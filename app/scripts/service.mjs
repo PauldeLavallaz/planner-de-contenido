@@ -13,6 +13,9 @@ const server = resolve(appDir, 'src/server.ts');
 const port = Number(process.env.PLANNER_PORT || 4180);
 const url = `http://127.0.0.1:${port}`;
 const os = platform();
+// En macOS, launchd no puede abrir carpetas protegidas (Documentos, Escritorio, iCloud) como directorio de trabajo
+// ni para los logs: los dos van a ~/Library, fuera de esas carpetas.
+const runtime = os === 'darwin' ? resolve(homedir(), 'Library/Application Support/PlannerDeContenido') : appDir;
 const logs = os === 'darwin' ? resolve(homedir(), 'Library/Logs/PlannerDeContenido') : resolve(homedir(), '.local/state', name);
 const envPath = [dirname(process.execPath), process.env.PATH || ''].filter(Boolean).join(delimiter);
 const xml = t => String(t).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
@@ -26,7 +29,7 @@ async function ready() {
     if (h) { console.log(`Planner listo: ${url} (PID ${h.pid}). Logs: ${logs}`); return; }
     await new Promise(r => setTimeout(r, 500));
   }
-  throw new Error(`El planner todavía no responde en ${url}. Revisá ${logs}`);
+  throw new Error(`El planner todavía no responde en ${url}. Revisá ${logs}.` + (os === 'darwin' ? ' Si dice «Operation not permitted», macOS no deja que node lea esta carpeta en segundo plano: dale acceso a node en Ajustes → Privacidad y seguridad → Acceso total al disco, o usá «npm start» con una terminal abierta.' : ''));
 }
 function run(cmd, args, required = true) {
   const r = spawnSync(cmd, args, { encoding: 'utf8' });
@@ -38,13 +41,13 @@ const mac = {
   plist: resolve(homedir(), 'Library/LaunchAgents', label + '.plist'),
   get target() { return `gui/${process.getuid()}/${label}`; },
   install() {
-    mkdirSync(logs, { recursive: true }); mkdirSync(dirname(this.plist), { recursive: true });
+    mkdirSync(logs, { recursive: true }); mkdirSync(runtime, { recursive: true }); mkdirSync(dirname(this.plist), { recursive: true });
     writeFileSync(this.plist, `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>${label}</string>
 <key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(server)}</string></array>
-<key>WorkingDirectory</key><string>${xml(appDir)}</string>
+<key>WorkingDirectory</key><string>${xml(runtime)}</string>
 <key>RunAtLoad</key><true/>
 <key>KeepAlive</key><true/>
 <key>ThrottleInterval</key><integer>3</integer>

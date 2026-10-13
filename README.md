@@ -22,7 +22,7 @@ Nada se publica solo: el planner sólo propone. Programar, mover o pausar en Pos
 
 3. Claude Code clona el proyecto, revisa qué te falta instalar, te ayuda a conectar tu cuenta de Postiz, mira cómo tenés organizadas tus carpetas y te propone cómo leerlas. Al final te abre el planner en `http://127.0.0.1:4180`.
 
-Necesitás una cuenta de Postiz (en la nube o instalada por tu cuenta) con tus redes conectadas. Claude Code te guía también en eso.
+Necesitás una cuenta de Postiz con tus redes conectadas. Postiz en la nube no tiene plan gratis (tiene una prueba de 7 días y planes según la cantidad de cuentas); también se puede instalar en un servidor propio, pero hay que registrar apps de desarrollador en cada red. Claude Code te guía también en eso.
 
 > **Para Claude Code:** si te pasaron este link para instalar el planner, cloná el repositorio (`git clone https://github.com/PauldeLavallaz/planner-de-contenido.git`) en la carpeta que el usuario elija y seguí [INSTALAR.md](INSTALAR.md) paso a paso. Las reglas de trabajo están en [AGENTS.md](AGENTS.md).
 

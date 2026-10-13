@@ -49,7 +49,7 @@ Preguntá y completá en `planner.config.json`:
 
 ## 3. Postiz
 
-Explicá en dos líneas qué es: Postiz es el servicio que publica en las redes. El planner organiza; Postiz ejecuta. Se puede usar en la nube (postiz.com; los planes y la prueba gratis están en su web) o instalado por su cuenta, gratis, en un servidor propio.
+Explicá en dos líneas qué es: Postiz es el servicio que publica en las redes. El planner organiza; Postiz ejecuta. Se puede usar en la nube (postiz.com): no tiene plan gratis, sí una prueba de 7 días, y cada plan admite una cantidad de canales (cada cuenta conectada es un canal). También se puede instalar gratis en un servidor propio, pero eso exige crear y hacer aprobar una app de desarrollador en cada red (Meta, TikTok, Google…): para alguien que empieza, la nube es el camino.
 
 1. **Cuenta y redes.** Si no tiene cuenta, que la cree en https://postiz.com. Dentro de Postiz, con el botón para agregar un canal, que conecte cada red que quiera usar (una o varias cuentas por red). Instagram puede conectarse como cuenta profesional; TikTok, YouTube, LinkedIn (perfil o página), Facebook, X, Threads, Bluesky, Pinterest y el resto, cada una con su login. Esto lo hace el usuario en el navegador: vos esperá y preguntá cuando termine.
 2. **Conectar el CLI.** Ofrecé las dos opciones:
@@ -89,6 +89,8 @@ cd app && npm run service:install
 ```
 
 Lo deja corriendo solo, también después de reiniciar la computadora (macOS: LaunchAgent; Linux: systemd de usuario; Windows: acceso en Inicio). Si prefiere no instalar un servicio: `npm start` con la terminal abierta.
+
+En macOS, si la carpeta del planner o del contenido está en Documentos, Escritorio o iCloud, macOS puede impedir que el servicio la lea en segundo plano (en los logs aparece «Operation not permitted»). Dos salidas: darle a `node` (la ruta que muestra `which node`) acceso en Ajustes → Privacidad y seguridad → Acceso total al disco y correr `npm run service:restart`, o usar `npm start` con la terminal abierta.
 
 Abrí http://127.0.0.1:4180 (si tenés navegador integrado, mostráselo). Confirmá con `npm run service:status`. Si no carga, `python3 engine/doctor.py` y los logs que indica el servicio.
 
