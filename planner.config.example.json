@@ -1,0 +1,28 @@
+{
+  "timezone": "America/Argentina/Buenos_Aires",
+  "locale": "es-AR",
+  "brands": ["Mi marca"],
+  "content": {
+    "root": "..",
+    "sources": [
+      { "path": "1-en-desarrollo", "stage": "development", "label": "En desarrollo" },
+      { "path": "2-por-revisar", "stage": "review", "label": "Por revisar" },
+      { "path": "3-listo", "stage": "ready", "label": "Listo para publicar" },
+      { "path": "4-publicado", "stage": "published", "label": "Publicado" }
+    ]
+  },
+  "publish_root": "publicar",
+  "slots": ["12:30", "18:30", "21:30"],
+  "suggested_times": ["09:00", "12:30", "15:00", "18:30", "20:00", "21:30"],
+  "jitter_minutes": 0,
+  "default_networks": [],
+  "channels": {},
+  "instagram": {
+    "reels_trial_default": false,
+    "default_collaborators": [],
+    "collaborator_options": []
+  },
+  "youtube": { "made_for_kids": "no", "tags": [] },
+  "captions": { "block_links": false },
+  "require_cover": false
+}

@@ -1,0 +1,23 @@
+{
+  "name": "planner-de-contenido",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "start": "node src/server.ts",
+    "test": "node --test test/*.test.mjs",
+    "service:install": "node scripts/service.mjs install",
+    "service:status": "node scripts/service.mjs status",
+    "service:restart": "node scripts/service.mjs restart",
+    "service:uninstall": "node scripts/service.mjs uninstall"
+  },
+  "dependencies": {
+    "hono": "4.12.14",
+    "@hono/node-server": "1.19.14"
+  },
+  "description": "Planner local de publicaciones sobre Postiz, operado con Claude Code",
+  "license": "MIT"
+}

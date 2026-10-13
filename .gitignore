@@ -1,0 +1,9 @@
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+# Configuración y credenciales de cada usuario
+planner.config.json
+.env
+# Cola y estado del planner si la carpeta de contenido apunta adentro del repo
+/publicar/
