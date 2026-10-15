@@ -48,6 +48,8 @@
 .s-story:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px var(--line-2), var(--shadow-lift); }
 .s-story img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .s-story .n { position: absolute; left: 6px; top: 6px; font: 600 11px var(--mono); color: #fff; background: #12110ecc; border-radius: 5px; padding: 1px 6px; }
+/* Historia con video y voz en off (2026-10-14). */
+.s-story .s-vid { position: absolute; right: 6px; top: 6px; font: 600 10px/1 var(--sans); color: #fff; background: #12110ecc; border-radius: 5px; padding: 3px 5px; }
 .s-story .stk { position: absolute; left: 6px; right: 6px; bottom: 6px; font: 600 10.5px/1.25 var(--sans); color: var(--ink); background: #fffdf9e8; border-radius: 6px; padding: 3px 6px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .s-free { align-self: center; color: var(--muted); font-size: 12.5px; }
 .s-res { position: relative; display: flex; flex-direction: column; gap: 8px; background: var(--bg); border-radius: 10px; padding: 10px; min-width: 0; }
@@ -100,6 +102,8 @@
 .sp-row.no, .sp-row.mano { color: var(--muted); }
 .sp-row .what { color: var(--ink); }
 .sp-row.no .what, .sp-row.mano .what { color: var(--muted); }
+.sp-sec { margin: 14px 0 6px; font: 600 12px var(--sans); color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
+.sp-row.fb { background: #fdf3df; }
 .sp-result { padding: 0 22px 14px; display: flex; flex-direction: column; gap: 8px; }
 .sp-result textarea { width: 100%; min-height: 110px; border: 1px solid var(--line-2); border-radius: 8px; padding: 10px; font: 12.5px/1.45 var(--mono); background: var(--surface); resize: vertical; }
 .sp-result .hint { margin: 0; color: var(--muted); font-size: 12.5px; }
@@ -250,6 +254,12 @@
 /* Imágenes como sticker. */
 .se-upload { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px; border-radius: 10px; border: 1.5px dashed var(--line-2); background: var(--bg); font: 600 13px var(--sans); color: var(--ink); cursor: pointer; }
 .se-upload:hover { border-color: var(--ink); }
+.se-tramo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); }
+.se-tramo input { width: 64px; padding: 4px 6px; border: 1px solid var(--line-2); border-radius: 6px; font: 500 12px var(--mono); background: var(--bg); color: var(--ink); }
+.se-drawer audio { width: 100%; height: 36px; }
+.se-voces { display: flex; flex-direction: column; gap: 6px; }
+.se-voces .se-add { text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.se-drawer .hint.busy { color: var(--ink); font-weight: 600; }
 .se-imgs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .se-img { aspect-ratio: 3 / 4; border-radius: 7px; overflow: hidden; background: var(--sunk); box-shadow: 0 0 0 1px var(--line); }
 .se-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -267,7 +277,7 @@
 .sb-main { display: flex; align-items: stretch; min-height: 0; padding: 0 10px 14px; gap: 6px; }
 .sb-col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .sb-body { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 0; }
-.sb-body img { height: min(76vh, 820px); aspect-ratio: 9 / 16; border-radius: 12px; object-fit: contain; background: #000; }
+.sb-body img, .sb-body video { height: min(76vh, 820px); aspect-ratio: 9 / 16; border-radius: 12px; object-fit: contain; background: #000; }
 .sb-actions { display: flex; gap: 10px; }
 .sb-act { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 18px; border-radius: 20px; font: 600 14px var(--sans); color: var(--ink); background: var(--surface); box-shadow: 0 0 0 1px var(--line-2); }
 .sb-act:hover { box-shadow: 0 0 0 1px var(--ink); }
@@ -285,4 +295,4 @@
 .fb-copy { width: 100%; justify-content: center; }
 #sqFeedback { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border-radius: 12px; padding: 14px; box-shadow: 0 0 0 1px var(--line); min-height: 220px; }
 #sqFeedback .fb-list { max-height: 320px; }
-@media (max-width: 860px) { .sb-main { flex-direction: column; } .sb-fb { width: auto; } .sb-body img { height: min(58vh, 620px); } }
+@media (max-width: 860px) { .sb-main { flex-direction: column; } .sb-fb { width: auto; } .sb-body img, .sb-body video { height: min(58vh, 620px); } }

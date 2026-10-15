@@ -7,7 +7,9 @@
 La propuesta la arma el planner (Historias → Programar → Preparar confirmación) en
 <publicar>/.planner/proposal-historias-<id>.json. Las historias de una secuencia salen cada 2 minutos desde la
 hora del día, en orden. Las que llevan un sticker interactivo (encuesta, link, mención, caja de preguntas) no se
-pueden publicar por la API de Instagram: quedan listadas para subirlas a mano. Todo pasa por engine/cola.py.
+pueden publicar por la API de Instagram: quedan listadas para subirlas a mano. Una historia con video de fondo o voz en
+off se publica como su MP4. Las que tienen feedback sin corregir («espera_feedback») no se agendan: se programan cuando
+el usuario apruebe la versión corregida. Todo pasa por engine/cola.py.
 """
 import argparse, datetime as dt, json, subprocess, sys
 from pathlib import Path
@@ -47,11 +49,12 @@ def aplicar(pid, ejecutar):
     if prop.get('status') not in {'awaiting_chat_confirmation', 'parcial'}:
         die(f"la propuesta está en estado {prop.get('status')}; no se vuelve a aplicar")
     hoy = now_local().date().isoformat()
-    manuales, resultados, ok_total = [], [], True
+    manuales, esperan, resultados, ok_total = [], [], [], True
     for a in prop['acciones']:
         # Una secuencia corrida desde otra semana trae su propia carpeta de semana.
         run = a.get('run') or prop['run']
-        img = ROOT / a['imagen']
+        # Una historia con video y voz en off se publica como su MP4; el planner la sigue por su PNG.
+        img = ROOT / (a.get('video') or a['imagen'])
         etiqueta = f"{a['fecha']} · historia {a['orden']} ({Path(a['imagen']).name})"
         cuenta_val = a.get('cuenta_id') or a.get('cuenta')
         cuenta = ['--cuenta', f'instagram={cuenta_val}'] if cuenta_val else []
@@ -60,6 +63,10 @@ def aplicar(pid, ejecutar):
             manuales.append(f"{etiqueta} · subila a las {hora or '—'}" + (f" en @{a['cuenta']}" if a.get('cuenta') else '') + f" · sticker: {a.get('sticker')}")
             continue
         if a['accion'] in {'nada', 'ya_publicada'}:
+            continue
+        if a['accion'] == 'espera_feedback':
+            esperan.append(f"{etiqueta} · tiene feedback sin corregir: se agenda cuando apruebes la versión nueva")
+            resultados.append({**a, 'resultado': 'espera_feedback'})
             continue
         if a['fecha'] < hoy and a['accion'] in {'agendar', 'mover', 'reemplazar'}:
             print(f'✗ {etiqueta}: la fecha ya pasó; no se agenda.')
@@ -76,10 +83,22 @@ def aplicar(pid, ejecutar):
         elif a['accion'] == 'mover':
             ok, out = correr(COLA + ['mover', a['cola']['slug'], '--fecha', a['fecha'], '--hora', hora] + cuenta, ejecutar)
         elif a['accion'] == 'reemplazar':
-            # La imagen cambió en el editor del planner: se quita, se reemplaza el archivo y se vuelve a agendar.
+            # La historia cambió en el editor del planner: se quita, se reemplaza el archivo y se vuelve a agendar.
             slug = a['cola']['slug']
+            previo = ''
+            if a['cola'].get('sidecar'):
+                try:
+                    previo = json.loads((ROOT / a['cola']['sidecar']).read_text(encoding='utf-8')).get('source_final') or ''
+                except (OSError, ValueError):
+                    previo = ''
             ok, out = correr(COLA + ['quitar', slug], ejecutar)
-            if ok:
+            if ok and previo and Path(previo).suffix.lower() != img.suffix.lower():
+                # Pasó de imagen a video (le pusieron video o voz en off) o al revés: la cola no cambia el tipo de
+                # archivo de una pieza, así que entra de nuevo con otro slug y la misma hora.
+                slug = f"{slug}-{'video' if img.suffix.lower() == '.mp4' else 'imagen'}"
+                ok, out = correr(COLA + ['listo', str(img), '--formato', 'story', '--redes', 'instagram', '--slug', slug,
+                                         '--titulo', f"Historia {a['fecha']} · {a['orden']}"] + cuenta, ejecutar)
+            elif ok:
                 ok, out = correr(COLA + ['reemplazar', slug, str(img), '--motivo', 'historia editada en el planner'], ejecutar)
             if ok:
                 ok, out = correr(COLA + ['agendar', slug, '--fecha', a['fecha'], '--hora', hora] + cuenta, ejecutar)
@@ -93,8 +112,12 @@ def aplicar(pid, ejecutar):
         print('\nA mano, en su lugar de la secuencia (Instagram no deja publicar esos stickers por la API):')
         for m in manuales:
             print('  ·', m)
+    if esperan:
+        print('\nEsperan el feedback (no se agendan todavía):')
+        for m in esperan:
+            print('  ·', m)
     if ejecutar:
-        prop.update(status='aplicada' if ok_total else 'parcial', applied_at=now_local().isoformat(timespec='seconds'), resultados=resultados, a_mano=manuales)
+        prop.update(status='aplicada' if ok_total else 'parcial', applied_at=now_local().isoformat(timespec='seconds'), resultados=resultados, a_mano=manuales, esperan_feedback=esperan)
         tmp = path.with_suffix('.tmp')
         tmp.write_text(json.dumps(prop, ensure_ascii=False, indent=2), encoding='utf-8')
         tmp.replace(path)

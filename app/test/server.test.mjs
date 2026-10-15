@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -235,6 +235,55 @@ test('standalone HTTP, media cancellation and durable draft across process exit'
       rev = (await (await seq({ fecha: W, historias: [img1, img2], publicar: 'no', hora: null }, rev)).json()).revision;
       assert.equal((await get(W)).draft.secuencias?.[W], undefined);
       assert.equal((await get(N)).entrantes.length, 0);
+    });
+    await t.test('stories: Programar carries unapplied feedback; recursos, voice-over upload and video checks', async () => {
+      const get = async w => (await fetch(base + '/api/planner/stories?week=' + w)).json();
+      // Una nota sin corregir: la cuenta GET stories y la propuesta la lleva; esa historia espera el feedback.
+      await request('/api/planner/stories/feedback', 'POST', { imagen: img1, alcance: 'historia', text: 'Achicá el título' });
+      const wk = await get(W);
+      const notas = wk.feedback_sin_aplicar[`historias/semana-prueba|${W}`];
+      assert.ok(notas.some(n => n.text === 'Achicá el título'));
+      let rev = wk.draft.revision;
+      rev = (await (await request('/api/planner/stories/seq', 'POST', { semana: W, orig: W, revision: rev, secuencia: { fecha: W, historias: [img1, img2], publicar: 'postiz', hora: '10:00' } })).json()).revision;
+      const prop = await (await request('/api/planner/stories/proposal', 'POST', { week: W, revision: rev })).json();
+      assert.ok(prop.feedback >= 1);
+      assert.equal(prop.esperan, 1);
+      assert.match(prop.prompt, /Contenido · feedback sin aplicar/);
+      assert.match(prop.prompt, /Achicá el título/);
+      const stored = JSON.parse(readFileSync(resolve(state, `proposal-historias-${prop.id}.json`)));
+      assert.equal(stored.acciones.find(x => x.imagen === img1).accion, 'espera_feedback');
+      assert.equal(stored.acciones.find(x => x.imagen === img2).accion, 'a_mano');
+      assert.ok(stored.feedback[0].notas.some(n => n.text === 'Achicá el título'));
+      // Una propuesta con sólo feedback también se arma.
+      rev = (await (await request('/api/planner/stories/seq', 'POST', { semana: W, orig: W, revision: rev, secuencia: { fecha: W, historias: [img1, img2], publicar: 'no', hora: null } })).json()).revision;
+      const solo = await (await request('/api/planner/stories/proposal', 'POST', { week: W, revision: rev })).json();
+      assert.match(solo.prompt, /sólo feedback de contenido/);
+      // Recursos listos del motor.
+      assert.match((await (await fetch(base + '/api/planner/stories/recursos')).json()).html, /data-recurso/);
+      // Subidas crudas: sólo del mismo origen y con un tipo de audio o video.
+      const raw = (q, body, type, origin = base) => fetch(base + '/api/planner/stories/media?' + q, { method: 'POST', headers: { 'Content-Type': type, Origin: origin }, body });
+      assert.equal((await raw('imagen=' + encodeURIComponent(img1) + '&tipo=audio&name=voz.txt', 'hola', 'text/plain')).status, 415);
+      assert.equal((await raw('imagen=' + encodeURIComponent(img1) + '&tipo=audio&name=voz.wav', Buffer.alloc(2000), 'audio/wav', 'https://otra.invalid')).status, 403);
+      assert.equal((await raw('imagen=' + encodeURIComponent(img1) + '&tipo=foto&name=x.wav', Buffer.alloc(2000), 'audio/wav')).status, 400);
+      const ffmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
+      if (ffmpeg) {
+        const sr = 48000, n = sr / 2, wav = Buffer.alloc(44 + n * 2);
+        wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+        wav.writeUInt32LE(sr, 24); wav.writeUInt32LE(sr * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
+        for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin(i / 20) * 8000), 44 + i * 2);
+        const up = await (await raw('imagen=' + encodeURIComponent(img1) + '&tipo=audio&name=Mi voz.wav', wav, 'audio/wav')).json();
+        assert.match(up.src, /^assets\/audio\/\d{14}-[0-9a-f]{4}-mi-voz\.wav$/);
+        assert.ok(Math.abs(up.duracion - 0.5) < 0.05);
+        const voces = (await (await fetch(base + '/api/planner/stories/voices?imagen=' + encodeURIComponent(img1))).json()).voces;
+        assert.ok(voces.some(v => v.src === up.src && v.en_fuente));
+      }
+      assert.equal((await request('/api/planner/stories/voice-import', 'POST', { imagen: img1, path: '../semana.json' })).status, 400);
+      assert.equal((await request('/api/planner/stories/video-trim', 'POST', { imagen: img1, secuencia: 'assets/videos/nada/%03d.jpg' })).status, 400);
+      // Un video de fondo tiene que tener sus cuadros en la carpeta de la semana.
+      const src = await (await fetch(base + '/api/planner/stories/source?imagen=' + encodeURIComponent(img1))).json();
+      const sinCuadros = await request('/api/planner/stories/edit', 'POST', { imagen: img1, mtime: src.mtime, html: src.html.replace('<img src="assets/fotos/x.jpg"', '<img data-secuencia="assets/videos/nada/%03d.jpg" src="assets/fotos/x.jpg"') });
+      assert.equal(sinCuadros.status, 400);
+      assert.match((await sinCuadros.json()).error, /video de fondo/);
     });
     await t.test('saved draft survives abrupt exit and restart', async () => {
       const before = await (await fetch(base + '/api/planner/draft')).json();

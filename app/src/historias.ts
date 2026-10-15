@@ -58,14 +58,16 @@ function storyFile(run: string, img: any) {
   const stem = img.split('/').pop()!.replace(/\.png$/, ''), png = resolve(ROOT(), run, img), html = resolve(ROOT(), run, 'fuente', stem + '.html');
   let mtime = 0; try { mtime = Math.round(statSync(png).mtimeMs); } catch {}
   let fondo = null, editable = false; try { fondo = fondoDe(readFileSync(html, 'utf8')); editable = true; } catch {}
-  return { mtime, fondo, editable };
+  // Una historia con video de fondo o voz en off tiene su MP4 al lado del PNG, con el mismo nombre.
+  let video_mtime = 0; try { video_mtime = Math.round(statSync(png.replace(/\.png$/, '.mp4')).mtimeMs); } catch {}
+  return { mtime, fondo, editable, video_mtime };
 }
 // Las rutas del manifiesto son relativas a la carpeta de la semana; el planner las sirve como rutas de tu contenido.
 export function storyWeekForPlanner(entry: { run: string, data: any, week?: string, cuenta?: string }) {
   const at = (p: any) => typeof p === 'string' && p && !p.startsWith('/') && !p.includes('..') ? entry.run + '/' + p : null;
   const d = entry.data, dias = (entry.week ? d.dias.filter((x: any) => mondayOf(x.fecha) === entry.week) : d.dias);
   return { ...d, run: entry.run, semana_calendario: entry.week || d.semana, cuenta: entry.cuenta || runAccount(d),
-    dias: dias.map((x: any) => ({ ...x, historias: (x.historias || []).map((h: any) => ({ ...h, imagen: at(h.imagen), ...storyFile(entry.run, h.imagen) })) })),
+    dias: dias.map((x: any) => ({ ...x, historias: (x.historias || []).map((h: any) => ({ ...h, imagen: at(h.imagen), video: h.video ? at(h.video) : null, ...storyFile(entry.run, h.imagen) })) })),
     recursos: (d.recursos || []).map((r: any) => ({ ...r, preview: at(r.preview), archivo: at(r.archivo) })) };
 }
 // Estado de cada historia en la cola (fichas con formato story de publicar/), por la imagen de origen.
@@ -81,7 +83,9 @@ export function storyQueue() {
         const posts = ((d.postiz || {}).posts || []).filter((x: any) => x.estado !== 'cancelado'), post = posts.find((x: any) => x.red === 'instagram') || posts[0] || null;
         let cambio = false; try { cambio = !!d.content_sha256 && createHash('sha256').update(readFileSync(src)).digest('hex') !== d.content_sha256; } catch {}
         const ig = d.cuentas?.instagram, cuenta = (ig && accts.find(a => a.id === ig)?.profile) || accts[0].profile;
-        out[posix(relative(base, src))] = { slug: d.slug, estado: d.publicado_at ? 'publicada' : d.estado, cuando: post?.date_utc || null, postiz: post?.provider_state || null, sidecar: posix(relative(base, p)), cambio, cuenta };
+        // Una historia con video entra a la cola como su MP4; el planner la sigue por su PNG (mismo nombre).
+        let key = posix(relative(base, src)); if (/\.mp4$/i.test(key) && existsSync(resolve(base, key.replace(/\.mp4$/i, '.png')))) key = key.replace(/\.mp4$/i, '.png');
+        out[key] = { slug: d.slug, estado: d.publicado_at ? 'publicada' : d.estado, cuando: post?.date_utc || null, postiz: post?.provider_state || null, sidecar: posix(relative(base, p)), cambio, cuenta };
       } else if (depth < 2 && !n.startsWith('.')) { try { if (statSync(p).isDirectory()) walk(p, depth + 1); } catch {} }
     }
   };
@@ -150,12 +154,38 @@ function storyPaths(imagen: any) {
 const scriptsOf = (h: string) => [...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].map(m => ((/\bsrc\s*=\s*["']?([^"'\s>]+)/i.exec(m[1]) || [])[1] || '') + '|' + m[2].trim()).join('\n');
 const refsOf = (h: string) => new Set([...h.matchAll(/\b(?:src|href)\s*=\s*["']([^"']+)["']/gi)].map(m => m[1]));
 const handlersOf = (h: string) => (h.match(/\son[a-z]+\s*=/gi) || []).length;
+const seqsOf = (h: string) => new Set([...h.matchAll(/\bdata-secuencia\s*=\s*["']([^"']+)["']/gi)].map(m => m[1]));
+// Historia con video de fondo o con voz en off: render.py la saca también en MP4, con la voz mezclada.
+export const storyHasVideo = (h: string) => /\bdata-secuencia\s*=/.test(h) || /<audio\b[^>]*\bclass="[^"]*\bvoz\b/.test(h);
+export function storyVoices(h: string) { return [...h.matchAll(/<audio\b([^>]*)>/gi)].filter(m => /\bclass="[^"]*\bvoz\b/.test(m[1])).map(m => ({ audio: (/\bsrc="([^"]+)"/.exec(m[1]) || [])[1] || null, inicio: parseFloat((/\bdata-inicio="([^"]+)"/.exec(m[1]) || [])[1] || '0') || 0 })).filter(v => v.audio); }
 export function validateStoryEdit(prev: string, next: any, fuente: string) {
   if (typeof next !== 'string' || next.length > 500_000 || !/<main\b[^>]*class="[^"]*\bhistoria\b/.test(next)) throw new Error('La historia editada no es válida.');
   if (scriptsOf(next) !== scriptsOf(prev) || handlersOf(next) > handlersOf(prev) || (/javascript:/i.test(next) && !/javascript:/i.test(prev))) throw new Error('La edición tocó código de la historia; no se guardó.');
-  const old = refsOf(prev);
+  const old = refsOf(prev), seq0 = seqsOf(prev);
+  for (const q of seqsOf(next)) if (!seq0.has(q) && (!/^assets\/videos\/[a-z0-9-]+\/%03d\.jpg$/.test(q) || !existsSync(resolve(fuente, q.replace('%03d', '001'))))) throw new Error('El video de fondo no está en la carpeta de la semana: ' + q);
   for (const r of refsOf(next)) if (!old.has(r) && (!/^assets\/[A-Za-z0-9_.\/-]+$/.test(r) || r.includes('..') || !existsSync(resolve(fuente, r)))) throw new Error('La historia apunta a un archivo que no está en su carpeta: ' + r);
   return next;
+}
+// Video de fondo y voz en off: llegan crudos (no en base64), porque un video del teléfono pesa cientos de MB.
+const VIDEO_UP: Record<string, string> = { 'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/x-m4v': '.m4v', 'video/webm': '.webm' };
+const AUDIO_UP: Record<string, string> = { 'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/wave': '.wav', 'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a', 'audio/aac': '.aac', 'audio/ogg': '.ogg', 'audio/webm': '.webm' };
+const upName = (n: any, def: string) => String(n || def).replace(/\.[^.]+$/, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || def;
+const upStamp = () => new Date().toISOString().replace(/\D/g, '').slice(0, 14) + '-' + randomUUID().slice(0, 4);
+async function mediaDuration(p: string) { try { const { stdout } = await exec('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', p], { timeout: 30000 }); const d = parseFloat(stdout); return Number.isFinite(d) ? Math.round(d * 1000) / 1000 : null; } catch { return null; } }
+const secs = (v: any) => v !== undefined && v !== null && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) < 36000 ? Number(v) : null;
+let videoBusy = false;
+// El video pasa por motor-historias/fondo_video.py: color normal (si viene en HDR, la conversión de Apple con las luces
+// altas suavizadas), 1080 × 1920 a 30 cuadros y sus cuadros JPG en fuente/assets/videos/<id>/. Una historia de video
+// dura hasta 60 s en Instagram: sin «hasta», se toma ese máximo.
+export async function prepareStoryVideo(run: string, orig: string, id: string, desde?: any, hasta?: any) {
+  if (videoBusy) throw new Error('Hay otro video preparándose. Esperá un momento.');
+  videoBusy = true;
+  try {
+    const d = secs(desde) || 0, h = secs(hasta), args = [resolve(MOTOR_DIR, 'fondo_video.py'), orig, '--fuente', resolve(run, 'fuente'), '--id', id, '--desde', String(d), '--hasta', String(h !== null && h > d ? Math.min(h, d + 60) : d + 60)];
+    const { stdout } = await exec(PYTHON, args, { cwd: run, timeout: 900000, maxBuffer: 8 * 1024 * 1024 });
+    return { ...JSON.parse(stdout.trim().split('\n').pop()!), id, origen: relRoot(orig) };
+  } catch (e: any) { throw new Error('No se pudo preparar el video: ' + String(e?.stderr || e?.message || e).trim().split('\n').pop() + ' (hace falta ffmpeg).'); }
+  finally { videoBusy = false; }
 }
 // El id de una semana en la URL del editor (sus archivos se sirven desde /api/planner/story-fuente/<id>/).
 const runId = (run: string) => Buffer.from(relRoot(run)).toString('base64url');
@@ -188,6 +218,10 @@ async function toJpg(src: string, out: string, max: number) {
 }
 
 // ── Feedback de historias: de una historia (detalles) o de toda la secuencia (general), en <semana>/feedback/ ──
+// Notas sin corregir (pendientes, o copiadas que nadie tomó): las cuenta Programar y viajan en su propuesta.
+const UNAPPLIED = (e: any) => e.estado !== 'aplicado' && e.estado !== 'en_curso';
+const storyFeedbackUnapplied = (run: string, dia?: string) => readFeedback(resolve(ROOT(), run, 'feedback')).filter((e: any) => e.tipo === 'historia' && UNAPPLIED(e) && (!dia || e.dia === dia));
+const fbNote = (e: any) => ({ file: e.file, dia: e.dia, alcance: e.alcance || 'historia', n: e.n || null, imagen: e.imagen || null, text: e.text || null, audio: e.audio || null, estado: e.estado || 'pendiente', created_at: e.created_at || null });
 const storyFeedbackOf = (run: string, dia: string) => readFeedback(resolve(ROOT(), run, 'feedback')).filter((e: any) => e.tipo === 'historia' && e.dia === dia);
 function storyFeedbackCounts(run: string) {
   const out: Record<string, { pendientes: number, historias: Record<string, number>, secuencia: number }> = {};
@@ -231,7 +265,7 @@ function storyContext(imagen: any) {
 function storyFeedbackReply(ctx: any) { const entries = storyFeedbackOf(ctx.run, ctx.dia.fecha); return { dia: ctx.dia.fecha, entries, prompt: entries.some((e: any) => e.estado !== 'aplicado' && e.estado !== 'en_curso') ? storyFeedbackPrompt(ctx.run, ctx.dia, entries) : null }; }
 
 let storyBusy = false;
-const FUENTE_TYPES: Record<string, string> = { ...TYPES, '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.gif': 'image/gif' };
+const FUENTE_TYPES: Record<string, string> = { ...TYPES, '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.gif': 'image/gif', '.json': 'application/json; charset=utf-8' };
 const IMG_UP: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'image/heic': '.heic', 'image/heif': '.heic' };
 
 export function registerStories(app: Hono) {
@@ -252,10 +286,13 @@ export function registerStories(app: Hono) {
     const fb: Record<string, any> = {};
     for (const [run, only] of [...(sem ? [[sem.run, null]] : []), ...entrantes.map(x => [x.run, x.orig])] as [string, string | null][])
       for (const [d, v] of Object.entries(storyFeedbackCounts(run))) if (!only || d === only) fb[d] = { ...v, historias: Object.fromEntries(Object.entries(v.historias).map(([img, n]) => [run + '/' + img, n])) };
+    const sinAplicar: Record<string, any[]> = {};
+    for (const [run, only] of [...(sem ? [[sem.run, null]] : []), ...entrantes.map(x => [x.run, x.orig])] as [string, string | null][])
+      for (const e of storyFeedbackUnapplied(run)) if (!only || e.dia === only) (sinAplicar[run + '|' + e.dia] || (sinAplicar[run + '|' + e.dia] = [])).push(fbNote(e));
     const semanasDe = (p: string) => Object.values(all).filter(e => e.cuenta === p).map(e => e.week).sort();
     return c.json({ week, cuenta, carpeta: relRoot(STORIES()), cuentas: accts.map(a => ({ profile: a.profile, label: a.label, marca: a.marca, semanas: semanasDe(a.profile) })), weeks: semanasDe(cuenta), semana: sem,
       metricas: metricsOf(metrics, cuenta, accts), metricas_cuentas: Object.fromEntries(accts.map(a => [a.profile, metricsOf(metrics, a.profile, accts)])),
-      draft: { revision: drafts.revision || 0, ...(drafts.semanas?.[draftKey(cuenta, week, accts)] || { secuencias: {} }) }, cola, entrantes, feedback: fb });
+      draft: { revision: drafts.revision || 0, ...(drafts.semanas?.[draftKey(cuenta, week, accts)] || { secuencias: {} }) }, cola, entrantes, feedback: fb, feedback_sin_aplicar: sinAplicar });
   });
   app.post('/api/planner/stories/metrics', async c => {
     try {
@@ -319,18 +356,31 @@ export function registerStories(app: Hono) {
       const dias = seqs.map(x => ({ x, sem: semOf(x.entry), dia: semOf(x.entry).dias.find((d: any) => d.fecha === x.orig) })).filter(({ dia }) => dia && dia.tipo !== 'libre')
         .sort((a, b) => a.x.secuencia.fecha.localeCompare(b.x.secuencia.fecha)).map(({ x, sem, dia }) => {
           const s = x.secuencia, all = Object.fromEntries(dia.historias.map((h: any) => [h.imagen, h]));
-          return { secuencia: x.orig, semana_origen: x.semana, run: sem.run, tipo: dia.tipo, formula: dia.formula, fecha: s.fecha, publicar: s.publicar, hora: s.hora || null, cuenta: s.cuenta || cuenta, cuenta_id: idOf(s.cuenta || cuenta),
-            historias: s.historias.map((img: string, i: number) => { const h = all[img] || {}, q = queue[img] || null; return { orden: i + 1, imagen: img, sticker: h.sticker || null, a_mano: storyNeedsHand(h.sticker), cola: q }; }) };
+          return { secuencia: x.orig, semana_origen: x.semana, run: sem.run, tipo: dia.tipo, formula: dia.formula, tema: dia.tema || null, fecha: s.fecha, publicar: s.publicar, hora: s.hora || null, cuenta: s.cuenta || cuenta, cuenta_id: idOf(s.cuenta || cuenta),
+            historias: s.historias.map((img: string, i: number) => { const h = all[img] || {}, q = queue[img] || null; return { orden: i + 1, imagen: img, video: h.video || null, sticker: h.sticker || null, a_mano: storyNeedsHand(h.sticker), cola: q }; }) };
         });
-      const acciones = dias.flatMap((d: any) => d.historias.map((h: any) => ({ ...h, run: d.run, fecha: d.fecha, hora: d.hora, cuenta: d.cuenta, cuenta_id: d.cuenta_id,
-        accion: d.publicar === 'postiz' ? (h.a_mano ? 'a_mano' : h.cola && h.cola.estado !== 'publicada' ? (h.cola.cambio ? 'reemplazar' : 'mover') : h.cola ? 'ya_publicada' : 'agendar') : (h.cola && h.cola.estado !== 'publicada' ? 'quitar' : 'nada') })));
+      // Feedback sin corregir de cada secuencia que se ve: viaja en la propuesta. Una historia con feedback (o todo el día,
+      // si la nota es de la secuencia) no se agenda hasta que el usuario apruebe la versión corregida.
+      const fbDias = dias.map((d: any) => ({ d, notas: storyFeedbackUnapplied(d.run, d.secuencia) })).filter(x => x.notas.length);
+      const espera = (d: any, h: any) => (fbDias.find(x => x.d === d)?.notas || []).some((e: any) => e.alcance === 'secuencia' || (e.imagen && d.run + '/' + e.imagen === h.imagen));
+      const acciones = dias.flatMap((d: any) => d.historias.map((h: any) => {
+        let accion = d.publicar === 'postiz' ? (h.a_mano ? 'a_mano' : h.cola && h.cola.estado !== 'publicada' ? (h.cola.cambio ? 'reemplazar' : 'mover') : h.cola ? 'ya_publicada' : 'agendar') : (h.cola && h.cola.estado !== 'publicada' ? 'quitar' : 'nada');
+        if (['agendar', 'mover', 'reemplazar'].includes(accion) && espera(d, h)) accion = 'espera_feedback';
+        return { ...h, run: d.run, fecha: d.fecha, hora: d.hora, cuenta: d.cuenta, cuenta_id: d.cuenta_id, accion };
+      }));
       const id = new Date().toISOString().replace(/\D/g, '').slice(0, 14) + '-' + randomUUID().slice(0, 6), name = 'proposal-historias-' + id + '.json';
       const n = acciones.filter((a: any) => ['agendar', 'mover', 'reemplazar'].includes(a.accion)).length, manual = acciones.filter((a: any) => a.accion === 'a_mano').length;
-      if (!n && !manual && !acciones.some((a: any) => a.accion === 'quitar')) return c.json({ error: 'No hay nada para mandar: elegí Postiz en algún día.' }, 400);
-      write(name, { id, status: 'awaiting_chat_confirmation', created_at: new Date().toISOString(), week, cuenta, run: storyWeeks()[storyKey(cuenta, week)]?.run || dias[0]?.run || seqs[0].entry.run, revision: file.revision || 0, timezone: paths().timezone, dias, acciones });
+      const agenda = n || manual || acciones.some((a: any) => a.accion === 'quitar');
+      if (!agenda && !fbDias.length) return c.json({ error: 'No hay nada para mandar: elegí Postiz en algún día o dejá feedback.' }, 400);
+      const feedback = fbDias.map(({ d, notas }) => ({ run: d.run, secuencia: d.secuencia, fecha: d.fecha, tipo: d.tipo, formula: d.formula, notas: notas.map(fbNote) }));
+      write(name, { id, status: 'awaiting_chat_confirmation', created_at: new Date().toISOString(), week, cuenta, run: storyWeeks()[storyKey(cuenta, week)]?.run || dias[0]?.run || seqs[0].entry.run, revision: file.revision || 0, timezone: paths().timezone, dias, acciones, feedback });
+      for (const { d, notas } of fbDias) markFeedbackSent(resolve(ROOT(), d.run, 'feedback'), notas.map((e: any) => e.file), 'propuesta-historias');
       const destinos = [...new Set(acciones.filter((a: any) => ['agendar', 'mover', 'reemplazar', 'a_mano'].includes(a.accion)).map((a: any) => a.cuenta))] as string[];
-      const where = relRoot(resolve(STATE(), name));
-      return c.json({ id, path: where, prompt: storyProposalPrompt(id, where, n, manual, destinos) });
+      const where = relRoot(resolve(STATE(), name)), esperan = acciones.filter((a: any) => a.accion === 'espera_feedback').length, total = fbDias.reduce((k, x) => k + x.notas.length, 0);
+      const partes = [agenda ? storyProposalPrompt(id, where, n, manual, destinos) : `Propuesta de historias ${id} del planner (${where}): sólo feedback de contenido, sin cambios de agenda.`];
+      if (fbDias.length) partes.push([`Contenido · feedback sin aplicar (${total} nota${total === 1 ? '' : 's'}). Corregilo primero${esperan ? `: ${esperan} historia${esperan === 1 ? '' : 's'} con feedback no se agenda${esperan === 1 ? '' : 'n'} ahora (quedan «espera_feedback» en la propuesta) y se programa${esperan === 1 ? '' : 'n'} cuando apruebes la versión nueva` : ''}.`,
+        ...fbDias.map(({ d, notas }) => storyFeedbackPrompt(d.run, d, notas))].join('\n\n'));
+      return c.json({ id, path: where, prompt: partes.join('\n\n'), feedback: total, esperan });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });
 
@@ -400,14 +450,78 @@ export function registerStories(app: Hono) {
           if (n.startsWith('.')) continue; const p = resolve(dir, n), st = statSync(p);
           if (st.isDirectory()) { if (depth < 2) walk(p, depth + 1); }
           // Los cuadros sueltos de una animación (001.jpg, 002.jpg…) no son imágenes para usar.
-          else if (/\.(png|jpe?g|webp|gif)$/i.test(n) && !/^\d{2,}\.(png|jpe?g|webp)$/i.test(n)) out.push({ src: 'assets/' + posix(relative(root, p)), mtime: Math.round(st.mtimeMs) });
+          else if (/\.(png|jpe?g|webp|gif)$/i.test(n) && !/^\d{2,}\.(png|jpe?g|webp)$/i.test(n)) { const r = posix(relative(root, p)); out.push({ src: 'assets/' + r, carpeta: r.split('/')[0], mtime: Math.round(st.mtimeMs) }); }
         }
       };
       walk(root); out.sort((a, b) => b.mtime - a.mtime);
       return c.json({ imagenes: out.slice(0, 120) });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });
-  // Guarda la historia editada y la vuelve a renderizar con el chequeo. La versión anterior (HTML, PNG y chequeo)
+  // Recursos listos (chat de WhatsApp, archivo del recurso…) para Agregar → Recursos del editor.
+  app.get('/api/planner/stories/recursos', c => { try { return c.json({ html: readFileSync(resolve(MOTOR_DIR, 'recursos.html'), 'utf8') }); } catch { return c.json({ html: '' }); } });
+  // Video de fondo o audio de voz en off, subidos crudos: POST stories/media?imagen=&tipo=video|audio&name=&desde=&hasta=.
+  // El original queda en <semana>/originales/; los cuadros del video en fuente/assets/videos/<id>/ y el audio, pasado a
+  // WAV 48 kHz, en fuente/assets/audio/.
+  app.post('/api/planner/stories/media', async c => {
+    try {
+      const q = c.req.query(), { run } = storyPaths(q.imagen), tipo = q.tipo;
+      if (tipo !== 'video' && tipo !== 'audio') throw new Error('Tipo inválido');
+      const tabla = tipo === 'video' ? VIDEO_UP : AUDIO_UP, mime = String(c.req.header('content-type') || '').split(';')[0].trim().toLowerCase(), ext0 = extname(String(q.name || '')).toLowerCase();
+      const ext = tabla[mime] || (Object.values(tabla).includes(ext0) ? ext0 : null);
+      if (!ext) throw new Error(tipo === 'video' ? 'Subí un video MP4, MOV o WebM.' : 'Subí un audio MP3, WAV, M4A u OGG.');
+      const buf = Buffer.from(await c.req.arrayBuffer()), max = tipo === 'video' ? 800_000_000 : 200_000_000;
+      if (buf.length < 1000) throw new Error('El archivo llegó vacío.');
+      if (buf.length > max) throw new Error(tipo === 'video' ? 'El video pesa más de 800 MB: recortalo antes de subirlo.' : 'El audio pesa más de 200 MB.');
+      const stamp = upStamp(), base = upName(q.name, tipo), dir = resolve(run, 'originales'); mkdirSync(dir, { recursive: true });
+      const orig = resolve(dir, `${stamp}-${base}${ext}`); writeFileSync(orig, buf);
+      if (tipo === 'video') return c.json(await prepareStoryVideo(run, orig, `${base}-${stamp.slice(8, 14)}`, q.desde, q.hasta));
+      const adir = resolve(run, 'fuente/assets/audio'); mkdirSync(adir, { recursive: true }); const wav = resolve(adir, `${stamp}-${base}.wav`);
+      try { await exec('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', orig, '-vn', '-ac', '2', '-ar', '48000', wav], { timeout: 180000 }); } catch { rmSync(wav, { force: true }); throw new Error('No se pudo leer ese audio (hace falta ffmpeg).'); }
+      return c.json({ src: 'assets/audio/' + basename(wav), duracion: await mediaDuration(wav) });
+    } catch (e) { return c.json({ error: (e as Error).message }, 400); }
+  });
+  // Cambia el tramo del video de fondo (desde/hasta, en segundos) volviendo a prepararlo desde su original.
+  app.post('/api/planner/stories/video-trim', async c => {
+    try {
+      const body = await c.req.json(), { run } = storyPaths(body?.imagen), m = /^assets\/videos\/([a-z0-9-]+)\/%03d\.jpg$/.exec(String(body?.secuencia || ''));
+      if (!m) throw new Error('Esta historia no tiene un video de fondo.');
+      const meta = fileRead(resolve(run, 'fuente/assets/videos', m[1], 'video.json'), null), orig = meta?.origen ? resolve(run, String(meta.origen)) : null;
+      if (!orig || !within(run, orig) || !existsSync(orig)) throw new Error('No encuentro el video original para recortarlo de nuevo.');
+      return c.json(await prepareStoryVideo(run, orig, m[1], body.desde, body.hasta));
+    } catch (e) { return c.json({ error: (e as Error).message }, 400); }
+  });
+  // Voces para la voz en off: las que ya están en la historia (fuente/assets/audio/) y las de <semana>/voces/.
+  app.get('/api/planner/stories/voices', async c => {
+    try {
+      const { run } = storyPaths(c.req.query('imagen')), out: any[] = [], AUD = /\.(wav|mp3|m4a|aac|ogg)$/i;
+      const walk = async (dir: string, en_fuente: boolean) => {
+        let names: string[] = []; try { names = readdirSync(dir); } catch { return; }
+        for (const n of names) {
+          if (n.startsWith('.') || !AUD.test(n)) continue; const p = resolve(dir, n), st = statSync(p); if (!st.isFile()) continue;
+          out.push({ path: posix(relative(run, p)), src: en_fuente ? 'assets/audio/' + n : null, media: relRoot(p), nombre: n, duracion: await mediaDuration(p), mtime: Math.round(st.mtimeMs), en_fuente });
+        }
+      };
+      await walk(resolve(run, 'fuente/assets/audio'), true); await walk(resolve(run, 'voces'), false);
+      // Una por voz: la copia que ya está en la historia gana, y entre WAV y MP3 de la misma toma, el WAV.
+      const seen = new Set<string>(), uno: any[] = [];
+      for (const v of out.sort((a, b) => Number(b.en_fuente) - Number(a.en_fuente) || Number(/\.wav$/i.test(b.nombre)) - Number(/\.wav$/i.test(a.nombre)))) { const k = upName(v.nombre, 'voz'); if (!seen.has(k)) { seen.add(k); uno.push(v); } }
+      uno.sort((a, b) => b.mtime - a.mtime);
+      return c.json({ voces: uno.slice(0, 60) });
+    } catch (e) { return c.json({ error: (e as Error).message }, 400); }
+  });
+  // Trae una voz de <semana>/voces/ a fuente/assets/audio/ (WAV 48 kHz) para usarla en la historia.
+  app.post('/api/planner/stories/voice-import', async c => {
+    try {
+      const body = await c.req.json(), { run } = storyPaths(body?.imagen), from = String(body?.path || '');
+      if (!/^voces\/[A-Za-z0-9_. -]+\.(wav|mp3|m4a|aac|ogg)$/i.test(from) || from.includes('..')) throw new Error('Voz inválida');
+      const src = resolve(run, from); if (!existsSync(src)) throw new Error('Esa voz ya no está en la carpeta de la semana.');
+      const adir = resolve(run, 'fuente/assets/audio'); mkdirSync(adir, { recursive: true });
+      const wav = resolve(adir, upName(basename(from), 'voz') + '.wav');
+      if (!existsSync(wav)) { try { await exec('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', src, '-vn', '-ac', '2', '-ar', '48000', wav], { timeout: 180000 }); } catch { rmSync(wav, { force: true }); throw new Error('No se pudo leer esa voz (hace falta ffmpeg).'); } }
+      return c.json({ src: 'assets/audio/' + basename(wav), duracion: await mediaDuration(wav) });
+    } catch (e) { return c.json({ error: (e as Error).message }, 400); }
+  });
+  // Guarda la historia editada y la vuelve a renderizar con el chequeo. La versión anterior (HTML, PNG, MP4 y chequeo)
   // queda en <semana>/tmp/ediciones/; si el render falla, vuelve sola.
   app.post('/api/planner/stories/edit', async c => {
     if (storyBusy) return c.json({ error: 'Hay otra historia renderizándose. Esperá unos segundos.' }, 409);
@@ -423,12 +537,15 @@ export function registerStories(app: Hono) {
         const chq = resolve(run, 'historias', stem + '.chequeo.json'), chq0 = existsSync(chq) ? readFileSync(chq) : null, png0 = readFileSync(png);
         const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14), bak = resolve(run, 'tmp/ediciones', stamp + '-' + stem);
         mkdirSync(bak, { recursive: true }); writeFileSync(resolve(bak, stem + '.html'), src0); writeFileSync(resolve(bak, stem + '.png'), png0); if (chq0) writeFileSync(resolve(bak, stem + '.chequeo.json'), chq0);
+        const mp4 = resolve(run, 'historias', stem + '.mp4'), mp4bak = resolve(bak, stem + '.mp4'), conVideo = storyHasVideo(next);
+        if (existsSync(mp4)) copyFileSync(mp4, mp4bak);
         writeFileSync(html, next);
         // Las caras (Vision) sólo en macOS: si no hay swiftc, el chequeo sigue sin ellas.
         const caras = resolve(STATE(), 'cache/caras');
         if (!existsSync(caras)) { try { mkdirSync(dirname(caras), { recursive: true }); await exec('swiftc', ['-O', resolve(MOTOR_DIR, 'caras.swift'), '-o', caras], { timeout: 180000 }); } catch {} }
-        try { await exec(PYTHON, [resolve(MOTOR_DIR, 'render.py'), html, '--salida', resolve(run, 'historias'), '--chequeo', ...(existsSync(caras) ? ['--caras', caras] : [])], { cwd: run, timeout: 180000, maxBuffer: 4 * 1024 * 1024 }); }
-        catch { writeFileSync(html, src0); writeFileSync(png, png0); if (chq0) writeFileSync(chq, chq0); throw new Error('No se pudo renderizar la historia; quedó la versión anterior. Revisá que esté instalado Playwright (docs/historias.md).'); }
+        // Con video o voz en off, render.py saca también el MP4 (cuadro a cuadro, con la voz): tarda más.
+        try { await exec(PYTHON, [resolve(MOTOR_DIR, 'render.py'), html, '--salida', resolve(run, 'historias'), '--chequeo', ...(existsSync(caras) ? ['--caras', caras] : [])], { cwd: run, timeout: conVideo ? 900000 : 180000, maxBuffer: 4 * 1024 * 1024 }); }
+        catch { writeFileSync(html, src0); writeFileSync(png, png0); if (chq0) writeFileSync(chq, chq0); if (existsSync(mp4bak)) copyFileSync(mp4bak, mp4); throw new Error('No se pudo renderizar la historia; quedó la versión anterior. Revisá que esté instalado Playwright (docs/historias.md).'); }
         const chequeo = fileRead(chq, []), avisos = Array.isArray(chequeo) ? chequeo : (chequeo.problemas || chequeo.avisos || []);
         const f0 = fondoDe(src0), f1 = fondoDe(next);
         const stk = (h: string) => [...h.matchAll(/data-sticker="([^"]*)"/g)].map(m => m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
@@ -441,6 +558,10 @@ export function registerStories(app: Hono) {
             if (f1 && JSON.stringify(f0) !== JSON.stringify(f1)) h.fondo = { ...f1, cambiado_at: new Date().toISOString() };
             if (!f1 && f0) delete h.fondo;
             if (stickers) h.sticker = k1.length ? k1.join(' + ') : null;
+            // Con video o voz en off, la historia que se publica es el MP4.
+            const voz = storyVoices(next);
+            if (conVideo && existsSync(mp4)) { h.video = 'historias/' + stem + '.mp4'; h.formato = 'video'; if (voz.length) h.voz = voz.length === 1 ? voz[0] : voz; else delete h.voz; }
+            else { delete h.video; delete h.voz; if (h.formato === 'video') delete h.formato; }
           }
           const tmp = resolve(run, 'semana.json.' + randomUUID() + '.tmp'); writeFileSync(tmp, JSON.stringify(semana, null, 1) + '\n'); renameSync(tmp, resolve(run, 'semana.json'));
         }

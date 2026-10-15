@@ -197,17 +197,20 @@ class Motor(unittest.TestCase):
         (run / 'historias').mkdir(parents=True)
         day, _ = self.future(5)
         imgs = []
-        for n in (1, 2, 3):
+        for n in (1, 2, 3, 4):
             png = run / f'historias/{day}_{n}_venta.png'
             png.write_bytes(os.urandom(600 + n))
             imgs.append(png.relative_to(self.content).as_posix())
         state = self.content / 'publicar/.planner'
         state.mkdir(parents=True, exist_ok=True)
-        def accion(n, que, sticker=None):
-            return {'orden': n, 'imagen': imgs[n - 1], 'fecha': day, 'hora': '10:00', 'cuenta': 'otramarca', 'cuenta_id': 'ig-alt',
+        # La 4 tiene video de fondo con voz en off: se publica su MP4.
+        mp4 = run / f'historias/{day}_4_venta.mp4'
+        mp4.write_bytes(os.urandom(5000))
+        def accion(n, que, sticker=None, video=None):
+            return {'orden': n, 'imagen': imgs[n - 1], 'video': video, 'fecha': day, 'hora': '10:00', 'cuenta': 'otramarca', 'cuenta_id': 'ig-alt',
                     'accion': que, 'sticker': sticker, 'a_mano': que == 'a_mano', 'cola': None}
         (state / 'proposal-historias-h1.json').write_text(json.dumps({'id': 'h1', 'status': 'awaiting_chat_confirmation', 'run': 'historias/semana-x',
-            'acciones': [accion(1, 'agendar'), accion(2, 'a_mano', 'encuesta: ¿sí o no?'), accion(3, 'agendar')]}))
+            'acciones': [accion(1, 'agendar'), accion(2, 'a_mano', 'encuesta: ¿sí o no?'), accion(3, 'agendar'), accion(4, 'agendar', video=mp4.relative_to(self.content).as_posix())]}))
         seco = self.run_py('historias.py', 'aplicar', 'h1').stdout
         self.assertIn('Corrida en seco', seco)
         self.assertEqual(json.loads((state / 'proposal-historias-h1.json').read_text())['status'], 'awaiting_chat_confirmation')
@@ -216,10 +219,18 @@ class Motor(unittest.TestCase):
         self.assertIn('10:02', out)
         prop = json.loads((state / 'proposal-historias-h1.json').read_text())
         self.assertEqual(prop['status'], 'aplicada')
-        self.assertEqual([r['hora_programada'] for r in prop['resultados']], ['10:00', '10:04'])
+        self.assertEqual([r['hora_programada'] for r in prop['resultados']], ['10:00', '10:04', '10:06'])
         posts = sorted((p for p in json.loads((self.tmp / 'postiz.json').read_text())['posts']
                         if p['publishDate'].startswith(day) and p['settings'].get('post_type') == 'story'), key=lambda p: p['publishDate'])
-        self.assertEqual([p['integration']['id'] for p in posts], ['ig-alt', 'ig-alt'])
+        self.assertEqual([p['integration']['id'] for p in posts], ['ig-alt', 'ig-alt', 'ig-alt'])
+        sidecar = json.loads(next(p for p in (self.content / 'publicar').rglob('*.json') if '4-venta' in p.name and '.planner' not in p.parts).read_text())
+        self.assertTrue(sidecar['source_final'].endswith('_4_venta.mp4'))
+        # Una historia con feedback sin corregir no se agenda: queda «espera_feedback».
+        (state / 'proposal-historias-h2.json').write_text(json.dumps({'id': 'h2', 'status': 'awaiting_chat_confirmation', 'run': 'historias/semana-x',
+            'acciones': [{**accion(1, 'espera_feedback'), 'fecha': self.future(6)[0]}]}))
+        out = self.run_py('historias.py', 'aplicar', 'h2', '--ejecutar').stdout
+        self.assertIn('Esperan el feedback', out)
+        self.assertEqual(json.loads((state / 'proposal-historias-h2.json').read_text())['resultados'][0]['resultado'], 'espera_feedback')
         self.assertNotEqual(self.run_py('historias.py', 'aplicar', 'h1', '--ejecutar', ok=False).returncode, 0)
         # Las historias de la cola no aparecen como piezas en el planner.
         self.assertFalse([i for i in self.inventory()['items'] if 'historia-' in i['id']])

@@ -218,7 +218,11 @@ export function registerPublicationPlanner(app:Hono) {
     if(c.req.method!=='GET') {
       const origin=c.req.header('origin');
       if(origin&&origin!==new URL(c.req.url).origin)return c.json({error:'Origen no permitido'},403);
-      if(!c.req.header('content-type')?.includes('application/json'))return c.json({error:'Se requiere JSON'},415);
+      // La subida de video o audio de una historia llega cruda: exige el mismo origen y un tipo que el navegador no
+      // manda sin verificación previa (un formulario de otra página no puede usarla).
+      if(c.req.path==='/api/planner/stories/media'){const ct=(c.req.header('content-type')||'').split(';')[0].trim().toLowerCase();
+        if(!origin||!ct||['application/x-www-form-urlencoded','multipart/form-data','text/plain'].includes(ct))return c.json({error:'Subida no permitida'},415);}
+      else if(!c.req.header('content-type')?.includes('application/json'))return c.json({error:'Se requiere JSON'},415);
     }
     await next();
   });

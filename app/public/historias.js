@@ -43,6 +43,9 @@ function storySeqs() {
 const entrantes = () => (stories.data?.entrantes || []).map(e => ({ orig: e.orig, dia: e.dia, src: e.semana, recurso: e.recurso, entrante: true, ...e.secuencia }));
 const allSeqs = () => [...storySeqs(), ...entrantes()];
 const weekSeqs = () => allSeqs().filter(s => monday(s.fecha) === week);
+// Notas sin corregir de una secuencia (pendientes o copiadas que nadie tomó), por el run al que pertenece.
+const runOfSeq = s => s.entrante ? (stories.data?.entrantes || []).find(e => e.orig === s.orig && e.semana === s.src)?.run : stories.data?.semana?.run;
+const fbSinAplicar = s => stories.data?.feedback_sin_aplicar?.[runOfSeq(s) + '|' + s.orig] || [];
 const seqOn = d => { const l = weekSeqs().filter(s => s.fecha === d); return l.find(s => s.historias.length) || l[0]; };
 const ownAccount = s => s.cuenta && s.cuenta !== stories.data?.cuenta ? s.cuenta : null;
 const seqChanged = s => JSON.stringify([s.fecha, s.historias, s.publicar, s.hora || null, ownAccount(s)]) !== JSON.stringify((({ fecha, historias, publicar, hora }) => [fecha, historias, publicar, hora, null])(defaultSeq(s.dia)));
@@ -112,8 +115,11 @@ function renderStories() {
   const queued = Object.values(cola).some(q => q && q.estado !== 'publicada');
   $('sActions').hidden = false;
   $('sReset').hidden = !changed;
-  $('sPropose').disabled = !(toPostiz || queued);
-  $('sProposeCount').textContent = toPostiz;
+  // Programar también cuenta el feedback sin corregir de la semana: viaja en la propuesta.
+  const fbN = weekSeqs().reduce((k, s) => k + fbSinAplicar(s).length, 0);
+  $('sPropose').disabled = !(toPostiz || queued || fbN);
+  $('sProposeCount').textContent = toPostiz + fbN;
+  $('sPropose').title = [toPostiz ? `${toPostiz} día${toPostiz === 1 ? '' : 's'} a Postiz` : '', fbN ? `${fbN} nota${fbN === 1 ? '' : 's'} de feedback sin corregir` : ''].filter(Boolean).join(' · ');
   $('sGrid').innerHTML = Array.from({ length: 7 }, (_, n) => {
     const d = dateAdd(week, n), s = seqOn(d);
     // Un día de esta semana sin secuencia: la semana de historias no lo cubre, o su secuencia se corrió a otra semana.
@@ -124,7 +130,7 @@ function renderStories() {
       ? s.historias.map((img, i) => {
           const h = byImg[img] || {}, q = cola[img], hand = needsHand(h), from = img.includes(`/${s.orig}_`) ? '' : ' moved', fbn = stories.data.feedback?.[s.orig]?.historias?.[img] || 0;
           const st = q ? (q.estado === 'publicada' ? '<span class="q ok">Publicada</span>' : q.cuenta && q.cuenta !== mc && s.publicar === 'postiz' ? `<span class="q warn" title="Está agendada en @${esc(q.cuenta)}: al confirmar la propuesta pasa a @${esc(mc)}">Pasa a @${esc(mc)}</span>` : q.cambio ? '<span class="q warn" title="Cambiaste la foto: se reemplaza en Postiz al confirmar la propuesta">Imagen nueva</span>' : `<span class="q">En Postiz${q.cuando ? ' · ' + esc(new Date(q.cuando).toLocaleTimeString('es-AR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })) : ''}</span>`) : '';
-          return `<button class="s-story${from}${s.publicar === 'postiz' && hand ? ' hand' : ''}" draggable="true" data-story="${esc(s.orig)}|${i}" data-img="${esc(img)}" title="${esc((h.texto || '') + (h.sticker ? ' · Sticker: ' + h.sticker : ''))}"><img src="/api/planner/poster?path=${esc(encodeURIComponent(img))}&v=${h.mtime || 0}" alt="" loading="lazy" draggable="false"><span class="n">${i + 1}</span>${fbn ? `<span class="s-fbn" title="${fbn} nota${fbn === 1 ? '' : 's'} de feedback pendiente${fbn === 1 ? '' : 's'}">💬 ${fbn}</span>` : ''}${st}${h.sticker && !/^zona segura/i.test(h.sticker) ? `<span class="stk">${hand ? '✋ ' : ''}${esc(h.sticker.split(':')[0])}</span>` : ''}</button>`;
+          return `<button class="s-story${from}${s.publicar === 'postiz' && hand ? ' hand' : ''}" draggable="true" data-story="${esc(s.orig)}|${i}" data-img="${esc(img)}" title="${esc((h.texto || '') + (h.sticker ? ' · Sticker: ' + h.sticker : ''))}"><img src="/api/planner/poster?path=${esc(encodeURIComponent(img))}&v=${h.mtime || 0}" alt="" loading="lazy" draggable="false"><span class="n">${i + 1}</span>${h.video ? '<span class="s-vid" title="Video con voz en off">▶ video</span>' : ''}${fbn ? `<span class="s-fbn" title="${fbn} nota${fbn === 1 ? '' : 's'} de feedback pendiente${fbn === 1 ? '' : 's'}">💬 ${fbn}</span>` : ''}${st}${h.sticker && !/^zona segura/i.test(h.sticker) ? `<span class="stk">${hand ? '✋ ' : ''}${esc(h.sticker.split(':')[0])}</span>` : ''}</button>`;
         }).join('')
       : `<span class="s-free">${esc(dia.tema || 'Sin historias')}</span>`;
     const num = (k, ph, label) => `<input inputmode="numeric" pattern="[0-9]*" data-smetric="${k}" data-date="${d}" data-cuenta="${esc(mc)}" value="${Number.isInteger(m[k]) ? m[k] : ''}" placeholder="${ph}" title="${label}" aria-label="${label} del ${esc(dayLong(d))}">`;
@@ -223,7 +229,9 @@ const SE_CSS = `
   .se-hover { outline: 3px dashed rgba(56, 151, 240, .95) !important; outline-offset: 6px; cursor: move; }
   [contenteditable="true"] { outline: 5px solid #fdcb58 !important; outline-offset: 6px; cursor: text !important; user-select: text; -webkit-user-select: text; caret-color: #3897f0; }
   .fondo, .atenuado { cursor: grab; }
-  .moveable-control-box { z-index: 2000 !important; }`;
+  .moveable-control-box { z-index: 2000 !important; }
+  .se-multi { outline: 3px solid rgba(56, 151, 240, .95) !important; outline-offset: 6px; }
+  .se-crop { outline: 4px dashed #fdcb58 !important; outline-offset: 0; cursor: grab !important; }`;
 const SE_MEDIA = '.captura, .recorte, .sticker, svg, img';
 const seIsMedia = el => el.matches(SE_MEDIA) || !!el.closest('svg');
 const seTop = el => { let e = el; while (e && e.parentElement && e.parentElement !== se.root) e = e.parentElement; return e && e.parentElement === se.root ? e : null; };
@@ -237,6 +245,7 @@ function seUnit(t) {
   if (!t || t.nodeType !== 1) t = t?.parentElement;
   if (!t || t === se.root || !se.root.contains(t)) return null;
   const top = seTop(t); if (!top || seLayer(top)) return null;
+  if (top.matches('.grupo, [data-grupo]')) return top;  // un grupo se elige y se mueve entero
   const emo = t.closest('.emoji'); if (emo && se.root.contains(emo)) return emo;
   if (seIsMedia(t) || seIsMedia(top)) return top;
   let e = t; while (e !== top && ['inline', 'inline-block', 'contents'].includes(se.w.getComputedStyle(e).display)) e = e.parentElement;
@@ -253,8 +262,9 @@ function seKind(el) {
 }
 const seLabel = el => {
   if (!el) return '';
-  if (el.matches('.fondo')) return '🖼️ Foto de fondo';
+  if (el.matches('.fondo')) return el.querySelector('img[data-secuencia]') ? '🎬 Video de fondo' : '🖼️ Foto de fondo';
   if (el.matches('.atenuado')) return 'Oscurecer la foto';
+  if (el.parentElement === se.root && seIsGroup(el)) { const t = (el.innerText || el.textContent).replace(/\s+/g, ' ').trim(); return `▣ Grupo de ${seGroupItems(el).length}${t ? ` · «${t.length > 36 ? t.slice(0, 36) + '…' : t}»` : ''}`; }
   const k = seKind(el);
   if (k === 'sticker') return /^zona segura/i.test(el.dataset.sticker || '') || !el.dataset.sticker ? 'Zona segura' : `Zona segura: ${el.dataset.sticker}`;
   if (k === 'dibujo') return 'Flecha o dibujo';
@@ -305,17 +315,26 @@ function seSetup() {
   // en un emoji, la letra; en una imagen, flecha o sticker, el ancho y el alto. Siempre desde el centro.
   mv.on('resizeStart', e => {
     if (se.editing || se.busy) { e.stop(); return; }
+    // Recortar, como en Canva: el lado que se
+    // arrastra corta el marco y la imagen queda quieta en su lugar.
+    if (se.crop?.el === e.target) { const el = e.target, img = seFreezeImg(el); if (!img) { e.stop(); return; } const cs = se.w.getComputedStyle(el);
+      se.g = { el, crop: true, img, before: seSnap(), L: parseFloat(cs.left) || 0, T: parseFloat(cs.top) || 0, W: el.offsetWidth, H: el.offsetHeight,
+        il: parseFloat(img.style.left) || 0, it: parseFloat(img.style.top) || 0, iw: parseFloat(img.style.width) || el.offsetWidth, ih: parseFloat(img.style.height) || el.offsetHeight, styles: seStylesOf(el) }; return; }
     e.setFixedDirection([0, 0]); const el = e.target, k = seKind(el), r0 = el.getBoundingClientRect(), ie = e.inputEvent;
     // La letra se escala por la distancia del puntero al centro (como pellizcar en Instagram), no por el ancho que
     // calcula Moveable: al cambiar la letra, el alto cambia y ese ancho deja de servir.
     const c = [r0.left + r0.width / 2, r0.top + r0.height / 2], p0 = ie ? [ie.clientX, ie.clientY] : [r0.right, r0.bottom];
-    se.g = { el, k, before: seSnap(), r0, c, d0: Math.max(8, Math.hypot(p0[0] - c[0], p0[1] - c[1])), fonts: ['texto', 'emoji', 'bloque'].includes(k) ? seFontTargets(el) : null, style0: el.getAttribute('style'), styles: seStylesOf(el) };
+    const ci = k === 'imagen' ? seCropImg(el) : null, img0 = ci && /px$/.test(ci.style.width || '') ? ['left', 'top', 'width', 'height'].map(p => parseFloat(ci.style[p]) || 0) : null;
+    se.g = { el, k, before: seSnap(), r0, c, d0: Math.max(8, Math.hypot(p0[0] - c[0], p0[1] - c[1])), fonts: ['texto', 'emoji', 'bloque'].includes(k) ? seFontTargets(el) : null, style0: el.getAttribute('style'), styles: seStylesOf(el), ci, img0 };
   }).on('resize', e => {
     const g = se.g; if (!g) return; seRestoreAll(g.styles);
+    if (g.crop) { seCropTo(g, e); return; }
     const ie = e.inputEvent, f = ie ? Math.max(.15, Math.hypot(ie.clientX - g.c[0], ie.clientY - g.c[1]) / g.d0) : e.width / g.r0.width;
     if (g.k === 'texto' || g.k === 'bloque') { if (e.direction[1] === 0) seSetWidth(g.el, Math.round(e.width)); else seScaleFont(g.fonts, f); }
     else if (g.k === 'emoji') seScaleFont(g.fonts, f);
-    else seSetSize(g.el, Math.round(e.width), Math.round(e.height), g.r0);
+    else { seSetSize(g.el, Math.round(e.width), Math.round(e.height), g.r0);
+      // Una imagen ya recortada escala con su marco: la imagen de adentro crece igual.
+      if (g.img0) { const f = Math.round(e.width) / g.r0.width; ['left', 'top', 'width', 'height'].forEach((p, i) => { g.ci.style[p] = Math.round(g.img0[i] * f) + 'px'; }); } }
   }).on('resizeEnd', e => { const g = se.g; se.g = null; if (g && e.isDrag) sePush(g.before); mv.updateRect(); seSide(); });
   mv.on('rotateStart', e => { if (se.editing || se.busy) { e.stop(); return; } se.g = { el: e.target, rot0: seRotation(e.target), before: seSnap() }; })
     .on('rotate', e => { const g = se.g; if (!g) return; seSetRotation(g.el, g.rot0 + e.dist); })
@@ -325,7 +344,7 @@ function seSetup() {
   d.addEventListener('pointerdown', seDown, true); d.addEventListener('pointermove', seMove); d.addEventListener('pointerup', seUp); d.addEventListener('pointercancel', seUp);
   d.addEventListener('dblclick', seDbl); d.addEventListener('keydown', seKey); d.addEventListener('paste', sePaste);
   d.addEventListener('input', () => { if (se.editing) { se.edited.add(se.editing.dataset.se); se.dirty = true; seSaveButton(); } });
-  d.addEventListener('load', e => { if (e.target.tagName === 'IMG') { seSide(); se.mv?.updateRect(); } }, true);
+  d.addEventListener('load', e => { if (e.target.tagName === 'IMG' && !se.play) { seSide(); se.mv?.updateRect(); } }, true);
   // Al marcar palabras mientras se corrige, la barra muestra el color y el resaltado de lo marcado.
   let selT = 0; d.addEventListener('selectionchange', () => { if (!se?.editing) return; clearTimeout(selT); selT = setTimeout(() => se?.editing && seBar(), 80); });
   d.addEventListener('pointerdown', () => $('sePop') && ($('sePop').hidden = true), true);
@@ -347,7 +366,8 @@ const seSnap = () => ({ html: se.root.innerHTML, cls: se.root.getAttribute('clas
 function seApplySnap(s) {
   se.mv.target = null; se.sel = se.hover = null;
   se.root.innerHTML = s.html; se.root.setAttribute('class', s.cls || ''); if (s.style === null) se.root.removeAttribute('style'); else se.root.setAttribute('style', s.style);
-  se.root.querySelectorAll('.se-hover').forEach(x => x.classList.remove('se-hover'));
+  se.root.querySelectorAll('.se-hover, .se-multi, .se-crop').forEach(x => x.classList.remove('se-hover', 'se-multi', 'se-crop'));
+  se.multi = new Set(); se.crop = null; if (se.mv) se.mv.draggable = true;
   se.root.querySelectorAll('[contenteditable]').forEach(x => x.removeAttribute('contenteditable'));
   seFreeze();
 }
@@ -418,15 +438,18 @@ function seMark(el) { for (const x of [el, ...el.querySelectorAll('*')]) x.setAt
 // ── Elegir, mover a mano, encuadrar la foto ──
 function seSelect(el) {
   if (se.hover) { se.hover.classList.remove('se-hover'); se.hover = null; }
+  if (se.multi?.size) { se.root.querySelectorAll('.se-multi').forEach(x => x.classList.remove('se-multi')); se.multi = new Set(); }
+  if (se.crop && se.crop.el !== el) seEndCrop(false);
   se.sel = el || null;
   const mv = se.mv;
   if (mv) {
     const k = seKind(el);
     mv.target = el && !se.editing ? el : null;
     if (el) {
-      mv.keepRatio = ['imagen', 'dibujo', 'emoji'].includes(k);
-      mv.renderDirections = k === 'texto' || k === 'bloque' ? ['w', 'e', 'nw', 'ne', 'sw', 'se'] : k === 'sticker' ? ['n', 's', 'w', 'e', 'nw', 'ne', 'sw', 'se'] : ['nw', 'ne', 'sw', 'se'];
-      mv.rotatable = k !== 'sticker';
+      const crop = se.crop?.el === el;
+      mv.keepRatio = !crop && ['imagen', 'dibujo', 'emoji'].includes(k);
+      mv.renderDirections = crop || k === 'sticker' ? ['n', 's', 'w', 'e', 'nw', 'ne', 'sw', 'se'] : k === 'texto' || k === 'bloque' ? ['w', 'e', 'nw', 'ne', 'sw', 'se'] : ['nw', 'ne', 'sw', 'se'];
+      mv.rotatable = !crop && k !== 'sticker'; mv.draggable = !crop;
       mv.elementGuidelines = [...se.root.children].filter(x => x !== el && !x.contains(el) && !seLayer(x) && !x.matches('.sticker'));
     }
   }
@@ -436,15 +459,22 @@ function seDown(e) {
   if (e.button !== 0 || se.busy) return;
   if (se.mv?.isMoveableElement?.(e.target) || e.target.closest?.('.moveable-control-box')) return;
   if (se.editing) { if (se.editing.contains(e.target)) return; seEndEdit(); }
+  // Recortando: arrastrar adentro del marco corre la imagen, que siempre lo cubre.
+  if (se.crop && se.crop.el.contains(e.target)) { e.preventDefault(); e.stopPropagation(); seCropPanBegin(e); return; }
   const u = seUnit(e.target);
   if (u) {
+    const t = seTop(u) || u;
+    if (e.shiftKey) { e.preventDefault(); e.stopPropagation(); seToggleMulti(u); return; }
+    if (se.multi?.size >= 2 && se.multi.has(t)) { e.preventDefault(); e.stopPropagation(); seDragBegin(e, [...se.multi]); return; }
     if (u === se.sel) return;  // Moveable ya lo arrastra
     e.preventDefault(); e.stopPropagation();
     seSelect(u);
-    // El arrastre arranca sólo si el botón sigue apretado (si no, Moveable quedaría arrastrando sin soltar).
-    se.mv.waitToChangeTarget().then(() => { if (se?.down) se.mv.dragStart(e); });
+    // Clic y arrastrar mueve; al soltar, se suelta. El
+    // arrastre del primer clic lo lleva el editor (no Moveable): sólo mueve mientras el botón sigue apretado.
+    seDragBegin(e, [u]);
     return;
   }
+  if (se.multi?.size) seSelectMany([]);
   seSelect(null);
   const img = se.root.querySelector('.fondo > img');
   if (img && (e.target === se.root || e.target.closest('.fondo, .atenuado'))) {
@@ -456,6 +486,8 @@ function seDown(e) {
   }
 }
 function seMove(e) {
+  if (se.drag) { seDragMove(e); return; }
+  if (se.cpan) { seCropPanMove(e); return; }
   if (se.pan) {
     const p = se.pan, dx = e.clientX - p.x0, dy = e.clientY - p.y0; if (!p.moved && Math.hypot(dx, dy) < 4) return; p.moved = true;
     const clamp = v => Math.max(0, Math.min(100, Math.round(v)));
@@ -466,10 +498,12 @@ function seMove(e) {
     if (u !== se.hover) { se.hover?.classList.remove('se-hover'); se.hover = u && u !== se.sel ? u : null; se.hover?.classList.add('se-hover'); }
   }
 }
-function seUp() { if (se.pan) { const p = se.pan; se.pan = null; if (p.moved && p.before.html !== se.root.innerHTML) sePush(p.before); else seSide(); } }
+function seUp() { if (se.drag) { seDragEnd(); return; } if (se.cpan) { seCropPanEnd(); return; } if (se.pan) { const p = se.pan; se.pan = null; if (p.moved && p.before.html !== se.root.innerHTML) sePush(p.before); else seSide(); } }
 // Doble clic: corregir el texto ahí mismo, con la palabra marcada.
 function seDbl(e) {
-  const u = seUnit(e.target); if (!u || seIsMedia(u) || u.querySelector('script')) return;
+  const u = seUnit(e.target);
+  if (u && seCropImg(u)) { seStartCrop(u); return; }
+  if (!u || seIsMedia(u) || u.querySelector('script')) return;
   seStartEdit(u, e.clientX, e.clientY);
 }
 function seStartEdit(u, x, y) {
@@ -506,7 +540,14 @@ function seKeys(e) {
   const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
   if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? seRedo() : seUndo(); return true; }
   if (mod && k === 'y') { e.preventDefault(); seRedo(); return true; }
-  if (e.key === 'Escape') { if (se.sel) { e.preventDefault(); seSelect(null); return true; } return false; }
+  if (e.key === 'Escape') { if (se.crop) { e.preventDefault(); seEndCrop(); return true; } if (se.multi?.size) { e.preventDefault(); seSelectMany([]); return true; } if (se.sel) { e.preventDefault(); seSelect(null); return true; } return false; }
+  if (mod && k === 'g') { e.preventDefault(); if (e.shiftKey) seUngroup(se.sel ? seTop(se.sel) || se.sel : null); else seGroup(); return true; }
+  if (se.multi?.size >= 2) {
+    const st = e.shiftKey ? 10 : 1, ar = { ArrowLeft: [-st, 0], ArrowRight: [st, 0], ArrowUp: [0, -st], ArrowDown: [0, st] };
+    if (ar[e.key]) { e.preventDefault(); seChange(() => se.multi.forEach(x => seMoveBy(x, ...ar[e.key]))); return true; }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); const l = [...se.multi]; seSelectMany([]); seChange(() => l.forEach(x => x.remove())); return true; }
+    return false;
+  }
   if (!se.sel) return false;
   if (mod && k === 'd') { e.preventDefault(); seDuplicate(); return true; }
   if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); seDelete(); return true; }
@@ -515,6 +556,156 @@ function seKeys(e) {
   if (arrows[e.key]) { e.preventDefault(); seChange(() => seMoveBy(se.sel, ...arrows[e.key])); return true; }
   return false;
 }
+
+// ── Arrastrar, varios a la vez, agrupar y desagrupar ──
+// Un grupo es un elemento de la historia con dos o más piezas adentro (un bloque con varias cajas, o uno
+// armado acá con data-grupo). Desagrupar deja cada pieza suelta en su lugar exacto; Shift+clic elige varias, que se
+// arrastran juntas, y Agrupar las une en un grupo que se mueve como una.
+const seUnion = els => { const rs = els.map(x => x.getBoundingClientRect()); const l = Math.min(...rs.map(r => r.left)), t = Math.min(...rs.map(r => r.top)), r = Math.max(...rs.map(r => r.right)), b = Math.max(...rs.map(r => r.bottom)); return { left: l, top: t, width: r - l, height: b - t, right: r, bottom: b }; };
+function seDragBegin(e, els) {
+  se.drag = { els, x0: e.clientX, y0: e.clientY, styles: els.flatMap(x => [[x, x.getAttribute('style')]]), before: seSnap(), moved: false };
+  try { e.target.setPointerCapture(e.pointerId); } catch {}
+}
+function seDragMove(e) {
+  const g = se.drag; if (!(e.buttons & 1)) { seDragEnd(); return; }
+  let dx = e.clientX - g.x0, dy = e.clientY - g.y0; if (!g.moved && Math.hypot(dx, dy) < 4) return; g.moved = true;
+  for (const [x, st] of g.styles) seRestore(x, st);
+  // Imán al eje central: todo va centrado.
+  const r = seUnion(g.els), cx = r.left + r.width / 2 + dx; if (Math.abs(cx - 540) < 12) dx += 540 - cx;
+  g.els.forEach(x => seMoveBy(x, Math.round(dx), Math.round(dy))); se.mv?.updateRect();
+}
+function seDragEnd() {
+  const g = se.drag; se.drag = null; if (!g) return;
+  if (g.moved) sePush(g.before);
+  se.mv?.updateRect(); seSide();
+}
+function seSelectMany(list) {
+  se.root.querySelectorAll('.se-multi').forEach(x => x.classList.remove('se-multi'));
+  list = [...new Set(list)].filter(x => x && x.parentElement === se.root && !seLayer(x));
+  if (list.length < 2) { se.multi = new Set(); seSelect(list[0] || null); return; }
+  if (se.crop) seEndCrop(false);
+  se.multi = new Set(list); se.sel = null; if (se.mv) se.mv.target = null;
+  list.forEach(x => x.classList.add('se-multi'));
+  seSide();
+}
+function seToggleMulti(u) {
+  const t = seTop(u) || u; if (!t || seLayer(t)) return;
+  const set = new Set(se.multi?.size ? se.multi : se.sel ? [seTop(se.sel) || se.sel] : []);
+  if (set.has(t)) set.delete(t); else set.add(t);
+  seSelectMany([...set]);
+}
+const seGroupItems = el => el && el.parentElement === se.root && !seLayer(el) && !el.matches('.captura, .recorte, .sticker, svg, img, audio, [data-recurso]') ? [...el.children].filter(x => !x.matches('script, style, br, audio') && x.getBoundingClientRect().height > 0) : [];
+const seIsGroup = el => seGroupItems(el).length >= 2;
+function seUngroup(el) {
+  if (!el || !seIsGroup(el)) { toast('Elegí un bloque con varias piezas para desagruparlo.'); return; }
+  const piezas = [];
+  seChange(() => {
+    // Todas las posiciones se miden antes de sacar la primera: al sacar una, las de abajo suben dentro del bloque.
+    const items = seGroupItems(el), rs = items.map(c => c.getBoundingClientRect()), mts = items.map(c => parseFloat(se.w.getComputedStyle(c).marginTop) || 0);
+    items.forEach((c, i) => {
+      const r0 = rs[i], abs = ['absolute', 'fixed'].includes(se.w.getComputedStyle(c).position);
+      let pieza = c;
+      if (abs) el.before(c);
+      else {
+        // Cada pieza sale en un bloque igual al original (las mismas clases, así conserva su letra y su tamaño) en su lugar.
+        pieza = el.cloneNode(false); pieza.removeAttribute('data-grupo'); pieza.removeAttribute('data-se'); pieza.classList.remove('grupo'); seMark(pieza);
+        pieza.style.top = Math.round(r0.top - mts[i]) + 'px'; pieza.style.bottom = 'auto'; pieza.style.removeProperty('height');
+        el.before(pieza); pieza.appendChild(c);
+      }
+      const r1 = c.getBoundingClientRect(), dx = Math.round(r0.left - r1.left), dy = Math.round(r0.top - r1.top);
+      if (dx || dy) seMoveBy(pieza, dx, dy);
+      piezas.push(pieza);
+    });
+    el.remove();
+  });
+  seSelectMany(piezas);
+  toast(`Separado en ${piezas.length} piezas: tocá cada una para moverla.`);
+}
+function seGroup(list = [...(se.multi || [])]) {
+  list = list.filter(x => x.parentElement === se.root && !seLayer(x));
+  if (list.length < 2) { toast('Elegí dos o más elementos con Shift+clic para agruparlos.'); return; }
+  list.sort((a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+  let g;
+  seChange(() => {
+    const u = seUnion(list), rs = list.map(x => x.getBoundingClientRect());
+    // El grupo ocupa todo el ancho: adentro, cada pieza conserva su lugar y su centrado.
+    // Sin data-grupo: así el chequeo del render sigue midiendo el centrado de cada pieza de adentro.
+    g = se.d.createElement('div'); g.className = 'bloque grupo';
+    g.style.cssText = `left: 0px; right: 0px; top: ${Math.round(u.top)}px; height: ${Math.round(u.height)}px;`;
+    seMark(g); list[0].before(g);
+    list.forEach((x, i) => { g.appendChild(x); const r1 = x.getBoundingClientRect(), dx = Math.round(rs[i].left - r1.left), dy = Math.round(rs[i].top - r1.top); if (dx || dy) seMoveBy(x, dx, dy); });
+  });
+  se.root.querySelectorAll('.se-multi').forEach(x => x.classList.remove('se-multi')); se.multi = new Set();
+  if (g) seSelect(g);
+}
+// ── Recursos y tapar una captura ──
+// motor-historias/recursos.html: bloques con el estilo adentro (chat de WhatsApp, archivo del
+// recurso). Entran centrados, a la altura de la mitad de la historia, y se eligen enteros (data-grupo).
+function seAddRecurso(id) {
+  const src = se.recursosDoc?.querySelector(`.historia > [data-recurso="${CSS.escape(id)}"]`); if (!src) return;
+  let el;
+  seChange(() => { el = se.d.importNode(src, true); se.root.appendChild(seMark(el)); el.style.top = Math.round(960 - el.getBoundingClientRect().height / 2) + 'px'; seCenter(el); });
+  if (el) seSelect(el);
+}
+// Tapar: la captura se borronea y lleva un candado encima; el recurso se ve pero no se lee (recurso hypeado, R4).
+function seTapar(el) {
+  const img = seCropImg(el); if (!img) return;
+  seChange(() => {
+    const t = el.querySelector(':scope > [data-tapa]');
+    if (t) { t.remove(); img.style.removeProperty('filter'); return; }
+    img.style.filter = 'blur(14px)';
+    const s = se.d.createElement('span'); s.setAttribute('data-tapa', ''); s.textContent = '🔒';
+    s.style.cssText = 'position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 150px; font-family: var(--emoji);';
+    el.appendChild(seMark(s));
+  });
+}
+// ── Recortar una imagen ──
+// La imagen queda con su tamaño y su lugar en px dentro del marco; recortar mueve los bordes del marco sin escalarla.
+const seCropImg = el => el?.matches?.('.captura') ? el.querySelector(':scope > img') : null;
+function seFreezeImg(el) {
+  const img = seCropImg(el); if (!img) return null;
+  if (/px$/.test(img.style.width || '')) return img;
+  const W = el.clientWidth, H = el.clientHeight, nw = img.naturalWidth || W, nh = img.naturalHeight || H, k = Math.max(W / nw, H / nh), fw = nw * k, fh = nh * k;
+  const [px, py] = (se.w.getComputedStyle(img).objectPosition || '50% 50%').split(' ').map(v => parseFloat(v) / 100);
+  Object.assign(img.style, { position: 'absolute', maxWidth: 'none', objectFit: 'fill', width: Math.round(fw) + 'px', height: Math.round(fh) + 'px', left: Math.round((W - fw) * (Number.isFinite(px) ? px : .5)) + 'px', top: Math.round((H - fh) * (Number.isFinite(py) ? py : .5)) + 'px' });
+  img.style.removeProperty('object-position');
+  return img;
+}
+function seStartCrop(el) {
+  if (!seCropImg(el)) return;
+  if (se.multi?.size) seSelectMany([]);
+  se.crop = { el }; el.classList.add('se-crop');
+  seSelect(el); toast('Arrastrá los bordes para recortar. Listo o Esc para terminar.');
+}
+function seEndCrop(reselect = true) {
+  const c = se.crop; if (!c) return; se.crop = null; c.el.classList.remove('se-crop');
+  if (se.mv) se.mv.draggable = true;
+  if (reselect) seSelect(c.el);
+}
+function seCropTo(g, e) {
+  const dir = e.direction, min = 40;
+  // Bordes de la imagen en coordenadas de la historia: el marco no puede salirse de ellos.
+  const iL = g.L + g.il, iT = g.T + g.it, iR = iL + g.iw, iB = iT + g.ih;
+  let L = g.L, T = g.T, W = g.W, H = g.H;
+  if (dir[0] === -1) { L = Math.max(iL, Math.min(g.L + g.W - min, g.L + g.W - e.width)); W = g.L + g.W - L; }
+  else if (dir[0] === 1) W = Math.max(min, Math.min(iR - g.L, e.width));
+  if (dir[1] === -1) { T = Math.max(iT, Math.min(g.T + g.H - min, g.T + g.H - e.height)); H = g.T + g.H - T; }
+  else if (dir[1] === 1) H = Math.max(min, Math.min(iB - g.T, e.height));
+  Object.assign(g.el.style, { left: Math.round(L) + 'px', top: Math.round(T) + 'px', width: Math.round(W) + 'px', height: Math.round(H) + 'px', right: 'auto', bottom: 'auto' });
+  g.img.style.left = Math.round(g.il - (L - g.L)) + 'px'; g.img.style.top = Math.round(g.it - (T - g.T)) + 'px';
+}
+function seCropPanBegin(e) {
+  const img = seFreezeImg(se.crop.el); if (!img) return;
+  se.cpan = { img, el: se.crop.el, x0: e.clientX, y0: e.clientY, l0: parseFloat(img.style.left) || 0, t0: parseFloat(img.style.top) || 0, before: seSnap(), moved: false };
+  try { e.target.setPointerCapture(e.pointerId); } catch {}
+}
+function seCropPanMove(e) {
+  const p = se.cpan; if (!(e.buttons & 1)) { seCropPanEnd(); return; }
+  const dx = e.clientX - p.x0, dy = e.clientY - p.y0; if (!p.moved && Math.hypot(dx, dy) < 3) return; p.moved = true;
+  const W = p.el.clientWidth, H = p.el.clientHeight, iw = parseFloat(p.img.style.width), ih = parseFloat(p.img.style.height);
+  p.img.style.left = Math.round(Math.min(0, Math.max(W - iw, p.l0 + dx))) + 'px'; p.img.style.top = Math.round(Math.min(0, Math.max(H - ih, p.t0 + dy))) + 'px';
+}
+function seCropPanEnd() { const p = se.cpan; se.cpan = null; if (p?.moved) sePush(p.before); seSide(); }
 
 // ── Agregar, duplicar, borrar, ordenar ──
 function seAdd(kind, value) {
@@ -553,8 +744,10 @@ function seAddImage(src, at) {
   seSelect(el);
 }
 async function seUploadFiles(files, at) {
-  const list = [...(files || [])].filter(f => /^image\//.test(f.type) || /\.(heic|heif)$/i.test(f.name || ''));
-  if (!list.length) { toast('Eso no es una imagen.'); return; }
+  const all = [...(files || [])], vid = all.find(seEsVideo), aud = all.find(seEsAudio);
+  if (vid) seUploadVideo(vid); if (aud) seUploadAudio(aud);
+  const list = all.filter(f => /^image\//.test(f.type) || /\.(heic|heif)$/i.test(f.name || ''));
+  if (!list.length) { if (!vid && !aud) toast('Eso no es una imagen.'); return; }
   for (const f of list) {
     if (f.size > 20e6) { toast(`${f.name || 'La imagen'} pesa más de 20 MB.`); continue; }
     toast('Subiendo ' + (f.name || 'la imagen') + '…');
@@ -603,6 +796,108 @@ function seSetAten(on, v) {
   const el = a || seMark(Object.assign(se.d.createElement('div'), { className: 'atenuado' }));
   if (!a) seFondo() ? seFondo().after(el) : se.root.prepend(el);
   if (v != null) el.style.setProperty('--atenuar', String(v));
+}
+
+// ── Video de fondo y voz en off ──
+// Historias con video de fondo y voz en off, con el texto encima. El video
+// se sube crudo (un MOV del iPhone pesa cientos de MB) y el servidor lo prepara con motor-historias/fondo_video.py: color
+// normal (si vino en HDR, la conversión de Apple con las luces altas suavizadas), 1080 × 1920 y sus cuadros. La voz es
+// un <audio class="voz"> de la historia, con su segundo de inicio; render.py la mezcla en el MP4.
+const seVideo = () => seFondo()?.querySelector('img[data-secuencia]') || null;
+const seVoz = () => se.root.querySelector(':scope > audio.voz');
+const seEsVideo = f => /^video\//.test(f.type) || /\.(mov|mp4|m4v|webm)$/i.test(f.name || '');
+const seEsAudio = f => /^audio\//.test(f.type) || /\.(mp3|wav|m4a|aac|ogg)$/i.test(f.name || '');
+const seFmtS = s => String(Math.round((s || 0) * 10) / 10).replace('.', ',');
+const seVideoDur = () => { const v = seVideo(); return v ? (parseInt(v.dataset.cuadros, 10) || 0) / (parseFloat(v.dataset.fps) || 30) : 0; };
+const seVozFin = () => { const a = seVoz(); return a && parseFloat(a.dataset.duracion) ? (parseFloat(a.dataset.inicio) || 0) + parseFloat(a.dataset.duracion) : 0; };
+// Con voz en off, la historia termina con la voz (más un respiro), para que no quede un tramo mudo al final; si la voz
+// dura más que el video, el último cuadro queda quieto hasta que termina. Sin voz, dura lo que el video.
+function seAjustarDuracion() {
+  const d = seVozFin() ? seVozFin() + 0.4 : seVideoDur();
+  if (d > 0) { const v = String(Math.round(d * 10) / 10); se.root.dataset.duracion = v; se.dur = parseFloat(v); }
+}
+async function seSubirMedia(file, tipo) {
+  if (file.size > (tipo === 'video' ? 800e6 : 200e6)) throw new Error(tipo === 'video' ? 'El video pesa más de 800 MB: recortalo antes de subirlo.' : 'El audio pesa más de 200 MB.');
+  const q = new URLSearchParams({ imagen: se.img, tipo, name: file.name || tipo });
+  const r = await fetch('/api/planner/stories/media?' + q, { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+  const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(j.error || 'No se pudo subir.'); return j;
+}
+function sePonerVideo(r) {
+  seChange(() => {
+    let f = seFondo();
+    if (!f) { f = se.d.createElement('div'); f.className = 'fondo'; f.innerHTML = '<img alt="">'; seMark(f); se.root.prepend(f); se.root.classList.remove('lisa', 'negra'); se.root.style.removeProperty('background-color'); se.stash = null; }
+    const img = f.querySelector('img') || f.appendChild(seMark(se.d.createElement('img')));
+    Object.entries({ 'data-secuencia': r.secuencia, 'data-cuadros': String(r.cuadros), 'data-fps': String(r.fps || 30), 'data-inicio': '0', src: r.poster }).forEach(([k, v]) => img.setAttribute(k, v));
+    img.style.removeProperty('object-position'); f.style.removeProperty('transform');
+    seAjustarDuracion();
+  });
+  se.videoMeta = r;
+}
+async function seUploadVideo(file) {
+  if (!file || !se?.root) return;
+  if (!seEsVideo(file)) { toast('Eso no es un video.'); return; }
+  se.mediaBusy = 'Subiendo y preparando el video… Si vino del iPhone en HDR, lo paso a color normal. Puede tardar un minuto.'; if (seTab !== 'fondo') seTab = 'fondo'; seDrawer();
+  try { const r = await seSubirMedia(file, 'video'); if (se?.root) { sePonerVideo(r); toast(`Video listo: ${seFmtS(r.duracion)} s.`); } }
+  catch (e) { toast(e.message); } finally { if (se) { se.mediaBusy = null; seDrawer(); } }
+}
+function seLoadVideoMeta(v) {
+  const m = /^assets\/videos\/([a-z0-9-]+)\//.exec(v.dataset.secuencia || ''); if (!m) return;
+  se.videoMetaLoading = true;
+  fetch(se.src.base + 'assets/videos/' + m[1] + '/video.json').then(r => r.ok ? r.json() : null).then(j => { if (se && j) se.videoMeta = j; })
+    .catch(() => {}).finally(() => { if (se) { se.videoMetaLoading = false; if (seTab === 'fondo') seDrawer(); } });
+}
+function seVideoBox(vid) {
+  if (/video/i.test(se.mediaBusy || '')) return `<p class="hint busy">${esc(se.mediaBusy)}</p>`;
+  const up = `<label class="se-upload"><input type="file" accept="video/*,.mov,.mp4,.m4v,.webm" data-upload-video hidden>⬆︎ ${vid ? 'Cambiar el video' : 'Subir un video'}</label>`;
+  if (!vid) return up + '<p class="hint">Del celular, una grabación de pantalla o un clip de YouTube. Si vino del iPhone en HDR, lo paso a color normal. Hasta 60 s por historia.</p>';
+  const m = se.videoMeta;
+  return `<div class="se-fondo-foto"><img src="${esc(se.src.base + vid.getAttribute('src'))}" alt=""><span class="muted">${seFmtS(seVideoDur())} s de video${m?.conversion && /HDR/.test(m.conversion) ? ' · pasado de HDR a color normal' : ''}</span></div>
+    <div class="se-tramo"><label>Desde <input type="number" min="0" step="0.1" data-video="desde" value="${esc(String(m?.desde ?? 0))}"> s</label><label>Hasta <input type="number" min="0" step="0.1" data-video="hasta" value="${esc(String(m?.hasta ?? ''))}" placeholder="fin"> s</label>${seB('video-tramo', 'Recortar', { title: 'Vuelve a tomar ese tramo del video original' })}</div>
+    <div class="se-adds row">${up}${seB('video-sacar', 'Sacar el video')}</div>`;
+}
+async function seTrimVideo() {
+  const v = seVideo(); if (!v) return;
+  const desde = document.querySelector('#seDrawer [data-video="desde"]')?.value, hasta = document.querySelector('#seDrawer [data-video="hasta"]')?.value;
+  se.mediaBusy = 'Recortando el video…'; seDrawer();
+  try { const r = await api('stories/video-trim', post({ imagen: se.img, secuencia: v.dataset.secuencia, desde, hasta })); if (se?.root) sePonerVideo(r); }
+  catch (e) { toast(e.message); } finally { if (se) { se.mediaBusy = null; seDrawer(); } }
+}
+function sePonerVoz(r) {
+  seChange(() => {
+    let a = seVoz();
+    if (!a) { a = seMark(se.d.createElement('audio')); a.className = 'voz'; a.dataset.inicio = '0.25'; se.root.prepend(a); }
+    a.setAttribute('src', r.src); a.dataset.duracion = String(r.duracion || 0);
+    seAjustarDuracion();
+  });
+}
+async function seUploadAudio(file) {
+  if (!file || !se?.root) return;
+  if (!seEsAudio(file)) { toast('Eso no es un audio.'); return; }
+  se.mediaBusy = 'Subiendo el audio…'; if (seTab !== 'audio') seTab = 'audio'; seDrawer();
+  try { const r = await seSubirMedia(file, 'audio'); if (se?.root) { sePonerVoz(r); se.voces = null; } }
+  catch (e) { toast(e.message); } finally { if (se) { se.mediaBusy = null; seDrawer(); } }
+}
+async function seElegirVoz(v) {
+  try { const r = v.en_fuente ? { src: v.src, duracion: v.duracion } : await api('stories/voice-import', post({ imagen: se.img, path: v.path })); if (se?.root) { sePonerVoz(r); se.voces = null; seDrawer(); } }
+  catch (e) { toast(e.message); }
+}
+// Probar: la voz suena desde su segundo y el video corre en el editor cuadro a cuadro, como en el render.
+function seProbar() {
+  if (se.play) { seParar(); return; }
+  const v = seVideo(), a = seVoz(), fps = parseFloat(v?.dataset.fps) || 30, n = parseInt(v?.dataset.cuadros, 10) || 0, pat = v?.dataset.secuencia;
+  const audio = a ? new Audio(se.src.base + a.getAttribute('src')) : null, ini = parseFloat(a?.dataset.inicio) || 0, t0 = performance.now(), dur = se.dur;
+  se.play = { audio, raf: 0, v, poster: v?.getAttribute('src'), timer: audio ? setTimeout(() => audio.play().catch(() => {}), ini * 1000) : null };
+  const tick = () => {
+    if (!se?.play) return; const t = (performance.now() - t0) / 1000; if (t >= dur) { seParar(); return; }
+    if (v && n) v.setAttribute('src', pat.replace('%03d', String(Math.min(n, Math.floor(t * fps) + 1)).padStart(3, '0')));
+    se.play.raf = requestAnimationFrame(tick);
+  };
+  tick(); seDrawer();
+}
+function seParar() {
+  const p = se?.play; if (!p) return; se.play = null;
+  cancelAnimationFrame(p.raf); clearTimeout(p.timer); p.audio?.pause(); if (p.v && p.poster) p.v.setAttribute('src', p.poster);
+  if (seTab === 'audio') seDrawer();
 }
 
 // ── Colores ──
@@ -731,7 +1026,7 @@ function seSetBoxStyle(el, style) {
   seSetBox(el, style === 'translucida' ? 'caja translucida' : style);
   if (style !== 'translucida') seColorAct('cajacolor', color === 'acento' ? 'acento' : color);
 }
-function seSaveButton() { $('seSave').disabled = !se?.dirty || se.busy; $('seSave').textContent = se?.busy ? 'Renderizando…' : 'Guardar y renderizar'; $('seUndo').disabled = !se?.undo.length || se?.busy; $('seRedo').disabled = !se?.redo.length || se?.busy; }
+function seSaveButton() { $('seSave').disabled = !se?.dirty || se.busy; $('seSave').textContent = se?.busy ? (se.root && (seVideo() || seVoz()) ? 'Renderizando el video…' : 'Renderizando…') : 'Guardar y renderizar'; $('seUndo').disabled = !se?.undo.length || se?.busy; $('seRedo').disabled = !se?.redo.length || se?.busy; }
 function seWarn(el) {
   if (!el || seKind(el) === 'sticker') return [];
   const r = el.getBoundingClientRect(), out = [];
@@ -749,7 +1044,8 @@ const seSep = '<span class="se-sep"></span>';
 function seBar() {
   const bar = $('seBar'); if (!se?.root) { bar.innerHTML = '<span class="muted">Cargando la historia…</span>'; return; }
   const el = se.sel, k = seKind(el);
-  const right = el ? `<span class="se-grow"></span>${seWarn(el).length ? `<span class="se-warn" title="${esc(seWarn(el).join(' '))}">⚠ ${esc(seWarn(el)[0].split(':')[0])}</span>` : ''}${seB('pos', 'Posición ▾', { pop: 'pos', title: 'Centrar, traer adelante, enviar atrás' })}${seB('duplicar', '⧉', { title: 'Duplicar (Cmd+D)' })}${seB('borrar', '🗑', { title: 'Borrar (Supr)', cls: 'danger' })}` : '';
+  const grupo = el && seIsGroup(seTop(el) || el) ? seB('desagrupar', '⧈ Desagrupar', { title: 'Separar las piezas para moverlas sueltas (Cmd+Shift+G)' }) : '';
+  const right = el ? `<span class="se-grow"></span>${grupo}${seWarn(el).length ? `<span class="se-warn" title="${esc(seWarn(el).join(' '))}">⚠ ${esc(seWarn(el)[0].split(':')[0])}</span>` : ''}${seB('pos', 'Posición ▾', { pop: 'pos', title: 'Centrar, traer adelante, enviar atrás' })}${seB('duplicar', '⧉', { title: 'Duplicar (Cmd+D)' })}${seB('borrar', '🗑', { title: 'Borrar (Supr)', cls: 'danger' })}` : '';
   let html = '';
   if (se.editing) {
     const r = seMarked(), at = r && seAt(r.startContainer, r.startOffset), M = r && seMarkUp(at, se.editing, SE_HL), C = r && seMarkUp(at, se.editing, SE_COL);
@@ -758,6 +1054,9 @@ function seBar() {
       ${seColorBtn('sel-hl', M ? seHlKey(M) || '' : '', 'Resaltar lo marcado', 'hl', { disabled: !r, label: 'Resaltar', auto: 'Sacar el resaltado' })}
       <span class="se-hint">${r ? 'Elegí un color para lo marcado. El mismo color otra vez lo saca.' : 'Marcá palabras arrastrando o con doble clic. Enter corta el renglón.'}</span>
       <span class="se-grow"></span>${seB('fin-edit', 'Listo', { cls: 'primary' })}`;
+  } else if (se.multi?.size >= 2) {
+    html = `<span class="se-label">${se.multi.size} elementos elegidos</span>${seSep}${seB('agrupar', '▣ Agrupar', { title: 'Unirlos en un grupo que se mueve como uno (Cmd+G)' })}${seB('multi-centrar', 'Centrar', { title: 'Centrar el conjunto' })}
+      <span class="se-grow"></span><span class="se-hint">Arrastralos para moverlos juntos. Shift+clic suma o saca uno.</span>${seB('multi-borrar', '🗑', { title: 'Borrar los elegidos', cls: 'danger' })}`;
   } else if (!el) {
     const bg = seBgValue(), img = seFondo()?.querySelector('img'), a = seAten();
     html = `${seColorBtn('bgcolor', bg === 'foto' ? '' : bg, 'Color de fondo', 'fill', { label: 'Fondo' })}
@@ -778,7 +1077,8 @@ function seBar() {
     html = `${seStep('fs', Math.round(parseFloat(se.w.getComputedStyle(el).fontSize)), 'Tamaño')}${seB('emoji', el.textContent.trim() + ' Cambiar ▾', { pop: 'emoji', title: 'Cambiar el emoji' })}${right}`;
   } else if (k === 'imagen') {
     const cs = se.w.getComputedStyle(el);
-    html = `<span class="se-lab">Ancho</span>${seStep('w', Math.round(el.getBoundingClientRect().width), 'Ancho de la imagen', 'px')}${seB('forma', 'Forma ▾', { pop: 'forma', title: 'Rectángulo, redondeada o círculo' })}<span class="se-lab">Bordes</span>${seStep('radio', Math.round(parseFloat(cs.borderRadius) || 0), 'Bordes redondeados', 'px')}${seB('sombra', 'Sombra', { on: cs.boxShadow !== 'none', title: 'Sombra de la imagen' })}${right}`;
+    if (se.crop?.el === el) { bar.innerHTML = `<span class="se-label">✂️ Recortando</span><span class="se-hint">Arrastrá los bordes para cortar la imagen y adentro para correrla.</span><span class="se-grow"></span>${seB('recortar-fin', 'Listo', { cls: 'primary' })}`; return; }
+    html = `${seCropImg(el) ? seB('recortar', '✂️ Recortar', { title: 'Cortar los bordes de la imagen (o doble clic)' }) + seB('tapar', el.querySelector(':scope > [data-tapa]') ? '🔓 Destapar' : '🔒 Tapar', { title: 'Borronear la captura y ponerle un candado: el recurso se ve pero no se lee' }) + seSep : ''}<span class="se-lab">Ancho</span>${seStep('w', Math.round(el.getBoundingClientRect().width), 'Ancho de la imagen', 'px')}${seB('forma', 'Forma ▾', { pop: 'forma', title: 'Rectángulo, redondeada o círculo' })}<span class="se-lab">Bordes</span>${seStep('radio', Math.round(parseFloat(cs.borderRadius) || 0), 'Bordes redondeados', 'px')}${seB('sombra', 'Sombra', { on: cs.boxShadow !== 'none', title: 'Sombra de la imagen' })}${right}`;
   } else if (k === 'dibujo') {
     html = `${seColorBtn('trazo', /acento/.test(el.style.getPropertyValue('--trazo')) ? 'acento' : seHex(el.style.getPropertyValue('--trazo')) || '#ffffff', 'Color de la flecha', 'fill', { auto: 'Blanco, el del lápiz' })}<span class="se-lab">Grosor</span>${seStep('trazo', Math.round(parseFloat(se.w.getComputedStyle(el).strokeWidth) || 11), 'Grosor del trazo')}${right}`;
   } else if (k === 'sticker') {
@@ -797,7 +1097,10 @@ function seDrawer() {
         <button data-act="add" data-val="texto:suelto" class="se-add"><span class="pv suelto">Texto suelto</span></button></div>
       <h4>Emojis</h4><div class="se-emojis">${SE_EMOJIS.map(x => `<button data-act="add" data-val="emoji:${x}">${x}</button>`).join('')}</div>
       <h4>Flechas</h4><div class="se-adds row"><button data-act="add" data-val="flecha:abajo" class="se-add">⤵︎ Hacia abajo</button><button data-act="add" data-val="flecha:curva" class="se-add">↷ Curva</button></div>
-      <h4>Zona segura</h4><div class="se-adds row"><button data-act="add" data-val="sticker:zona segura" class="se-add">▭ Zona segura</button></div>`;
+      <h4>Zona segura</h4><div class="se-adds row"><button data-act="add" data-val="sticker:zona segura" class="se-add">▭ Zona segura</button></div>
+      <h4>Recursos</h4><div class="se-adds">${se.recursos ? (se.recursos.map(r => `<button data-act="add-recurso" data-val="${esc(r.id)}" class="se-add">${r.id === 'chat' ? '💬' : r.id === 'archivo' ? '📄' : '✨'} ${esc(r.nombre)}</button>`).join('') || '<p class="hint">No encontré motor-historias/recursos.html.</p>') : '<p class="hint">Cargando…</p>'}</div>
+      <p class="hint">Para tapar una captura del recurso, elegila y tocá «Tapar». El chat de WhatsApp recrea un chat real o una broma que se nota: nunca una reacción inventada.</p>`;
+    if (!se.recursos && !se.recursosLoading) { se.recursosLoading = true; api('stories/recursos').then(r => { const doc = new DOMParser().parseFromString(r.html || '', 'text/html'); se.recursosDoc = doc; se.recursos = [...doc.querySelectorAll('.historia > [data-recurso]')].filter(x => x.dataset.recurso !== 'tapado').map(x => ({ id: x.dataset.recurso, nombre: x.dataset.nombre || x.dataset.recurso })); }, () => { se.recursos = []; }).finally(() => { if (se) { se.recursosLoading = false; if (seTab === 'agregar') seDrawer(); } }); }
   } else if (seTab === 'imagenes') {
     box.innerHTML = `<h4>Subir</h4><label class="se-upload"><input type="file" accept="image/*,.heic,.heif" multiple data-upload hidden>⬆︎ Subir fotos o capturas</label>
       <p class="hint">También podés arrastrarlas sobre la historia o pegar una captura con Cmd+V.</p>
@@ -805,12 +1108,23 @@ function seDrawer() {
       <h4>De esta semana</h4><div class="se-imgs">${se.assets ? (se.assets.map(a => `<button class="se-img" data-act="add-img" data-val="${esc(a.src)}" title="${esc(a.src.split('/').pop())}"><img src="${esc(se.src.base + a.src)}" loading="lazy" alt=""></button>`).join('') || '<p class="hint">Todavía no hay imágenes.</p>') : '<p class="hint">Cargando…</p>'}</div>`;
     if (!se.assets && !se.assetsLoading) { se.assetsLoading = true; api('stories/assets?imagen=' + encodeURIComponent(se.img)).then(r => { se.assets = r.imagenes; }, () => { se.assets = []; }).finally(() => { if (se) { se.assetsLoading = false; if (seTab === 'imagenes') seDrawer(); } }); }
   } else if (seTab === 'fondo') {
-    const bg = seBgValue(), img = seFondo()?.querySelector('img');
+    const bg = seBgValue(), vid = seVideo(), img = vid ? null : seFondo()?.querySelector('img');
+    if (vid && !se.videoMeta && !se.videoMetaLoading) seLoadVideoMeta(vid);
     box.innerHTML = `<h4>Foto</h4>${img ? `<div class="se-fondo-foto"><img src="${esc(se.src.base + img.getAttribute('src'))}" alt=""><span class="muted">${esc((img.getAttribute('src') || '').split('/').pop())}</span></div>` : ''}
       <div class="se-adds row">${seB('bg-foto', img ? 'Cambiar foto' : 'Poner una foto')}${img ? seB('bg-sinfoto', 'Sacar la foto') : ''}</div>
+      <h4>Video</h4>${seVideoBox(vid)}
       <h4>Color liso</h4><div class="se-colors big">${SE_PALETTE.map(([h, n]) => `<button class="se-color ${bg === h ? 'on' : ''}" data-act="bgcolor" data-val="${h}" title="${n}" style="background:${h}"></button>`).join('')}<label class="se-color custom" title="Otro color"><input type="color" data-act="bgcolor" value="${bg.startsWith('#') ? bg : '#ff3366'}"></label></div>`;
+  } else if (seTab === 'audio') {
+    const a = seVoz(), busy = /audio/i.test(se.mediaBusy || '');
+    box.innerHTML = `<h4>Voz en off</h4>${a ? `<audio controls preload="metadata" src="${esc(se.src.base + a.getAttribute('src'))}"></audio>
+        <div class="se-tramo"><label>Empieza en <input type="number" min="0" step="0.05" data-voz="inicio" value="${esc(a.dataset.inicio || '0')}"> s</label></div>
+        <div class="se-adds row">${seB('voz-probar', se.play ? '■ Parar' : (seVideo() ? '▶ Probar con el video' : '▶ Probar'))}${seB('voz-sacar', 'Sacar la voz')}</div>` : '<p class="hint">Sin voz en off. Subí un audio o elegí una voz de la carpeta voces/ de la semana.</p>'}
+      <p class="hint">La historia dura ${seFmtS(se.dur)} s${seVideo() ? ` · el video, ${seFmtS(seVideoDur())} s` : ''}${a && seVozFin() ? ` · la voz termina en ${seFmtS(seVozFin())} s` : ''}.${a && seVideo() && seVozFin() > seVideoDur() ? ' El video termina antes que la voz: el último cuadro queda quieto.' : ''}</p>
+      <h4>Subir</h4>${busy ? `<p class="hint busy">${esc(se.mediaBusy)}</p>` : '<label class="se-upload"><input type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg" data-upload-audio hidden>⬆︎ Subir un audio</label>'}
+      <h4>Voces de la semana</h4><div class="se-voces">${se.voces ? (se.voces.map((v, k) => `<button class="se-add" data-act="voz-elegir" data-val="${k}" title="${esc(v.path)}">🎙 ${esc(v.nombre)}${v.duracion ? ` · ${seFmtS(v.duracion)} s` : ''}${a && v.src && v.src === a.getAttribute('src') ? ' · en uso' : ''}</button>`).join('') || '<p class="hint">No hay voces en la carpeta voces/ de la semana.</p>') : '<p class="hint">Cargando…</p>'}</div>`;
+    if (!se.voces && !se.vocesLoading) { se.vocesLoading = true; api('stories/voices?imagen=' + encodeURIComponent(se.img)).then(r => { se.voces = r.voces; }, () => { se.voces = []; }).finally(() => { if (se) { se.vocesLoading = false; if (seTab === 'audio') seDrawer(); } }); }
   } else if (seTab === 'capas') {
-    const items = [...se.root.children].filter(x => !x.matches('script')).reverse();
+    const items = [...se.root.children].filter(x => !x.matches('script, audio')).reverse();
     box.innerHTML = `<h4>Capas</h4><p class="hint">De adelante hacia atrás. Tocá una para elegirla.</p>${items.map(x => `<div class="se-layer ${x === se.sel || x.contains(se.sel) ? 'on' : ''} ${seLayer(x) ? 'fija' : ''}"><button class="se-layer-name" data-act="layer" data-val="${esc(x.dataset.se || '')}">${esc(seLabel(x))}</button>${seLayer(x) ? '' : `<button class="icon" data-act="layer-up" data-val="${esc(x.dataset.se || '')}" title="Adelante">↑</button><button class="icon" data-act="layer-down" data-val="${esc(x.dataset.se || '')}" title="Atrás">↓</button>`}</div>`).join('')}`;
   } else if (seTab === 'chequeo') {
     box.innerHTML = `<h4>Chequeo del render</h4>${se.check?.html || '<p class="hint">Al guardar, la historia se renderiza y acá aparecen los avisos (texto fuera de lugar, poco contraste, caras tapadas) y cómo quedó.</p>'}${se.check?.img ? `<img class="se-result-img" src="${esc(se.check.img)}" alt="Historia renderizada">` : ''}`;
@@ -902,11 +1216,24 @@ document.querySelector('#storyEditor').addEventListener('click', e => {
     case 'img-catalogo': return openPicker('sticker');
     case 'add-img': return seAddImage(val);
     case 'bg-sinfoto': return seChange(() => seColorAct('bgcolor', '#ffffff'));
+    case 'video-tramo': return seTrimVideo();
+    case 'video-sacar': seParar(); se.videoMeta = null; return seChange(() => { seFondo()?.remove(); seAten()?.remove(); se.root.classList.add('lisa', 'negra'); seAjustarDuracion(); });
+    case 'voz-probar': return seProbar();
+    case 'voz-sacar': seParar(); return seChange(() => { seVoz()?.remove(); seAjustarDuracion(); });
+    case 'voz-elegir': return se.voces?.[+val] && seElegirVoz(se.voces[+val]);
     case 'add': { const [kind, v] = val.split(/:(.*)/s); return seAdd(kind, v); }
     case 'layer': { const x = seById(val); return seSelect(x && !seLayer(x) ? x : null); }
     case 'layer-up': return seOrder(seById(val), 1);
     case 'layer-down': return seOrder(seById(val), -1);
     case 'editar': return el && seStartEdit(el);
+    case 'agrupar': return seGroup();
+    case 'desagrupar': return seUngroup(el ? seTop(el) || el : null);
+    case 'multi-centrar': return seChange(() => { const r = seUnion([...se.multi]), dx = Math.round(540 - (r.left + r.width / 2)); if (dx) se.multi.forEach(x => seMoveBy(x, dx, 0)); });
+    case 'multi-borrar': { const l = [...se.multi]; seSelectMany([]); return seChange(() => l.forEach(x => x.remove())); }
+    case 'recortar': return el && seStartCrop(el);
+    case 'add-recurso': return seAddRecurso(val);
+    case 'tapar': return el && seTapar(el);
+    case 'recortar-fin': return seEndCrop();
     case 'fin-edit': return seEndEdit();
     case 'duplicar': return seDuplicate();
     case 'borrar': return seDelete();
@@ -917,6 +1244,9 @@ document.querySelector('#storyEditor').addEventListener('change', e => {
   const t = e.target; if (!se?.root) return;
   if (t.matches('[data-stepin]')) { const v = parseFloat(String(t.value).replace(',', '.')); if (Number.isFinite(v)) seStepTo(t.dataset.stepin, v); else seSide(); }
   else if (t.matches('[data-upload]')) { seUploadFiles(t.files); t.value = ''; }
+  else if (t.matches('[data-upload-video]')) { seUploadVideo(t.files[0]); t.value = ''; }
+  else if (t.matches('[data-upload-audio]')) { seUploadAudio(t.files[0]); t.value = ''; }
+  else if (t.matches('[data-voz="inicio"]')) { const v = Math.max(0, parseFloat(String(t.value).replace(',', '.')) || 0); seChange(() => { const a = seVoz(); if (a) { a.dataset.inicio = String(Math.round(v * 100) / 100); seAjustarDuracion(); } }); seDrawer(); }
   else if (t.matches('[data-pick-input]')) { const p = $('sePop'); sePick('color', p.dataset.act, seHex(t.value)); seClosePop(); }
   else if (t.matches('input[type=color][data-act="bgcolor"]')) seChange(() => seColorAct('bgcolor', seHex(t.value)));
 });
@@ -937,7 +1267,7 @@ function seBuild() {
   const out = se.doc.cloneNode(true), oroot = out.querySelector('.historia');
   const plano = el => { const c = el.cloneNode(true); c.querySelectorAll('.sticker, script, style, svg, .emoji, [data-caja]').forEach(x => x.remove()); return c.textContent.replace(/\s+/g, ' ').trim(); };
   const clone = se.root.cloneNode(true);
-  for (const x of [clone, ...clone.querySelectorAll('*')]) { x.removeAttribute('contenteditable'); x.removeAttribute('spellcheck'); x.classList?.remove('se-hover'); if (x.getAttribute('class') === '') x.removeAttribute('class'); }
+  for (const x of [clone, ...clone.querySelectorAll('*')]) { x.removeAttribute('contenteditable'); x.removeAttribute('spellcheck'); x.classList?.remove('se-hover', 'se-multi', 'se-crop'); if (x.getAttribute('class') === '') x.removeAttribute('class'); }
   // Scripts de adentro de la historia: después del elemento que los precedía (o al final de su contenedor).
   for (const sc of [...oroot.querySelectorAll('script')]) {
     const parentId = sc.parentElement.dataset.se, prev = sc.previousElementSibling?.dataset.se;
@@ -993,7 +1323,7 @@ $('seClose').onclick = seClose;
 $('storyEditor').addEventListener('cancel', e => { e.preventDefault(); if (!$('sePop').hidden) seClosePop(); else if (se?.editing) seEndEdit(); else if (se?.sel) seSelect(null); else seClose(); });
 document.addEventListener('paste', e => { if (!$('storyEditor').open || !se?.root || se.editing || e.target.closest?.('input, textarea, [contenteditable]')) return; sePasteImage(e); });
 // El aviso de cierre llega después: si para entonces se abrió otra historia, no se toca.
-$('storyEditor').addEventListener('close', () => { if ($('storyEditor').open) return; try { se?.mv?.destroy(); } catch {} $('seFrame').srcdoc = ''; se = null; });
+$('storyEditor').addEventListener('close', () => { if ($('storyEditor').open) return; seParar(); try { se?.mv?.destroy(); } catch {} $('seFrame').srcdoc = ''; se = null; });
 
 // Elegir una foto de tu carpeta (planner.config.json → historias.fotos) para el fondo o como sticker. La foto se
 // copia a la carpeta de la semana y entra al editor centrada; el encuadre se ajusta arrastrándola.
@@ -1049,6 +1379,7 @@ $('ppApply').onclick = async () => {
       let f = seFondo();
       if (!f) { f = se.d.createElement('div'); f.className = 'fondo'; f.innerHTML = '<img alt="">'; seMark(f); se.root.prepend(f); se.root.classList.remove('lisa', 'negra'); se.stash = null; }
       const img = f.querySelector('img'); img.setAttribute('src', r.src); img.style.objectPosition = '50% 50%'; f.style.removeProperty('transform');
+      ['data-secuencia', 'data-cuadros', 'data-fps', 'data-inicio', 'data-loop'].forEach(k => img.removeAttribute(k)); se.videoMeta = null;
     });
     $('photoPicker').close();
   } catch (e) { $('ppAvisos').innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
@@ -1066,7 +1397,11 @@ function renderStoryProposal() {
     const what = s.publicar === 'postiz' ? `Postiz${en} desde las ${esc(s.hora || STORY_DEFAULT_HOUR)}, cada ${STORY_GAP_MIN} min · ${s.historias.length - hands.length} historia${s.historias.length - hands.length === 1 ? '' : 's'}${nuevas ? ` · se reemplaza${nuevas === 1 ? '' : 'n'} ${nuevas} con la foto nueva` : ''}${hands.length ? ` · a mano: ${hands.map(([, i]) => `${i + 1} a las ${storyTime(s.hora, i)}`).join(', ')}` : ''}` : s.publicar === 'mano' ? 'A mano' + en + (queued ? ' · se quita de Postiz' : '') : 'No se publica' + (queued ? ' · se quita de Postiz' : '');
     return `<div class="sp-row ${s.publicar}"><b>${esc(dayLong(s.fecha))}</b><span>${TIPO_NAME[s.dia.tipo] || ''} ${esc(s.dia.formula || '')}</span><span class="what">${what}</span></div>`;
   }).join('');
-  $('spList').innerHTML = rows; $('spResult').hidden = true; $('spPrepare').disabled = false;
+  const fb = seqs.filter(s => fbSinAplicar(s).length).sort((a, b) => a.fecha.localeCompare(b.fecha)).map(s => {
+    const l = fbSinAplicar(s), txt = l.map(e => `${e.alcance === 'secuencia' ? 'Secuencia' : `Historia ${e.n || '?'}`}: ${e.text || (e.audio ? 'audio' : '')}`).join(' · ');
+    return `<div class="sp-row fb"><b>${esc(dayLong(s.fecha))}</b><span>${l.length} nota${l.length === 1 ? '' : 's'}</span><span class="what">${esc(txt.length > 240 ? txt.slice(0, 240) + '…' : txt)}${s.publicar === 'postiz' ? ' · su agenda espera la corrección' : ''}</span></div>`;
+  }).join('');
+  $('spList').innerHTML = rows + (fb ? `<h4 class="sp-sec">Contenido · feedback sin corregir</h4>${fb}` : ''); $('spResult').hidden = true; $('spPrepare').disabled = false;
 }
 $('sPropose').onclick = async () => { await sSaving; renderStoryProposal(); $('storyProposal').showModal(); };
 $('sReset').onclick = () => { if (!confirm('¿Volver al plan original de la semana? Lo que ya está en Postiz no cambia.')) return; saveSeqs(storySeqs().map(s => ({ ...s, ...defaultSeq(s.dia) })), 'Volviste al plan original.'); };
@@ -1075,7 +1410,7 @@ $('spPrepare').onclick = async () => {
     $('spPrepare').disabled = true; await sSaving;
     const r = await api('stories/proposal', post({ week: stories.week, cuenta: stories.data.cuenta, revision: stories.data.draft.revision }));
     $('spResult').hidden = false;
-    $('spResult').innerHTML = `<p class="hint">Pegá este mensaje en Claude Code: agenda las historias en Postiz y te avisa las que van a mano.</p><textarea readonly aria-label="Mensaje de confirmación">${esc(r.prompt)}</textarea><button class="primary" id="spCopy">${ICON.copy} Copiar mensaje</button>`;
+    $('spResult').innerHTML = `<p class="hint">Pegá este mensaje en Claude Code: ${r.feedback ? 'corrige el feedback' + (r.prompt.includes('historias.py aplicar') ? ', agenda lo que va a Postiz y te avisa lo que va a mano.' : '.') : 'agenda las historias en Postiz y te avisa las que van a mano.'}</p><textarea readonly aria-label="Mensaje de confirmación">${esc(r.prompt)}</textarea><button class="primary" id="spCopy">${ICON.copy} Copiar mensaje</button>`;
     $('spCopy').onclick = () => copyText(r.prompt, 'Copiado. Pegalo en el chat.');
   } catch (e) { toast(e.message); $('spPrepare').disabled = false; }
 };
@@ -1089,6 +1424,11 @@ function showStory() {
   const { s, i, byImg } = sbState, img = s.historias[i], h = byImg[img] || {};
   $('sbTitle').textContent = `${dayLong(s.fecha)} · ${TIPO_NAME[s.dia.tipo] || s.dia.tipo} ${s.dia.formula || ''} · ${i + 1} de ${s.historias.length}`;
   $('sbImg').src = mediaUrl(img) + '&v=' + (h.mtime || 0); $('sbImg').alt = h.texto || '';
+  // Historia con video y voz en off: se ve y se escucha el MP4 que se publica.
+  const vid = h.video ? mediaUrl(h.video) + '&v=' + (h.video_mtime || 0) : null, sv = $('sbVid');
+  $('sbImg').hidden = !!vid; sv.hidden = !vid;
+  if (vid) { if (sv.dataset.src !== vid) { sv.dataset.src = vid; sv.src = vid; } sv.play().catch(() => {}); }
+  else if (sv.dataset.src) { sv.pause(); sv.removeAttribute('src'); delete sv.dataset.src; sv.load(); }
   // Dos botones, editar y feedback; el feedback se abre al costado. Arriba, si hace falta, el aviso de que va a mano.
   $('sbChip').hidden = !needsHand(h); $('sbChip').textContent = needsHand(h) ? '✋ Va a mano: ' + h.sticker.split(/[(:]/)[0].trim() : ''; $('sbChip').title = h.sticker || '';
   $('sbEdit').hidden = !h.editable;
@@ -1097,7 +1437,7 @@ function showStory() {
   if (!$('sbFeedback').hidden) loadStoryFeedback('sb', img);
 }
 const sbFbCount = n => { $('sbFbN').hidden = !n; $('sbFbN').textContent = n || ''; };
-$('sbEdit').onclick = () => openEditor();
+$('sbEdit').onclick = () => { $('sbVid').pause(); openEditor(); };
 $('sbFbBtn').onclick = () => {
   const open = $('sbFeedback').hidden; $('sbFeedback').hidden = !open; $('sbFbBtn').classList.toggle('on', open);
   if (open && sbState) { loadStoryFeedback('sb', sbState.s.historias[sbState.i]); setTimeout(() => $('sbFeedback').querySelector('[data-sfb="text"]')?.focus(), 60); }
@@ -1211,7 +1551,7 @@ function openSeqFeedback(orig) {
 const stepStory = n => { if (!sbState) return; const k = sbState.i + n; if (k < 0 || k >= sbState.s.historias.length) return; sbState.i = k; showStory(); };
 $('sbPrev').onclick = () => stepStory(-1); $('sbNext').onclick = () => stepStory(1);
 $('storyBox').addEventListener('click', e => { if (e.target === $('storyBox')) $('storyBox').close(); });
-$('storyBox').addEventListener('close', () => { if (sfbx.sb?.rec) sfbx.sb.rec.rec.stop(); });
+$('storyBox').addEventListener('close', () => { if (sfbx.sb?.rec) sfbx.sb.rec.rec.stop(); $('sbVid').pause(); });
 $('seqFb').addEventListener('close', () => { if (sfbx.dia?.rec) sfbx.dia.rec.rec.stop(); });
 $('seqFb').addEventListener('click', e => { if (e.target === $('seqFb')) $('seqFb').close(); });
 $('sGrid').addEventListener('change', e => {
