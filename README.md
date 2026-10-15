@@ -5,6 +5,7 @@ Un calendario local para organizar y programar tus publicaciones en Instagram, T
 - Ves tus piezas como portadas: lo que está en desarrollo, lo que falta revisar, lo listo y lo que ya salió.
 - Arrastrás cada pieza a un día y una hora, elegís en qué redes sale y desde qué cuenta.
 - Dejás feedback escrito o con audio sobre cada video, para que Claude Code lo corrija.
+- Planificás tus historias de Instagram en una vista propia: la semana en filas, cada día con su secuencia, un editor tipo Canva y las respuestas de cada día.
 - Cuando terminás, el planner arma un mensaje. Lo pegás en Claude Code y él programa todo en Postiz.
 
 ![La vista Semana del planner](docs/img/semana.png)
@@ -36,6 +37,12 @@ Necesitás una cuenta de Postiz con tus redes conectadas. Postiz en la nube no t
 
 Más detalle en [docs/como-funciona.md](docs/como-funciona.md).
 
+## Historias
+
+La pestaña **Historias** muestra la semana de historias en filas: un día por fila, sus historias una al lado de la otra y el recurso del día a la derecha. Elegís por día si sale por Postiz, a mano o no sale, a qué hora y desde qué cuenta; reordenás arrastrando o corrés una secuencia a otro día (también a otra semana); cargás las respuestas de cada día; y abrís cada historia para editarla en un editor tipo Canva o dejarle feedback con audio. Las historias con encuesta, link o caja de preguntas quedan marcadas para subirlas a mano, porque Instagram no deja publicarlas por la API.
+
+Las historias se arman con el motor de `motor-historias/` (HTML → imagen, con un chequeo de zonas seguras y contraste). Pedile a Claude Code «armá la semana de historias». Detalle en [docs/historias.md](docs/historias.md).
+
 ## Tus carpetas
 
 El planner se adapta a cómo ya trabajás. Dos formas:
@@ -51,6 +58,7 @@ Claude Code analiza tus carpetas durante la instalación y te recomienda una. Ve
 - [Node.js](https://nodejs.org) 22.18 o más nuevo, y Python 3.10 o más nuevo.
 - El CLI de Postiz: `npm install -g postiz`.
 - ffmpeg (opcional, para portadas de video y notas de voz).
+- Para historias (opcional): `pip install playwright pillow numpy` y `python3 -m playwright install chromium`.
 
 `python3 engine/doctor.py` chequea todo y dice cómo instalar lo que falte.
 
@@ -60,8 +68,9 @@ Claude Code analiza tus carpetas durante la instalación y te recomienda una. Ve
 |---|---|
 | `app/` | El planner: servidor local (Node) e interfaz web. |
 | `engine/` | El motor en Python: inventario de tus carpetas, cola de publicación y conexión con Postiz. |
-| `.claude/skills/` | Instrucciones para Claude Code: instalar, organizar carpetas y publicar. |
-| `docs/` | Cómo funciona, carpetas y particularidades de cada red. |
+| `motor-historias/` | El motor de historias: plantilla, estilos y render a imagen. |
+| `.claude/skills/` | Instrucciones para Claude Code: instalar, organizar carpetas, publicar e historias. |
+| `docs/` | Cómo funciona, carpetas, historias y particularidades de cada red. |
 | `tests/` | Pruebas del motor contra un Postiz simulado. |
 
 Tu configuración (`planner.config.json`) y tus credenciales (`.env`) quedan sólo en tu computadora; no se suben al repositorio.

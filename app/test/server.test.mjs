@@ -23,6 +23,25 @@ const item = { id: 'queue:test', title: 'Final de prueba', status: 'ready', appr
 const inventory = resolve(root, 'fake_inventory.py');
 writeFileSync(inventory, 'print(' + JSON.stringify(JSON.stringify({ items: [item], timezone: 'America/Argentina/Buenos_Aires', config: {} })) + ')\n');
 writeFileSync(resolve(state, 'draft.json'), JSON.stringify({ revision: 7, changes: {} }));
+// Una semana de historias (historias/<semana>/semana.json) con el HTML fuente de cada una, para la pestaña Historias.
+const nextMonday = (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() + 7 + ((8 - d.getUTCDay()) % 7)); return d.toISOString().slice(0, 10); })();
+const W = nextMonday, W2 = new Date(Date.parse(W + 'T12:00:00Z') + 864e5).toISOString().slice(0, 10);
+const run = resolve(root, 'historias/semana-prueba');
+mkdirSync(resolve(run, 'historias'), { recursive: true }); mkdirSync(resolve(run, 'fuente/assets/fotos'), { recursive: true });
+const storyHtml = `<!doctype html>\n<html><head><link rel="stylesheet" href="motor/historia.css"></head><body><main class="historia" data-duracion="7"><div class="fondo"><img src="assets/fotos/x.jpg" style="object-position: 40% 50%"></div><p class="caja">Hola mundo</p><script src="motor/historia.js"></script></main></body></html>\n`;
+for (const n of [1, 2]) { writeFileSync(resolve(run, `historias/${W}_${n}_venta.png`), Buffer.alloc(256, n)); writeFileSync(resolve(run, `fuente/${W}_${n}_venta.html`), storyHtml); }
+writeFileSync(resolve(run, 'fuente/assets/fotos/x.jpg'), Buffer.alloc(128, 9));
+writeFileSync(resolve(run, 'semana.json'), JSON.stringify({ semana: W, dias: [
+  { fecha: W, tipo: 'venta', formula: 'V1', tema: 'Tema de prueba', recurso: 'r1', historias: [{ imagen: `historias/${W}_1_venta.png`, texto: 'Hola mundo' }, { imagen: `historias/${W}_2_venta.png`, texto: 'Encuesta', sticker: 'encuesta: ¿sí o no?' }] },
+  { fecha: W2, tipo: 'libre', historias: [] }],
+  recursos: [{ id: 'r1', tipo: 'recurso', nombre: 'Guía de prueba', palabra: 'GUIA', dm: 'Te paso la guía', estado: 'listo' }] }));
+const img1 = `historias/semana-prueba/historias/${W}_1_venta.png`, img2 = `historias/semana-prueba/historias/${W}_2_venta.png`;
+// La semana siguiente, para correr una secuencia de una semana a otra.
+const N = new Date(Date.parse(W + 'T12:00:00Z') + 7 * 864e5).toISOString().slice(0, 10), day = n => new Date(Date.parse(N + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+const run2 = resolve(root, 'historias/semana-prueba-2');
+mkdirSync(resolve(run2, 'historias'), { recursive: true });
+writeFileSync(resolve(run2, `historias/${day(1)}_1_venta.png`), Buffer.alloc(256, 5));
+writeFileSync(resolve(run2, 'semana.json'), JSON.stringify({ semana: N, dias: [{ fecha: day(1), tipo: 'venta', historias: [{ imagen: `historias/${day(1)}_1_venta.png`, texto: 'Martes' }] }] }));
 let child, base, errors = '';
 async function start() {
   child = spawn(process.execPath, [serverPath], { cwd: tmpdir(), env: { ...process.env, PLANNER_PORT: '0', PLANNER_CONFIG: config, PLANNER_INVENTORY: inventory }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -120,6 +139,102 @@ test('standalone HTTP, media cancellation and durable draft across process exit'
       assert.equal(removed.entries.length, 0);
       assert.equal(removed.prompt, null);
       assert.equal((await request('/api/planner/feedback/remove', 'POST', { id: item.id, file: '../draft.json' })).status, 400);
+    });
+    await t.test('stories: week, editor source, draft, proposal, metrics, uploads and feedback', async () => {
+      const get = async path => { const r = await fetch(base + '/api/planner/' + path); return { status: r.status, body: await r.json() }; };
+      const week = (await get('stories?week=' + W)).body;
+      assert.equal(week.cuentas[0].profile, 'ig');
+      assert.equal(week.semana.dias.length, 2);
+      const h1 = week.semana.dias[0].historias[0];
+      assert.equal(h1.imagen, img1);
+      assert.equal(h1.editable, true);
+      assert.deepEqual(h1.fondo, { foto: 'x.jpg', posicion: '40% 50%' });
+      assert.equal((await get('stories?week=' + W + '&cuenta=otra')).status, 400);
+      assert.equal((await get('stories?week=' + W + '&cuenta=ig')).body.semana.run, 'historias/semana-prueba');
+      // Editor: el HTML fuente y sus archivos, sin salir de fuente/.
+      const src = (await get('stories/source?imagen=' + encodeURIComponent(img1))).body;
+      assert.match(src.html, /Hola mundo/);
+      assert.equal((await fetch(base + src.base + 'assets/fotos/x.jpg')).status, 200);
+      for (const bad of ['..%2Fsemana.json', '../semana.json', '.oculto.css']) assert.equal((await fetch(base + src.base + bad)).status, 404);
+      assert.equal((await get('stories/source?imagen=' + encodeURIComponent('piezas/test/final.mp4'))).status, 400);
+      const same = await (await request('/api/planner/stories/edit', 'POST', { imagen: img1, html: src.html, mtime: src.mtime })).json();
+      assert.equal(same.sin_cambios, true);
+      for (const html of [src.html.replace('</main>', '<script>alert(1)</script></main>'), src.html.replace('Hola mundo', '<img src="assets/nope.png">'), src.html.replace('<p class', '<p onclick="x()" class')])
+        assert.equal((await request('/api/planner/stories/edit', 'POST', { imagen: img1, html, mtime: src.mtime })).status, 400);
+      assert.equal((await request('/api/planner/stories/edit', 'POST', { imagen: img1, html: src.html + ' ', mtime: src.mtime - 1000 })).status, 409);
+      // Imágenes como sticker: se suben a fuente/assets/subidas/ y aparecen en la lista de la semana.
+      const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(200, 1)]).toString('base64');
+      const up = await (await request('/api/planner/stories/upload', 'POST', { imagen: img1, name: 'Captura de pantalla.png', mime: 'image/png', data: png })).json();
+      assert.match(up.src, /^assets\/subidas\/\d{14}-[0-9a-f]{4}-captura-de-pantalla\.png$/);
+      assert.ok((await get('stories/assets?imagen=' + encodeURIComponent(img1))).body.imagenes.some(a => a.src === up.src));
+      assert.equal((await request('/api/planner/stories/upload', 'POST', { imagen: img1, name: 'x.exe', mime: 'application/octet-stream', data: png })).status, 400);
+      // Sin carpeta de fotos configurada, el catálogo viene vacío.
+      assert.equal((await get('catalog')).body.carpeta, null);
+      // Borrador y propuesta: la que tiene encuesta va a mano; el mensaje apunta al aplicador del motor.
+      const draft = await request('/api/planner/stories/draft', 'POST', { week: W, cuenta: 'ig', revision: 0, secuencias: { [W]: { fecha: W, historias: [img1, img2], publicar: 'postiz', hora: '10:00' } } });
+      assert.equal(draft.status, 200);
+      assert.equal((await draft.json()).revision, 1);
+      assert.equal((await request('/api/planner/stories/draft', 'POST', { week: W, cuenta: 'ig', revision: 0, secuencias: {} })).status, 409);
+      assert.equal((await request('/api/planner/stories/draft', 'POST', { week: W, cuenta: 'ig', revision: 1, secuencias: { [W]: { fecha: W, historias: [img1, img1], publicar: 'no', hora: null } } })).status, 400);
+      const prop = await (await request('/api/planner/stories/proposal', 'POST', { week: W, cuenta: 'ig', revision: 1 })).json();
+      assert.match(prop.prompt, /python3 engine\/historias\.py aplicar .* --ejecutar/);
+      const stored = JSON.parse(readFileSync(resolve(state, `proposal-historias-${prop.id}.json`)));
+      assert.deepEqual(stored.acciones.map(a => a.accion), ['agendar', 'a_mano']);
+      assert.equal(stored.acciones[0].cuenta_id, 'ig');
+      // Respuestas por día.
+      const m = await (await request('/api/planner/stories/metrics', 'POST', { date: W, cuenta: 'ig', respuestas: 12, vistas_primera: 300 })).json();
+      assert.equal(m.metricas[W].respuestas, 12);
+      assert.equal((await get('stories?week=' + W)).body.metricas[W].vistas_primera, 300);
+      assert.equal((await request('/api/planner/stories/metrics', 'POST', { date: W, respuestas: -1 })).status, 400);
+      // Feedback: detalles de una historia y general de la secuencia, en la carpeta de la semana.
+      const f1 = await (await request('/api/planner/stories/feedback', 'POST', { imagen: img1, alcance: 'historia', text: 'Más grande el título' })).json();
+      const f2 = await (await request('/api/planner/stories/feedback', 'POST', { imagen: img1, alcance: 'secuencia', text: 'Cambiá el tema del día' })).json();
+      assert.equal(f2.entries.length, 2);
+      assert.match(f2.prompt, /Feedback general de la secuencia \(1\)/);
+      assert.match(f2.prompt, /Detalles de cada historia \(1\)/);
+      assert.match(f2.prompt, /motor-historias\/render\.py" <html>/);
+      assert.ok(f1.entries[0].file.endsWith('-planner.json'));
+      const counts = (await get('stories?week=' + W)).body.feedback[W];
+      assert.equal(counts.pendientes, 2);
+      assert.equal(counts.historias[img1], 1);
+      // Las notas de historias no se mezclan con el feedback de las piezas.
+      assert.ok((await (await fetch(base + '/api/planner/data')).json()).items.every(i => !i.feedback_pending));
+      const sent = await (await request('/api/planner/stories/feedback/sent', 'POST', { imagen: img1 })).json();
+      assert.ok(sent.entries.every(e => e.estado === 'enviado'));
+      assert.match(sent.prompt, /Cambiá el tema del día/); // enviadas: se pueden volver a copiar
+      const gone = await (await request('/api/planner/stories/feedback/remove', 'POST', { imagen: img1, file: f1.entries[0].file })).json();
+      assert.equal(gone.entries.length, 1);
+      assert.equal((await request('/api/planner/stories/feedback/remove', 'POST', { imagen: img1, file: '../semana.json' })).status, 400);
+      // Archivos del cliente: la pestaña y Moveable.
+      for (const path of ['/historias.js', '/historias.css', '/vendor/moveable.min.js']) assert.equal((await fetch(base + path)).status, 200);
+    });
+    await t.test('stories: a sequence moves to next week and is shown, edited and scheduled there', async () => {
+      const get = async w => (await fetch(base + '/api/planner/stories?week=' + w)).json();
+      const seq = (secuencia, revision) => request('/api/planner/stories/seq', 'POST', { semana: W, orig: W, revision, secuencia });
+      let rev = (await get(W)).draft.revision;
+      assert.equal((await seq({ fecha: day(1), historias: [img1, img2], publicar: 'no', hora: null }, rev)).status, 400, 'that Tuesday already has a sequence');
+      assert.equal((await seq({ fecha: '2099-01-01', historias: [img1, img2], publicar: 'no', hora: null }, rev)).status, 400, 'too far');
+      const moved = await (await seq({ fecha: day(2), historias: [img1, img2], publicar: 'postiz', hora: '11:00' }, rev)).json();
+      assert.equal(moved.semana, N);
+      rev = moved.revision;
+      const origin = await get(W);
+      assert.equal(origin.draft.secuencias[W].fecha, day(2), 'kept in the draft of its origin week');
+      const next = await get(N);
+      assert.equal(next.entrantes.length, 1);
+      assert.equal(next.entrantes[0].semana, W);
+      assert.equal(next.entrantes[0].recurso.id, 'r1');
+      assert.equal(next.entrantes[0].dia.historias[0].imagen, img1);
+      assert.equal((await request('/api/planner/stories/proposal', 'POST', { week: N, revision: rev })).status, 200);
+      const prop = await (await request('/api/planner/stories/proposal', 'POST', { week: N, revision: rev })).json();
+      const stored = JSON.parse(readFileSync(resolve(state, `proposal-historias-${prop.id}.json`)));
+      const a = stored.acciones.find(x => x.imagen === img1);
+      assert.equal(a.fecha, day(2));
+      assert.equal(a.run, 'historias/semana-prueba');
+      assert.deepEqual(stored.dias.map(d => d.fecha), [day(1), day(2)]);
+      // Vuelve a su lugar.
+      rev = (await (await seq({ fecha: W, historias: [img1, img2], publicar: 'no', hora: null }, rev)).json()).revision;
+      assert.equal((await get(W)).draft.secuencias?.[W], undefined);
+      assert.equal((await get(N)).entrantes.length, 0);
     });
     await t.test('saved draft survives abrupt exit and restart', async () => {
       const before = await (await fetch(base + '/api/planner/draft')).json();

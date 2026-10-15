@@ -82,6 +82,16 @@ Seguí la skill [organizar-carpetas](.claude/skills/organizar-carpetas/SKILL.md)
 
 Nunca muevas, renombres ni borres archivos suyos sin su confirmación explícita.
 
+## 4b. Historias (opcional)
+
+Preguntá si quiere planificar historias de Instagram en el planner. Si sí:
+
+- La carpeta de historias es `historias/` adentro de su contenido (`historias.carpeta` en la config para cambiarla). No hace falta crearla: la primera semana la arma Claude Code.
+- Si tiene una carpeta con sus fotos para usar de fondo o de sticker, cargala en `historias.fotos` (ruta absoluta o relativa a su contenido). El planner sólo la lee.
+- Para renderizar historias: `pip install playwright pillow numpy` y `python3 -m playwright install chromium`, con su OK.
+
+Detalle en [docs/historias.md](docs/historias.md).
+
 ## 5. Arrancar el planner
 
 ```bash

@@ -190,6 +190,40 @@ class Motor(unittest.TestCase):
         self.assertNotEqual(self.run_py('cola.py', 'aplicar', 'test1', '--ejecutar', ok=False).returncode, 0)
         self.run_py('cola.py', 'quitar', 'reel-propuesta')
 
+    def test_historias(self):
+        # Propuesta de la pestaña Historias: tres historias en orden desde la cuenta alternativa; la de la encuesta va a mano.
+        self.run_py('conectar.py')
+        run = self.content / 'historias/semana-x'
+        (run / 'historias').mkdir(parents=True)
+        day, _ = self.future(5)
+        imgs = []
+        for n in (1, 2, 3):
+            png = run / f'historias/{day}_{n}_venta.png'
+            png.write_bytes(os.urandom(600 + n))
+            imgs.append(png.relative_to(self.content).as_posix())
+        state = self.content / 'publicar/.planner'
+        state.mkdir(parents=True, exist_ok=True)
+        def accion(n, que, sticker=None):
+            return {'orden': n, 'imagen': imgs[n - 1], 'fecha': day, 'hora': '10:00', 'cuenta': 'otramarca', 'cuenta_id': 'ig-alt',
+                    'accion': que, 'sticker': sticker, 'a_mano': que == 'a_mano', 'cola': None}
+        (state / 'proposal-historias-h1.json').write_text(json.dumps({'id': 'h1', 'status': 'awaiting_chat_confirmation', 'run': 'historias/semana-x',
+            'acciones': [accion(1, 'agendar'), accion(2, 'a_mano', 'encuesta: ¿sí o no?'), accion(3, 'agendar')]}))
+        seco = self.run_py('historias.py', 'aplicar', 'h1').stdout
+        self.assertIn('Corrida en seco', seco)
+        self.assertEqual(json.loads((state / 'proposal-historias-h1.json').read_text())['status'], 'awaiting_chat_confirmation')
+        out = self.run_py('historias.py', 'aplicar', 'h1', '--ejecutar').stdout
+        self.assertIn('A mano', out)
+        self.assertIn('10:02', out)
+        prop = json.loads((state / 'proposal-historias-h1.json').read_text())
+        self.assertEqual(prop['status'], 'aplicada')
+        self.assertEqual([r['hora_programada'] for r in prop['resultados']], ['10:00', '10:04'])
+        posts = sorted((p for p in json.loads((self.tmp / 'postiz.json').read_text())['posts']
+                        if p['publishDate'].startswith(day) and p['settings'].get('post_type') == 'story'), key=lambda p: p['publishDate'])
+        self.assertEqual([p['integration']['id'] for p in posts], ['ig-alt', 'ig-alt'])
+        self.assertNotEqual(self.run_py('historias.py', 'aplicar', 'h1', '--ejecutar', ok=False).returncode, 0)
+        # Las historias de la cola no aparecen como piezas en el planner.
+        self.assertFalse([i for i in self.inventory()['items'] if 'historia-' in i['id']])
+
     def test_sincronizar_carpetas(self):
         state = self.content / 'publicar/.planner'
         state.mkdir(parents=True, exist_ok=True)

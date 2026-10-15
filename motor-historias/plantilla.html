@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<!-- Plantilla de una historia (1080×1920). Copiala a SEMANA/fuente/ con el nombre
+     AAAA-MM-DD_N_tipo.html. Instrucciones en docs/historias.md. Imagen fija por defecto: sin clases de animación. -->
+<link rel="stylesheet" href="motor/historia.css">
+<link rel="stylesheet" href="motor/instagram.css">
+<style>
+  /* Lo propio de esta historia: posiciones y tamaños. */
+  .arriba { top: 330px; }
+  .arriba .caja { font-size: 62px; max-width: 900px; }
+</style></head>
+<body>
+<!-- El estilo del día: estilo-amarillo, estilo-rojo, estilo-verde o estilo-naranja.
+     Fondo blanco: class="historia lisa estilo-…"; negro: class="historia lisa negra estilo-…". -->
+<main class="historia estilo-amarillo">
+
+  <!-- Foto de fondo. object-position para encuadrar. -->
+  <div class="fondo"><img src="assets/fotos/FOTO.jpg" style="object-position: 50% 50%"></div>
+  <!-- Para escribir sin caja: <div class="atenuado" style="--atenuar:.4"></div> y el texto con .suelto -->
+
+  <!-- Todo centrado sobre el eje (el chequeo lo mide): .bloque centra; nada alineado a un costado. Una fila de varias cosas
+       va dentro de un contenedor con data-grupo, centrado como conjunto. -->
+  <!-- Texto en caja negra con las palabras que importan en el color del día. -->
+  <div class="bloque arriba">
+    <p class="caja serif parejo">La frase de la historia, con <span class="c">la palabra que importa</span>.</p>
+  </div>
+
+  <!-- Otros estilos:
+       <p class="caja blanca serif">…</p>                      caja blanca, letra negra
+       <p class="caja color serif">…</p>                       caja del color del día
+       <p><span class="caja color remate">remate<span class="emoji">🫵</span></span></p>
+                                                               remate en Clásica con emoji (debajo de la caja negra)
+       <p><span class="resalte clasica">…</span></p>            resaltado por renglón (Clásica)
+       <p><span class="resalte color serif">…</span></p>        resaltado del color del día
+       <p class="serif suelto">…</p>                           texto blanco sin caja, sobre la foto atenuada
+       <span class="emoji">👇</span>                            emoji
+       <svg class="lapiz" viewBox="0 0 130 70"><path d="M6 46 C 38 10, 82 10, 118 38"/><path d="M96 16 L120 40 L94 56"/></svg>
+                                                               flecha de lápiz -->
+
+  <!-- Lugar del sticker de Instagram (encuesta, preguntas, mención, link, slider): no se dibuja. -->
+  <div class="sticker" data-sticker="encuesta: Opción A / Opción B" style="left:150px; top:1330px; width:780px; height:300px"></div>
+</main>
+<script src="motor/historia.js"></script>
+</body></html>

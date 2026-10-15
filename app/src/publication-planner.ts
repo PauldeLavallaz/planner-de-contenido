@@ -6,14 +6,14 @@ import { resolve, extname, relative, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { ENGINE_DIR, PYTHON, REPO_DIR, CONFIG_PATH, paths } from './config.ts';
-const exec = promisify(execFile);
-const ROOT=()=>paths().root, STATE=()=>paths().state;
+export const exec = promisify(execFile);
+export const ROOT=()=>paths().root, STATE=()=>paths().state;
 // Una ruta dentro de la carpeta de contenido (o de la cola, si vive afuera), siempre con barras /.
-const within=(base:string,p:string)=>{const r=relative(base,p);return !!r&&!r.startsWith('..')&&!r.includes(':');};
-const posix=(p:string)=>p.split(sep).join('/');
-const TYPES: Record<string,string> = {'.mp4':'video/mp4','.mov':'video/quicktime','.webm':'video/webm','.mp3':'audio/mpeg','.wav':'audio/wav','.m4a':'audio/mp4','.ogg':'audio/ogg','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp','.md':'text/plain; charset=utf-8','.txt':'text/plain; charset=utf-8'};
-const fileRead=(p:string,fallback:any)=>{try{return JSON.parse(readFileSync(p,'utf8'));}catch{return fallback;}};
-function write(name:string, data:unknown) { mkdirSync(STATE(),{recursive:true}); const target=resolve(STATE(),name), tmp=target+'.'+randomUUID()+'.tmp';writeFileSync(tmp,JSON.stringify(data,null,2));renameSync(tmp,target); }
+export const within=(base:string,p:string)=>{const r=relative(base,p);return !!r&&!r.startsWith('..')&&!r.includes(':');};
+export const posix=(p:string)=>p.split(sep).join('/');
+export const TYPES: Record<string,string> = {'.mp4':'video/mp4','.mov':'video/quicktime','.webm':'video/webm','.mp3':'audio/mpeg','.wav':'audio/wav','.m4a':'audio/mp4','.ogg':'audio/ogg','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp','.md':'text/plain; charset=utf-8','.txt':'text/plain; charset=utf-8'};
+export const fileRead=(p:string,fallback:any)=>{try{return JSON.parse(readFileSync(p,'utf8'));}catch{return fallback;}};
+export function write(name:string, data:unknown) { mkdirSync(STATE(),{recursive:true}); const target=resolve(STATE(),name), tmp=target+'.'+randomUUID()+'.tmp';writeFileSync(tmp,JSON.stringify(data,null,2));renameSync(tmp,target); }
 export function plannerMediaPath(value:string) {
   try { if(!value)return null;
     const p=realpathSync(resolve(ROOT(),value)), roots=[ROOT(),paths().publish].map(r=>{try{return realpathSync(r);}catch{return r;}});
@@ -49,7 +49,7 @@ export function feedbackDir(item:any) {
   // Piezas que son un archivo suelto o registros de Postiz: carpeta propia del planner.
   return resolve(STATE(),'feedback',String(item.id).replace(/[^\w.-]+/g,'_').slice(0,120));
 }
-const rel=(p:string)=>within(ROOT(),p)?posix(relative(ROOT(),p)):p;
+export const rel=(p:string)=>within(ROOT(),p)?posix(relative(ROOT(),p)):p;
 export function readFeedback(dir:string) {
   if(!existsSync(dir))return [];
   // Por hora de creación: dos notas del mismo segundo no quedan en orden por el sufijo aleatorio del nombre.
@@ -67,8 +67,10 @@ const FEEDBACK_RULES=[
   '- Si la corrección implica gastar (generar video, voz o imágenes con servicios pagos), avisame antes con qué y cuánto.',
   '- Al terminar, en el JSON de cada nota poné estado «aplicado», aplicado_at y una línea de qué cambió en «cambio».',
 ];
-const OPEN=(e:any)=>!e.estado||e.estado==='pendiente';
-export const pendingFeedback=(item:any)=>readFeedback(feedbackDir(item)).filter(OPEN);
+export const OPEN=(e:any)=>!e.estado||e.estado==='pendiente';
+// Las notas de historias (tipo «historia») viven en la carpeta de la semana: no son de una pieza de la cola.
+export const pieceFeedback=(dir:string)=>readFeedback(dir).filter((e:any)=>e.tipo!=='historia');
+export const pendingFeedback=(item:any)=>pieceFeedback(feedbackDir(item)).filter(OPEN);
 // Marca como enviadas (copiadas a una sesión) las notas pendientes; dejan de viajar en la propuesta global.
 export function markFeedbackSent(dir:string, files:string[], via:string) {
   const now=new Date().toISOString();
@@ -307,7 +309,7 @@ export function registerPublicationPlanner(app:Hono) {
   app.get('/api/planner/feedback',async c=>{
     const data=await inventory(),item=data.items.find((i:any)=>i.id===c.req.query('id'));
     if(!item)return c.json({error:'Esta pieza ya no está en el tablero.'},404);
-    const dir=feedbackDir(item),entries=readFeedback(dir);
+    const dir=feedbackDir(item),entries=pieceFeedback(dir);
     return c.json({dir:rel(dir),entries,prompt:entries.some(e=>e.estado!=='aplicado'&&e.estado!=='en_curso')?feedbackPrompt(item,dir,entries):null});
   });
   app.post('/api/planner/feedback',async c=>{
@@ -324,7 +326,7 @@ export function registerPublicationPlanner(app:Hono) {
         audio=rel(target);}
       const entry={id:item.id,title:item.title,source:item.source||null,video:item.primary?.path||null,status_planner:item.status,created_at:now.toISOString(),by:'planner',text:body.text||null,audio,audio_mime:body.audio?.mime||null,audio_seconds:body.audio_seconds,video_time:body.video_time,transcript:null,estado:'pendiente'};
       const target=resolve(dir,stamp+'-planner.json'),tmp=target+'.tmp';writeFileSync(tmp,JSON.stringify(entry,null,2));renameSync(tmp,target);
-      const entries=readFeedback(dir);
+      const entries=pieceFeedback(dir);
       return c.json({dir:rel(dir),entries,prompt:feedbackPrompt(item,dir,entries)});
     }catch(e){return c.json({error:(e as Error).message},400);}
   });
@@ -334,8 +336,8 @@ export function registerPublicationPlanner(app:Hono) {
     if(!body||typeof body.id!=='string')return c.json({error:'Pieza inválida'},400);
     const data=await inventory(),item=data.items.find((i:any)=>i.id===body.id);
     if(!item)return c.json({error:'Esta pieza ya no está en el tablero.'},400);
-    const dir=feedbackDir(item);markFeedbackSent(dir,readFeedback(dir).map(e=>e.file),'copiar');
-    const entries=readFeedback(dir);
+    const dir=feedbackDir(item);markFeedbackSent(dir,pieceFeedback(dir).map(e=>e.file),'copiar');
+    const entries=pieceFeedback(dir);
     return c.json({dir:rel(dir),entries,prompt:entries.some(e=>e.estado!=='aplicado'&&e.estado!=='en_curso')?feedbackPrompt(item,dir,entries):null});
   });
   // Borrar una nota la mueve a feedback/.borradas: nada se pierde.
@@ -350,7 +352,7 @@ export function registerPublicationPlanner(app:Hono) {
     const entry=fileRead(src,{});
     if(entry.audio){const a=resolve(ROOT(),entry.audio);if(within(dir,a)&&existsSync(a))renameSync(a,resolve(trash,relative(dir,a)));}
     renameSync(src,resolve(trash,body.file));
-    const entries=readFeedback(dir);
+    const entries=pieceFeedback(dir);
     return c.json({dir:rel(dir),entries,prompt:entries.some(e=>e.estado!=='aplicado'&&e.estado!=='en_curso')?feedbackPrompt(item,dir,entries):null});
   });
   app.put('/api/planner/draft',async c=>{
@@ -395,8 +397,11 @@ export function registerPublicationPlanner(app:Hono) {
     return new Response(Readable.toWeb(createReadStream(p,{start,end})) as ReadableStream,{status,headers});
   });
   app.get('/api/planner/poster',async c=>{
-    const p=plannerMediaPath(c.req.query('path')||'');if(!p||!['.mp4','.mov','.webm'].includes(extname(p).toLowerCase()))return c.text('No disponible',404);
+    const p=plannerMediaPath(c.req.query('path')||''),isImage=!!p&&['.png','.jpg','.jpeg','.webp'].includes(extname(p).toLowerCase());
+    if(!p||!(isImage||['.mp4','.mov','.webm'].includes(extname(p).toLowerCase())))return c.text('No disponible',404);
     const key=createHash('sha256').update(p+statSync(p).mtimeMs).digest('hex');const folder=resolve(STATE(),'cache/posters');mkdirSync(folder,{recursive:true});const out=resolve(folder,key+'.jpg');
-    try {if(!existsSync(out))await exec('ffmpeg',['-hide_banner','-loglevel','error','-ss','0.15','-i',p,'-frames:v','1','-vf','scale=320:-2','-q:v','5','-y',out],{timeout:15000});return new Response(readFileSync(out),{headers:{'Content-Type':'image/jpeg','Cache-Control':'private, max-age=3600'}});}catch{return c.text('Sin portada',404);}
+    try {if(!existsSync(out))await exec('ffmpeg',['-hide_banner','-loglevel','error',...(isImage?[]:['-ss','0.15']),'-i',p,'-frames:v','1','-vf','scale=320:-2','-q:v','5','-y',out],{timeout:15000});return new Response(readFileSync(out),{headers:{'Content-Type':'image/jpeg','Cache-Control':'private, max-age=3600'}});}
+    // Sin ffmpeg, una imagen se muestra tal cual.
+    catch{if(isImage)return new Response(readFileSync(p),{headers:{'Content-Type':TYPES[extname(p).toLowerCase()],'Cache-Control':'private, max-age=60'}});return c.text('Sin portada',404);}
   });
 }

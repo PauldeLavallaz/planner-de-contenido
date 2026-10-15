@@ -1,0 +1,116 @@
+/* Motor de historias · base común a cualquier marca.
+   Una historia por archivo HTML, de 1080 × 1920. Lo propio de la marca (fuentes, colores, rótulos)
+   va en su marca.css; acá están el lienzo, las capas y las animaciones.
+
+   Las animaciones son CSS comunes. El motor las pausa y las lleva al instante exacto de cada cuadro
+   (historia.js), así que el render sale idéntico siempre. Se escriben con translate, scale y rotate
+   sueltos (no con transform) para que una rotación fija del elemento no se pierda al animarlo. */
+
+:root {
+  --ease: cubic-bezier(.2, .8, .2, 1);        /* entra rápido y se apoya suave */
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --dur: 7s;                                  /* lo pisa data-duracion en .historia */
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: #000; }
+img, svg, video { display: block; }
+
+.historia {
+  position: relative; width: 1080px; height: 1920px; overflow: hidden;
+  -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision;
+  font-kerning: normal;
+}
+
+/* Capas */
+.capa { position: absolute; inset: 0; }
+.fondo { position: absolute; inset: 0; overflow: hidden; }
+.fondo > img { width: 100%; height: 100%; object-fit: cover; }
+.abs { position: absolute; }
+
+/* Texto: renglones parejos sin esfuerzo. balance empareja el largo de los renglones; pretty evita
+   la palabra sola al final. Igual se revisa en el chequeo. */
+.parejo { text-wrap: balance; }
+.bonito { text-wrap: pretty; }
+.cifras { font-variant-numeric: tabular-nums; }
+
+/* Zonas de stickers de Instagram: el diseño les deja el lugar y nunca los dibuja. Invisibles en el
+   render; se ven con ?guias en la URL. */
+.sticker { position: absolute; pointer-events: none; }
+
+/* Guías para revisar (abrir el HTML con ?guias). */
+.guias .historia::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 999;
+  background:
+    linear-gradient(rgba(255, 0, 80, .35), rgba(255, 0, 80, .35)) 0 0 / 100% 250px no-repeat,
+    linear-gradient(rgba(255, 0, 80, .35), rgba(255, 0, 80, .35)) 0 1650px / 100% 270px no-repeat;
+}
+.guias .sticker { outline: 4px dashed #ff2f6d; background: rgba(255, 47, 109, .14); }
+.guias .sticker::before {
+  content: attr(data-sticker); position: absolute; left: 12px; top: 8px;
+  font: 600 26px/1 system-ui, sans-serif; color: #ff2f6d;
+}
+
+/* Modos que usa el chequeo (render.py): texto invisible para medir el contraste de lo que queda
+   detrás, y sólo la foto para encontrar las caras. */
+.chequeo-sin-texto * { color: transparent !important; text-shadow: none !important;
+  -webkit-text-stroke: 0 !important; text-decoration-color: transparent !important; }
+.chequeo-sin-texto [data-texto-svg] { visibility: hidden !important; }
+.chequeo-solo-foto .historia > :not(.fondo) { visibility: hidden !important; }
+
+/* ── Animaciones ─────────────────────────────────────────────────────────────────────────────
+   Uso: class="a-sube" style="--d:.3s" (demora), --t (duración), --desde (distancia o escala).
+   Todas terminan quietas (both): la historia queda armada para leer y para la imagen fija. */
+
+@keyframes aparece   { from { opacity: 0; } }
+@keyframes sube      { from { opacity: 0; translate: 0 var(--desde, 56px); } }
+@keyframes baja      { from { opacity: 0; translate: 0 calc(var(--desde, 56px) * -1); } }
+@keyframes izquierda { from { opacity: 0; translate: calc(var(--desde, 80px) * -1) 0; } }
+@keyframes derecha   { from { opacity: 0; translate: var(--desde, 80px) 0; } }
+@keyframes escala    { from { opacity: 0; scale: var(--desde, .82); } }
+@keyframes pop       { 0% { opacity: 0; scale: .3; } 55% { opacity: 1; scale: 1.08; } 100% { scale: 1; } }
+@keyframes golpe     { 0% { opacity: 0; scale: 1.6; } 100% { opacity: 1; scale: 1; } }
+@keyframes revela-x  { from { clip-path: inset(-20% 100% -20% -2%); } to { clip-path: inset(-20% -2% -20% -2%); } }
+@keyframes revela-y  { from { clip-path: inset(100% -5% -5% -5%); } to { clip-path: inset(-5% -5% -5% -5%); } }
+@keyframes subraya   { from { scale: 0 1; } }
+@keyframes dibuja    { from { stroke-dashoffset: var(--largo, 1200); } to { stroke-dashoffset: 0; } }
+@keyframes renglon   { from { translate: 0 108%; } }
+
+/* Movimiento lento y continuo, para que la historia no quede muerta mientras se lee. */
+@keyframes zoom-lento { from { scale: var(--z0, 1); } to { scale: var(--z1, 1.07); } }
+@keyframes paneo      { from { translate: var(--p0, 0 0); } to { translate: var(--p1, 0 -40px); } }
+@keyframes flota      { 0%, 100% { translate: 0 0; } 50% { translate: 0 var(--flota, -16px); } }
+@keyframes balancea   { 0%, 100% { rotate: calc(var(--rot, 0deg) - 2deg); } 50% { rotate: calc(var(--rot, 0deg) + 2deg); } }
+@keyframes late       { 0%, 100% { scale: 1; } 50% { scale: var(--late, 1.04); } }
+@keyframes scroll     { from { translate: 0 0; } to { translate: 0 var(--hasta, -1200px); } }
+@keyframes scroll-vuelve { 0%, 12% { translate: 0 0; } 55%, 70% { translate: 0 var(--hasta, -1200px); } 100% { translate: 0 0; } }
+
+.a-aparece  { animation: aparece  var(--t, .6s)  var(--ease)    var(--d, 0s) both; }
+.a-sube     { animation: sube     var(--t, .8s)  var(--ease)    var(--d, 0s) both; }
+.a-baja     { animation: baja     var(--t, .8s)  var(--ease)    var(--d, 0s) both; }
+.a-izq      { animation: izquierda var(--t, .8s) var(--ease)    var(--d, 0s) both; }
+.a-der      { animation: derecha  var(--t, .8s)  var(--ease)    var(--d, 0s) both; }
+.a-escala   { animation: escala   var(--t, .8s)  var(--ease)    var(--d, 0s) both; }
+.a-pop      { animation: pop      var(--t, .7s)  var(--ease)    var(--d, 0s) both; }
+.a-golpe    { animation: golpe    var(--t, .5s)  var(--ease-out) var(--d, 0s) both; }
+.a-revela   { animation: revela-x var(--t, .9s)  var(--ease-in-out) var(--d, 0s) both; }
+.a-revela-y { animation: revela-y var(--t, .9s)  var(--ease-in-out) var(--d, 0s) both; }
+.a-subraya  { transform-origin: left center; animation: subraya var(--t, .6s) var(--ease) var(--d, 0s) both; }
+.a-dibuja   { stroke-dasharray: var(--largo, 1200); animation: dibuja var(--t, .9s) var(--ease-in-out) var(--d, 0s) both; }
+
+.a-zoom     { animation: zoom-lento var(--dur) linear 0s both; }
+.a-paneo    { animation: paneo var(--dur) linear 0s both; }
+.a-flota    { animation: flota var(--t, 3.2s) var(--ease-in-out) var(--d, 0s) infinite; }
+.a-balancea { animation: balancea var(--t, 3.6s) var(--ease-in-out) var(--d, 0s) infinite; }
+.a-late     { animation: late var(--t, 1.6s) var(--ease-in-out) var(--d, 0s) infinite; }
+.a-scroll   { animation: scroll var(--t, 4s) var(--ease-in-out) var(--d, 1s) both; }
+.a-scroll-vuelve { animation: scroll-vuelve var(--t, 5s) var(--ease-in-out) var(--d, 1s) both; }  /* recorre y vuelve arriba: la imagen fija muestra la portada */
+
+/* Renglón por renglón: historia.js parte el texto en sus renglones reales y cada uno sube desde
+   abajo con 130 ms de desfase. Uso: <h1 data-renglones style="--d:.2s">…</h1> */
+.renglon { display: block; overflow: hidden; padding: .06em .12em .14em; margin: -.06em -.12em -.14em; }
+.renglon > .renglon-in { display: inline-block; animation: renglon var(--t, .75s) var(--ease) calc(var(--d, 0s) + var(--i, 0) * 130ms) both; }
+
+/* Palabra por palabra (data-palabras): cada palabra aparece y sube un poco. */
+.palabra-in { display: inline-block; animation: sube var(--t, .55s) var(--ease) calc(var(--d, 0s) + var(--i, 0) * 70ms) both; --desde: 26px; }

@@ -24,5 +24,6 @@
   },
   "youtube": { "made_for_kids": "no", "tags": [] },
   "captions": { "block_links": false },
-  "require_cover": false
+  "require_cover": false,
+  "historias": { "carpeta": "historias", "fotos": "" }
 }

@@ -69,6 +69,9 @@ def queue_items(live):
             covered.add(rel(src))
         all_posts = (d.get('postiz') or {}).get('posts', [])
         used.update(p.get('id') for p in all_posts if p.get('id'))
+        # Las historias se manejan en la pestaña Historias: no son piezas sueltas de Semana ni del Tablero.
+        if d.get('formato') == 'story':
+            continue
         channels = []
         for lp in [p for p in all_posts if p.get('estado') != 'cancelado']:
             p = live.get(lp.get('id'))

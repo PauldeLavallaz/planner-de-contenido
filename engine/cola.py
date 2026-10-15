@@ -930,18 +930,23 @@ def cmd_reemplazar(a):
         if media.parent != INBOX:
             die(f'«{a.slug}» está agendada: quitala, reemplazala y volvé a agendarla')
         meta = load_meta(media)
-        if len(meta.get('media_files') or []) > 1 or format_for(meta) not in {'reel', 'video'}:
-            die('reemplazar admite piezas de un solo video')
+        # Historias e imágenes sueltas también: el planner las reemplaza cuando se editó la imagen.
+        fija = format_for(meta) in {'story', 'image'}
+        if len(meta.get('media_files') or []) > 1 or format_for(meta) not in {'reel', 'video', 'story', 'image'}:
+            die('reemplazar admite piezas de un solo video, historias o imágenes sueltas')
         new = Path(a.archivo).expanduser().resolve()
-        if not new.is_file() or new.suffix.lower() not in {'.mp4', '.mov'} or not inside_root(new):
-            die('el archivo nuevo tiene que ser un mp4/mov dentro de la carpeta de contenido')
+        tipos = IMAGE if fija else {'.mp4', '.mov'}
+        if not new.is_file() or new.suffix.lower() not in tipos or not inside_root(new):
+            die(f"el archivo nuevo tiene que ser {'una imagen' if fija else 'un mp4/mov'} dentro de la carpeta de contenido")
+        if fija and new.suffix.lower() != media.suffix.lower():
+            die(f'la imagen nueva tiene que ser {media.suffix} como la anterior')
         if meta.get('content_sha256') == ordered_media_digest([new]):
             die('la pieza ya tiene esa versión')
         old = PUBLISH / '.assets' / meta['slug'] / f"reemplazado-{now_local().strftime('%Y%m%d-%H%M%S')}{media.suffix}"
         old.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(media, old)
         shutil.copy2(new, media)
-        t = a.portada if a.portada is not None else (meta.get('portada') or {}).get('t')
+        t = None if fija else a.portada if a.portada is not None else (meta.get('portada') or {}).get('t')
         meta['portada'] = aplicar_portada(media, new, float(t), meta['slug']) if t is not None else None
         meta.setdefault('reemplazos', []).append({'at': now_local().isoformat(timespec='seconds'), 'antes': meta.get('source_final'), 'copia_anterior': str(old), 'motivo': a.motivo})
         meta['source_final'], meta['content_sha256'] = str(new), ordered_media_digest([new])

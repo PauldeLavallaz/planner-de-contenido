@@ -8,6 +8,7 @@ Planner local de publicaciones sobre Postiz. El usuario organiza en el navegador
 - **Organizar o mapear carpetas, «no aparece mi video»:** skill [organizar-carpetas](.claude/skills/organizar-carpetas/SKILL.md).
 - **Un mensaje que empieza con «Confirmo la propuesta…», agendar, mover, pausar, «¿qué sale esta semana?»:** skill [publicar](.claude/skills/publicar/SKILL.md).
 - **Feedback del planner sobre una pieza:** seguí las reglas que trae el mensaje y las instrucciones del proyecto de contenido del usuario.
+- **Historias: armar una semana, «Confirmo la propuesta de historias…» o feedback de historias:** skill [historias](.claude/skills/historias/SKILL.md).
 
 En Windows, `python` en lugar de `python3`.
 
@@ -33,7 +34,10 @@ En Windows, `python` en lugar de `python3`.
 | `engine/conectar.py` | Lee las cuentas de Postiz y las escribe en la config. |
 | `engine/carpetas.py` | Analiza, crea, prueba y sincroniza la estructura de carpetas. |
 | `engine/piezas.py` | Cómo se reconoce una pieza dentro de una carpeta. |
+| `engine/historias.py` | Aplica en Postiz las propuestas de la pestaña Historias (por `engine/cola.py`). |
+| `motor-historias/` | El motor de historias: plantilla, estilos, `render.py` (HTML → PNG con chequeo) y `caras.swift`. |
+| `<contenido>/historias/` | Una carpeta por semana de historias, con su `semana.json` (ver [docs/historias.md](docs/historias.md)). |
 | `<contenido>/publicar/` | Cola: `inbox/` (lista, sin fecha), `agendado/` (en Postiz), `publicado/AAAA-MM/`. `.planner/` guarda el borrador, las propuestas y el estado del tablero. |
-| `docs/` | Cómo funciona, carpetas y redes. |
+| `docs/` | Cómo funciona, carpetas, redes e historias. |
 
 Pruebas: `python3 -m unittest discover -s tests` (motor, con un Postiz simulado) y `cd app && npm test` (servidor). Corrélas si cambiás código.

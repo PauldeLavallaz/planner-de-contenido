@@ -1,0 +1,111 @@
+/* Estilo Instagram nativo · la base visual de las historias: las tipografías, fondos y colores que trae
+   el editor de Instagram, para que la historia se vea como las que la gente está acostumbrada a ver.
+
+   Instagram no publica sus fuentes (Instagram Sans y los estilos del editor son propios de Meta y
+   no tienen licencia de descarga). Se usan las libres que más se les parecen, comparadas contra
+   historias reales publicadas:
+     Serif    → Newsreader (opsz 12): la serif de las cajas negras, la más usada por cuentas que
+                venden con historias.
+     Clásica  → Instrument Sans: el estilo Classic del editor.
+     Máquina  → Courier Prime: el estilo Typewriter.
+   Las tres son de Google Fonts, licencia OFL (archivos y licencias en motor/fuentes/). */
+
+@font-face { font-family: 'IG Serif'; src: url('fuentes/Newsreader.ttf') format('truetype'); font-weight: 200 800; }
+@font-face { font-family: 'IG Clasica'; src: url('fuentes/InstrumentSans.ttf') format('truetype'); font-weight: 400 700; font-stretch: 75% 100%; }
+@font-face { font-family: 'IG Maquina'; src: url('fuentes/CourierPrime-Regular.ttf') format('truetype'); font-weight: 400; }
+@font-face { font-family: 'IG Maquina'; src: url('fuentes/CourierPrime-Bold.ttf') format('truetype'); font-weight: 700; }
+
+:root {
+  /* La fila de colores que trae el editor de texto, en orden. El amarillo se verificó contra
+     historias publicadas (medido #f6c64e en JPG). */
+  --ig-blanco: #ffffff;
+  --ig-negro: #000000;
+  --ig-azul: #3897f0;
+  --ig-verde: #70c050;
+  --ig-amarillo: #fdcb58;
+  --ig-naranja: #fd8d32;
+  --ig-rojo: #ed4956;
+  --ig-magenta: #d10869;
+  --ig-violeta: #a307ba;
+  /* grises del mismo editor */
+  --ig-gris-oscuro: #262626;
+  --ig-gris: #737373;
+  --ig-gris-claro: #dbdbdb;
+  --ig-gris-papel: #efefef;
+
+  --acento: var(--ig-amarillo);      /* el color del día, siempre uno de la fila */
+  --sobre-acento: var(--ig-negro);   /* letra sobre una caja del acento: negra con amarillo, verde y naranja; blanca con azul, rojo, magenta y violeta */
+  --serif: 'IG Serif', Georgia, serif;
+  --clasica: 'IG Clasica', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --maquina: 'IG Maquina', 'Courier New', monospace;
+  --emoji: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
+.historia { color: var(--ig-blanco); background: var(--ig-negro); font-family: var(--serif);
+  font-variation-settings: 'opsz' 12; font-weight: 420; }
+
+/* Historia sin foto: fondo liso, blanco o negro (en el planner se puede elegir otro color). */
+.historia.lisa { background: var(--ig-blanco); color: var(--ig-negro); }
+.historia.lisa.negra { background: var(--ig-negro); color: var(--ig-blanco); }
+
+/* Cuatro estilos de color. Cada uno fija el
+   color de la fila y la letra que va sobre una caja de ese color. */
+.estilo-amarillo { --acento: var(--ig-amarillo); --sobre-acento: var(--ig-negro); }
+.estilo-rojo     { --acento: var(--ig-rojo);     --sobre-acento: var(--ig-blanco); }
+.estilo-verde    { --acento: var(--ig-verde);    --sobre-acento: var(--ig-negro); }
+.estilo-naranja  { --acento: var(--ig-naranja);  --sobre-acento: var(--ig-negro); }
+
+/* ── Los tres estilos de letra ── */
+.serif { font-family: var(--serif); font-variation-settings: 'opsz' 12; font-weight: 420; letter-spacing: -.005em; line-height: 1.18; }
+.clasica { font-family: var(--clasica); font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
+.maquina { font-family: var(--maquina); font-weight: 400; letter-spacing: 0; line-height: 1.25; }
+.emoji { font-family: var(--emoji); font-style: normal; }
+
+/* ── Fondos de texto, como el botón «A» del editor ── */
+/* Caja: un rectángulo que abraza el bloque. Negra con letra blanca por defecto. */
+.caja { display: inline-block; background: var(--caja, var(--ig-negro)); color: var(--letra, var(--ig-blanco));
+  padding: .32em .5em .36em; text-align: center; }
+.caja.blanca { --caja: var(--ig-blanco); --letra: var(--ig-negro); }
+.caja.color { --caja: var(--acento); --letra: var(--sobre-acento, var(--ig-negro)); }
+.caja.translucida { --caja: rgba(0, 0, 0, .55); }
+
+/* Resaltado por renglón, el del estilo Clásica: una pastilla redondeada detrás de cada renglón. */
+.resalte { display: inline; background: var(--caja, var(--ig-blanco)); color: var(--letra, var(--ig-negro));
+  padding: .1em .32em .14em; border-radius: .24em; line-height: 1.42;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.resalte.negro { --caja: var(--ig-negro); --letra: var(--ig-blanco); }
+.resalte.color { --caja: var(--acento); --letra: var(--sobre-acento, var(--ig-negro)); }
+
+/* Remate de un gancho o un cierre: caja del color con la Clásica en negrita y un emoji al final
+   Uso: <p><span class="caja color clasica remate">esto es para vos<span class="emoji">🫵</span></span></p> */
+.remate { font-family: var(--clasica); font-weight: 700; letter-spacing: -.02em; line-height: 1.1;
+  padding: .3em .55em .32em; white-space: nowrap; }
+.remate .emoji { font-size: .95em; margin-left: .3em; vertical-align: -.04em; }
+
+/* Palabras pintadas con otro color de la fila (como se hace seleccionando la palabra). */
+.c { color: var(--acento); }
+.mencion { text-decoration: underline; text-decoration-thickness: .06em; text-underline-offset: .14em; }
+
+/* Bloque centrado: el texto del editor nace centrado. */
+.centro { text-align: center; }
+.bloque { position: absolute; left: 60px; right: 60px; text-align: center; }
+
+/* Overlay negro de opacidad baja sobre la foto entera, parejo, sin degradés: oscurece lo justo
+   para escribir encima sin cajas. Entre .3 y .5. */
+.atenuado { position: absolute; inset: 0; background: rgba(0, 0, 0, var(--atenuar, .4)); }
+/* Texto blanco sin caja sobre la foto atenuada: una sombra mínima, como la que deja la app. */
+.suelto { color: var(--ig-blanco); text-shadow: 0 1px 10px rgba(0, 0, 0, .35); }
+
+/* Flechas y subrayados hechos con el lápiz del editor: trazo parejo, punta redonda. */
+.lapiz { position: absolute; fill: none; stroke: var(--trazo, var(--ig-blanco)); stroke-width: 11;
+  stroke-linecap: round; stroke-linejoin: round; }
+
+/* Stickers propios (la persona recortada, una captura): con la sombra suave que pone Instagram a los
+   recortes. */
+.recorte { position: absolute; filter: drop-shadow(0 10px 18px rgba(0, 0, 0, .28)); }
+.captura { position: absolute; border-radius: 18px; overflow: hidden; box-shadow: 0 18px 40px rgba(0, 0, 0, .35); }
+.captura > img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Hueco para completar (✏️ de la tarjeta de Notion): borrador a la vista. */
+.completar { background: #ffe066; color: #000; padding: 0 .2em; border-radius: .15em;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone; }

@@ -8,12 +8,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/planner.css">
+<link rel="stylesheet" href="/historias.css">
 </head>
 <body>
 <header class="topbar">
   <div class="brandmark">Publicaciones</div>
   <nav class="tabs" role="tablist" aria-label="Vista">
     <button role="tab" data-view="week" aria-selected="true">Semana</button>
+    <button role="tab" data-view="stories" aria-selected="false">Historias</button>
     <button role="tab" data-view="pieces" aria-selected="false">Tablero</button>
     <button role="tab" data-view="history" aria-selected="false">Publicadas</button>
   </nav>
@@ -57,6 +59,27 @@
     <div id="grid" class="grid"></div>
     <p id="footnote" class="footnote" hidden></p>
   </section>
+</main>
+
+<!-- Historias: la semana en horizontal, un día por fila, la secuencia una al lado de la otra y el recurso fijo a la
+     derecha. Las respuestas por día son la métrica principal. -->
+<main id="storiesView" class="stories-view" hidden>
+  <div class="calendar-head">
+    <button id="sWeekTitle" class="week-title" title="Ir a otra fecha"></button>
+    <input id="sJumpDate" type="date" tabindex="-1" aria-hidden="true">
+    <div class="week-nav">
+      <button id="sPrev" class="icon" title="Semana anterior (←)" aria-label="Semana anterior"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+      <button id="sToday" class="ghost">Hoy</button>
+      <button id="sNext" class="icon" title="Semana siguiente (→)" aria-label="Semana siguiente"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button>
+    </div>
+    <select id="sCuenta" class="s-cuenta-filter" aria-label="Cuenta de Instagram" hidden></select>
+    <div id="sSummary" class="s-summary" role="status"></div>
+    <div id="sActions" class="s-actions" hidden>
+      <button id="sReset" class="ghost" hidden>Volver al plan</button>
+      <button id="sPropose" class="primary" disabled><span>Programar</span><span id="sProposeCount" class="count">0</span></button>
+    </div>
+  </div>
+  <div id="sGrid" class="s-grid"></div>
 </main>
 
 <main id="piecesView" class="list-view board-view" hidden>
@@ -109,8 +132,87 @@
   <div class="modal-foot"><span id="autoSummary" class="muted"></span><button id="autoApply" class="primary">Aplicar a mis cambios</button></div>
 </dialog>
 
+<dialog id="storyBox" class="story-box" aria-labelledby="sbTitle">
+  <div class="sb-head"><h2 id="sbTitle"></h2><span id="sbChip" class="sb-chip" hidden></span><button class="icon close" aria-label="Cerrar"><svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg></button></div>
+  <div class="sb-main">
+    <div class="sb-col">
+      <div class="sb-body">
+        <button id="sbPrev" class="icon sb-nav" aria-label="Historia anterior"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+        <img id="sbImg" alt="">
+        <button id="sbNext" class="icon sb-nav" aria-label="Historia siguiente"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button>
+      </div>
+      <div class="sb-actions">
+        <button id="sbEdit" class="sb-act">✏️ Editar</button>
+        <button id="sbFbBtn" class="sb-act">💬 Feedback<span id="sbFbN" class="sb-n" hidden></span></button>
+      </div>
+    </div>
+    <aside id="sbFeedback" class="sb-fb" hidden aria-label="Feedback de esta historia"></aside>
+  </div>
+</dialog>
+
+<!-- Feedback general de la secuencia de un día. -->
+<dialog id="seqFb" class="modal seq-fb" aria-labelledby="sqTitle">
+  <div class="modal-head"><h2 id="sqTitle">Feedback de la secuencia</h2><button class="icon close" aria-label="Cerrar"><svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg></button></div>
+  <div class="sq-body"><div id="sqStrip" class="sq-strip"></div><section id="sqFeedback" class="sb-fb" aria-label="Feedback de la secuencia"></section></div>
+</dialog>
+
+<dialog id="storyEditor" class="modal story-editor" aria-labelledby="seTitle">
+  <div class="se-head">
+    <h2 id="seTitle">Editar historia</h2>
+    <div class="se-top">
+      <button id="seUndo" class="se-b" disabled title="Deshacer (Cmd+Z)">↶</button>
+      <button id="seRedo" class="se-b" disabled title="Rehacer (Shift+Cmd+Z)">↷</button>
+      <label class="toggle se-guias" title="Muestra lo que tapa Instagram arriba y abajo, y los lugares de sticker"><input type="checkbox" id="seGuides" checked> Zonas seguras</label>
+      <button id="seSave" class="primary" disabled>Guardar y renderizar</button>
+      <button class="icon" id="seClose" aria-label="Cerrar"><svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
+    </div>
+  </div>
+  <div class="se-bar" id="seBar" role="toolbar" aria-label="Herramientas de lo elegido"></div>
+  <div class="se-body">
+    <nav class="se-rail" aria-label="Paneles">
+      <button data-tab="agregar"><span>＋</span>Agregar</button>
+      <button data-tab="imagenes"><span>🖼</span>Imágenes</button>
+      <button data-tab="fondo"><span>▧</span>Fondo</button>
+      <button data-tab="capas"><span>☰</span>Capas</button>
+      <button data-tab="chequeo"><span>✓</span>Chequeo</button>
+    </nav>
+    <aside class="se-drawer" id="seDrawer" hidden></aside>
+    <div class="se-stage" id="seStage"><div class="se-scale" id="seScale"><iframe id="seFrame" title="Historia en edición"></iframe></div></div>
+  </div>
+  <div class="se-pop" id="sePop" hidden></div>
+</dialog>
+
+<dialog id="photoPicker" class="modal photo-picker" aria-labelledby="ppTitle">
+  <div class="modal-head"><h2 id="ppTitle">Cambiar foto de fondo</h2><button class="icon close" aria-label="Cerrar"><svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg></button></div>
+  <div class="pp-body">
+    <div class="pp-side">
+      <div class="pp-frame"><img id="ppCrop" alt=""></div>
+      <p class="pp-label">Recorte al centro. En el editor la arrastrás para encuadrarla.</p>
+      <p id="ppNow" class="pp-now"></p>
+      <div id="ppAvisos" class="pp-avisos" role="status"></div>
+      <button id="ppApply" class="primary" disabled>Usar esta foto</button>
+    </div>
+    <div class="pp-main">
+      <div class="pp-filters">
+        <select id="ppCarpeta" aria-label="Carpeta"><option value="">Todas las carpetas</option></select>
+        <input id="ppQ" type="search" placeholder="Buscar por nombre" aria-label="Buscar foto">
+      </div>
+      <div id="ppGrid" class="pp-grid"></div>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="storyProposal" class="modal" aria-labelledby="spTitle">
+  <div class="modal-head"><h2 id="spTitle">Historias para mandar</h2><button class="icon close" aria-label="Cerrar"><svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg></button></div>
+  <p class="modal-sub">Nada cambia en Postiz hasta que confirmes en el chat. Las historias con encuesta, link, mención o caja de preguntas van a mano: Instagram no deja publicar esos stickers por la API.</p>
+  <div id="spList" class="sp-list"></div>
+  <div id="spResult" class="sp-result" hidden></div>
+  <div class="modal-foot"><span></span><button id="spPrepare" class="primary">Preparar confirmación</button></div>
+</dialog>
+
 <div id="timePop" class="popover" hidden></div>
 <div id="toast" class="toast" role="status"><span id="toastText"></span><button id="toastAction" hidden></button></div>
 <script src="/planner.js"></script>
+<script src="/historias.js"></script>
 </body>
 </html>
