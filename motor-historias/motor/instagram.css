@@ -82,6 +82,14 @@
   padding: .3em .55em .32em; white-space: nowrap; }
 .remate .emoji { font-size: .95em; margin-left: .3em; vertical-align: -.04em; }
 
+/* Titular de un gancho: la frase que manda, corta (2 a 8 palabras) y grande. Suelto sobre la foto lleva la sombra de
+   .suelto; también entra en .caja. Lo demás va chico: la .etiqueta arriba o la bajada en caja. */
+.titular { font-family: var(--clasica); font-weight: 800; font-size: 96px; letter-spacing: -.03em; line-height: 1.02; }
+/* Etiqueta chica arriba del titular («Ya te lo advertí»): Clásica en caja blanca redondeada. */
+.etiqueta { display: inline-block; font-family: var(--clasica); font-weight: 700; font-size: 38px; letter-spacing: -.01em;
+  line-height: 1.1; padding: .2em .5em .24em; border-radius: .3em; background: var(--caja, var(--ig-blanco));
+  color: var(--letra, var(--ig-negro)); }
+
 /* Palabras pintadas con otro color de la fila (como se hace seleccionando la palabra). */
 .c { color: var(--acento); }
 .mencion { text-decoration: underline; text-decoration-thickness: .06em; text-underline-offset: .14em; }

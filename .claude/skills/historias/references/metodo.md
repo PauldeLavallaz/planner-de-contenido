@@ -106,6 +106,11 @@ Ganchos, reacciones y pedidos probados, con plantillas para completar: [ganchos.
   listas, bonos y pedidos pueden llegar al 40 o 50%. Si hace falta más, se parte en dos historias.
 - La primera historia abre con algo que pasó, una pregunta al público o una afirmación que dé
   curiosidad. Nunca con «hoy te voy a enseñar».
+- **El gancho es corto y no cuenta el final.** Un titular de 2 a 8 palabras que manda en la pantalla y, si
+  hace falta, una bajada chica o una etiqueta arriba («Ya te lo advertí», «en tu 2026»). En las secuencias de
+  referencia, la mitad de las primeras historias tiene 12 palabras o menos y tres de cada cuatro, 20 o menos. El dato,
+  la cifra o el hallazgo va en la historia siguiente: si el gancho ya dice qué pasó, qué se encontró y cuánto costó,
+  no queda nada para abrir. Si deja algo abierto, cierra con 👉 o una flecha de lápiz hacia la siguiente.
 - Voz de la persona, como habla. Mayúsculas para una palabra de énfasis, no para frases enteras.
   Emojis con moderación.
 - La venta va de gancho a vehículo, resultado y pedido con su palanca (ver las fórmulas). El gancho es

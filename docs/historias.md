@@ -86,7 +86,7 @@ Cada historia es un HTML de 1080×1920 hecho con el motor de `motor-historias/`:
    python3 motor-historias/render.py <semana>/fuente/*.html --salida <semana>/historias --chequeo
    ```
 
-   Deja el PNG de cada una y un chequeo: texto en la zona que tapa Instagram (250 px arriba, 270 abajo), poco contraste, renglones disparejos, algo fuera del eje y stickers pisados.
+   Deja el PNG de cada una y un chequeo: texto en la zona que tapa Instagram (250 px arriba, 270 abajo), poco contraste, renglones disparejos, algo fuera del eje, stickers pisados y texto largo (más de 20 palabras en la primera historia del día o más de 47 en cualquiera).
 
 Necesita Python con `pip install playwright pillow numpy` y `python3 -m playwright install chromium`. En macOS, el chequeo también busca caras tapadas por texto (Vision): el planner compila `motor-historias/caras.swift` solo la primera vez si está `swiftc`.
 

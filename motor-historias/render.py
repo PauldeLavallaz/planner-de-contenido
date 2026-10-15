@@ -22,13 +22,16 @@ voz en off). El chequeo mira, en el último cuadro:
     en el eje de la historia (540 px); un conjunto (una fila de emojis) se marca con data-grupo y se
     mide entero;
   - con --caras (el binario compilado de caras.swift, sólo en macOS): caras tapadas por texto o cajas ([data-caja]),
-    o cortadas por el borde.
+    o cortadas por el borde;
+  - texto largo: más de 20 palabras en el gancho (la primera del día, nombre_1_… o historia1_…) o más de 47 en
+    cualquier historia.
 Necesita: pip install playwright pillow numpy; python3 -m playwright install chromium; ffmpeg sólo para --video.
 """
 import argparse
 import asyncio
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -132,6 +135,29 @@ def revisar(textos, stickers, cajas, fondo_png, caras, centrado=()):
             if solapa(c['caja'], s['caja']) > 0.08 * area:
                 problemas.append(f'el sticker {s["que"]} queda sobre una cara')
     return problemas
+
+
+# Palabras escritas en la historia, sin contar recursos con texto propio (chat, archivo), stickers ni emojis.
+CONTAR_PALABRAS = '''(() => { let n = 0;
+  const w = document.createTreeWalker(document.querySelector('.historia'), NodeFilter.SHOW_TEXT);
+  while (w.nextNode()) { const p = w.currentNode.parentElement;
+    if (!p || p.closest('[data-sin-chequeo], .sticker, .emoji, style, script')) continue;
+    const cs = getComputedStyle(p); if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    n += (w.currentNode.textContent.match(/[\\p{L}\\p{N}]+/gu) || []).length; }
+  return n; })()'''
+# En unas 1.200 historias de cuentas que venden con historias, la primera de cada secuencia tiene una mediana de 12
+# palabras (tres de cada cuatro, 20 o menos) y cualquier historia, 20 (nueve de cada diez, 47 o menos).
+GANCHO_MAX, HISTORIA_MAX = 20, 47
+
+
+def avisos_de_texto(nombre, palabras):
+    if re.search(r'(?:^|_)1_|^historia0*1(?:_|$)', nombre) and palabras > GANCHO_MAX:
+        return [f'el gancho tiene {palabras} palabras (en las referencias 3 de cada 4 tienen {GANCHO_MAX} o menos y la '
+                'mitad, 12): dejá un titular corto y pasá el dato a la historia siguiente']
+    if palabras > HISTORIA_MAX:
+        return [f'tiene {palabras} palabras (en las referencias 9 de cada 10 tienen {HISTORIA_MAX} o menos): recortá o '
+                'partila en dos']
+    return []
 
 
 def detectar_caras(binario, png):
@@ -247,6 +273,7 @@ async def una(browser, html, a, sem):
             await page.evaluate("document.documentElement.classList.remove('chequeo-solo-foto')")
             caras = detectar_caras(a.caras, str(tmp / 'solo-foto.png'))
             problemas = revisar(textos, stickers, cajas, str(tmp / 'sin-texto.png'), caras, centrado)
+            problemas += avisos_de_texto(html.stem, await page.evaluate(CONTAR_PALABRAS))
             problemas += avisos_video
             problemas += [f'error en la página: {e}' for e in errores]
             json.dump({'historia': html.name, 'duracion': dur, 'textos': textos, 'stickers': stickers,

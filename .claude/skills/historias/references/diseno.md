@@ -51,6 +51,9 @@ código (motor, plantilla, render y chequeo) está en [docs/historias.md](../../
 3. **Cómo se combinan los elementos** (texto, emojis, flechas, capturas), tal como lo hacen las secuencias
    que mejor funcionan:
    - De 2 a 4 elementos por historia y uno que domina: la foto, la captura o la lista.
+   - Una frase manda. En el gancho, el titular va grande (`.titular`, la Clásica en negrita a 88–110 px,
+     suelto con sombra o en caja) y lo demás chico: la etiqueta de arriba (`.etiqueta`) o la bajada en
+     caja. Tres cajas de serif del mismo tamaño no tienen jerarquía y se leen como un párrafo.
    - El texto en caja o pastilla que abraza la frase. La serif en cajas para las frases; la Clásica en
      negrita, en etiqueta blanca o del color, para el gancho de curiosidad, los títulos de sección
      («El sistema funciona así:») y las etiquetas de los pasos.
