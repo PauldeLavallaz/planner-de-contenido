@@ -9,8 +9,11 @@ Uso:
   python3 render.py SEMANA/fuente/*.html --salida SEMANA/historias [--chequeo]
          [--caras RUTA/AL/BINARIO/caras] [--video] [--fps 30] [--png-en 6.5] [--paralelo 3]
 
-Deja por historia: nombre.png, nombre.mp4 con --video (H.264, 1080x1920, sin audio) y, con
---chequeo, nombre.chequeo.json más un resumen. El chequeo mira, en el último cuadro:
+Deja por historia: nombre.png, nombre.mp4 con --video (H.264, 1080x1920, SDR BT.709) y, con
+--chequeo, nombre.chequeo.json más un resumen. Una historia con video de fondo (<img data-secuencia>) o con
+voz en off (<audio class="voz" src="assets/audio/…" data-inicio="0.25">) sale siempre en MP4, con la voz
+mezclada desde su segundo de inicio, y su imagen fija es el cuadro del segundo 1 (formato de historia con video y
+voz en off). El chequeo mira, en el último cuadro:
   - texto arriba de 250 px, abajo de 1650 px o pegado a los bordes;
   - renglones disparejos (el más corto bajo el 80% del más largo) y palabra sola al final;
   - contraste del texto contra lo que tiene detrás (3:1 en texto de 48 px o más, 4,5:1 en el resto);
@@ -144,6 +147,44 @@ def detectar_caras(binario, png):
             for c in datos.get('caras', []) if c.get('confianza', 1) > 0.5 and c['w'] * W > 60]
 
 
+def duracion_de(archivo):
+    r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(archivo)],
+                       capture_output=True, text=True)
+    try:
+        return float(r.stdout.strip())
+    except ValueError:
+        return None
+
+
+def mezclar_voz(sin_voz, mp4, voces, carpeta, dur):
+    """Pega la voz en off (una o más pistas, cada una desde su segundo) sobre el video y avisa si se corta."""
+    avisos, entradas, filtros = [], [], []
+    for k, v in enumerate(voces):
+        archivo = (carpeta / v['src']).resolve()
+        if not archivo.is_file():
+            avisos.append(f'no encuentro la voz en off {v["src"]}')
+            continue
+        largo = duracion_de(archivo)
+        if largo and v['inicio'] + largo > dur + 0.05:
+            avisos.append(f'la voz en off termina en {v["inicio"] + largo:.1f} s y la historia dura {dur:.1f} s: se corta')
+        entradas += ['-i', str(archivo)]
+        filtros.append(f'[{len(entradas) // 2}:a]aresample=48000,adelay={int(round(v["inicio"] * 1000))}:all=1[v{k}]')
+    if not entradas:
+        os.replace(sin_voz, mp4)
+        return avisos
+    etiquetas = ''.join(f'[v{k}]' for k in range(len(entradas) // 2))
+    mezcla = f'{etiquetas}amix=inputs={len(entradas) // 2}:normalize=0,apad[voz]' if len(entradas) > 2 else f'{etiquetas}apad[voz]'
+    r = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', sin_voz, *entradas, '-filter_complex', ';'.join(filtros + [mezcla]),
+                        '-map', '0:v', '-map', '[voz]', '-t', f'{dur:.3f}', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k',
+                        '-ar', '48000', '-movflags', '+faststart', mp4], capture_output=True, text=True)
+    if r.returncode:
+        avisos.append('no se pudo mezclar la voz en off: ' + r.stderr.strip()[-300:])
+        os.replace(sin_voz, mp4)
+    else:
+        os.remove(sin_voz)
+    return avisos
+
+
 async def una(browser, html, a, sem):
     async with sem:
         html = Path(html).resolve()
@@ -157,20 +198,37 @@ async def una(browser, html, a, sem):
         await page.goto(html.as_uri() + '?render')
         await page.evaluate('window.historiaLista')
         dur = await page.evaluate('window.HISTORIA.duracion')
-        fin = a.png_en if a.png_en is not None else max(0, dur - 1 / a.fps)
+        voces = await page.evaluate("[...document.querySelectorAll('audio.voz')].map(x => ({src: x.getAttribute('src'), "
+                                    "inicio: parseFloat(x.dataset.inicio || '0') || 0}))")
+        con_video = await page.evaluate("!!document.querySelector('img[data-secuencia]')")
+        video = a.video or con_video or bool(voces)
+        fin = a.png_en if a.png_en is not None else (min(1.0, dur) if (con_video or voces) else max(0, dur - 1 / a.fps))
+        avisos_video = []
 
-        if a.video:
+        if video:
+            if not shutil.which('ffmpeg'):
+                sys.exit('Falta ffmpeg para el video de la historia (Mac: brew install ffmpeg).')
             n = int(round(dur * a.fps))
+            mp4, sin_voz = str(base) + '.mp4', str(base) + '.sin-voz.mp4'
+            # Las capturas JPEG llegan en rango completo y matriz BT.601: se pasan a BT.709 limitado y se declaran,
+            # así el video se ve igual en Instagram, en el celular y en el planner.
             ff = await asyncio.create_subprocess_exec(
                 'ffmpeg', '-v', 'error', '-y', '-f', 'image2pipe', '-framerate', str(a.fps), '-c:v', 'mjpeg',
-                '-i', '-', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', str(a.crf), '-preset', 'medium',
-                '-movflags', '+faststart', str(base) + '.mp4', stdin=asyncio.subprocess.PIPE)
+                '-i', '-', '-vf', 'scale=in_color_matrix=bt601:in_range=pc:out_color_matrix=bt709:out_range=tv,format=yuv420p,'
+                'setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709',
+                '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', str(a.crf), '-preset', 'medium',
+                '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', '-color_range', 'tv',
+                '-movflags', '+faststart', sin_voz if voces else mp4, stdin=asyncio.subprocess.PIPE)
             for i in range(n):
                 await page.evaluate(f'window.seek({i / a.fps})')
                 ff.stdin.write(await page.screenshot(type='jpeg', quality=95))
                 await ff.stdin.drain()
             ff.stdin.close()
             await ff.wait()
+            if voces:
+                avisos_video = mezclar_voz(sin_voz, mp4, voces, html.parent, dur)
+            if dur > 60:
+                avisos_video.append(f'dura {dur:.1f} s: Instagram corta cada historia de video a los 60 s; partila en dos')
 
         await page.evaluate(f'window.seek({fin})')
         await page.screenshot(path=str(base) + '.png', type='png')
@@ -189,14 +247,17 @@ async def una(browser, html, a, sem):
             await page.evaluate("document.documentElement.classList.remove('chequeo-solo-foto')")
             caras = detectar_caras(a.caras, str(tmp / 'solo-foto.png'))
             problemas = revisar(textos, stickers, cajas, str(tmp / 'sin-texto.png'), caras, centrado)
+            problemas += avisos_video
             problemas += [f'error en la página: {e}' for e in errores]
             json.dump({'historia': html.name, 'duracion': dur, 'textos': textos, 'stickers': stickers,
                        'caras': caras, 'problemas': problemas},
                       open(str(base) + '.chequeo.json', 'w'), ensure_ascii=False, indent=1)
             shutil.rmtree(tmp, ignore_errors=True)
             resumen += ' · ' + ('sin problemas' if not problemas else f'{len(problemas)} para revisar:\n    - ' + '\n    - '.join(problemas))
-        elif errores:
-            resumen += ' · errores en la página:\n    - ' + '\n    - '.join(errores)
+        elif errores or avisos_video:
+            resumen += ' · para revisar:\n    - ' + '\n    - '.join(avisos_video + errores)
+        if video:
+            resumen += f' · {html.stem}.mp4' + (' con voz en off' if voces else '')
         await page.close()
         print(resumen, flush=True)
 

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<!-- Recursos visuales que se repiten en las historias que mejor funcionan: el chat de WhatsApp, el archivo del recurso y
+     el recurso tapado.
+
+     Cada bloque con data-recurso es un elemento suelto de una historia: se copia tal cual adentro de <main class="historia">
+     y se ajustan left/top (centrado: left = (1080 − ancho) / 2) y los textos. Traen el estilo adentro, sin imágenes ni
+     scripts (data-sin-chequeo: su texto tiene fondo propio y el chequeo no lo mide contra la foto; data-caja sí
+     se mide para no tapar caras), así funcionan en cualquier semana aunque su copia del motor sea anterior. El editor del planner los ofrece
+     en Agregar → Recursos (lee este archivo). Criterio y reglas en .claude/skills/historias/references/recursos.md. -->
+<link rel="stylesheet" href="motor/historia.css">
+<link rel="stylesheet" href="motor/instagram.css">
+</head>
+<body>
+<main class="historia lisa">
+
+<!-- Chat de WhatsApp: la reacción de alguien o una conversación. Burbuja blanca a la izquierda = lo que llega; verde a
+     la derecha = lo que mandó la persona de la cuenta. Recrea un chat real (mismas palabras, con permiso) o una escena
+     en broma que se lea como broma. Nunca una reacción de cliente inventada presentada como real. -->
+<div data-recurso="chat" data-nombre="Chat de WhatsApp" data-sin-chequeo data-grupo="chat de WhatsApp" data-caja="chat de WhatsApp" style="position: absolute; left: 150px; top: 700px; width: 780px; border-radius: 30px; overflow: hidden; background: #efeae2; color: #111b21; font-family: var(--clasica); font-weight: 400; text-align: left; box-shadow: 0 18px 44px rgba(0, 0, 0, .35);">
+  <div style="display: flex; align-items: center; gap: 18px; padding: 22px 28px; background: #ffffff; border-bottom: 1px solid #e3ddd3;">
+    <span style="font-size: 40px; line-height: 1; color: #007aff;">‹</span>
+    <span style="flex: none; width: 66px; height: 66px; border-radius: 50%; background: #5f7480; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 700;">M</span>
+    <span style="display: flex; flex-direction: column; line-height: 1.15;"><b style="font-size: 32px; font-weight: 700;">Martín</b><span style="font-size: 22px; color: #667781;">en línea</span></span>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 14px; padding: 28px 24px 32px;">
+    <p style="margin: 0; align-self: flex-end; max-width: 82%; background: #d9fdd3; padding: 14px 20px 12px; border-radius: 22px 6px 22px 22px; font-size: 32px; line-height: 1.3; box-shadow: 0 1px 1px rgba(11, 20, 26, .13);">Te mandé lo que te conté <span style="font-size: 20px; color: #667781; margin-left: 8px; white-space: nowrap;">18:40 <span style="color: #53bdeb;">✓✓</span></span></p>
+    <p style="margin: 0; align-self: flex-start; max-width: 82%; background: #ffffff; padding: 14px 20px 12px; border-radius: 6px 22px 22px 22px; font-size: 32px; line-height: 1.3; box-shadow: 0 1px 1px rgba(11, 20, 26, .13);">Queeeeee estás loco jajaja <span style="font-size: 20px; color: #667781; margin-left: 8px; white-space: nowrap;">18:42</span></p>
+    <p style="margin: 0; align-self: flex-start; max-width: 82%; background: #ffffff; padding: 14px 20px 12px; border-radius: 6px 22px 22px 22px; font-size: 32px; line-height: 1.3; box-shadow: 0 1px 1px rgba(11, 20, 26, .13);">Esto me ahorra toda la semana 🤯 <span style="font-size: 20px; color: #667781; margin-left: 8px; white-space: nowrap;">18:42</span></p>
+  </div>
+</div>
+
+<!-- Archivo del recurso: la tarjeta que aparece al compartir un documento o una carpeta. Para mostrar que el recurso existe, sin abrirlo. Ícono: ≡ documento, 📁 carpeta, ▶ video. -->
+<div data-recurso="archivo" data-nombre="Archivo del recurso" data-sin-chequeo data-grupo="archivo del recurso" data-caja="archivo del recurso" style="position: absolute; left: 220px; top: 1180px; width: 640px; display: flex; align-items: center; gap: 24px; padding: 24px 30px; border-radius: 24px; background: #ffffff; color: #1f1f1f; font-family: var(--clasica); text-align: left; box-shadow: 0 12px 30px rgba(0, 0, 0, .28);">
+  <span style="flex: none; width: 60px; height: 76px; border-radius: 8px; background: #1a5fd0; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 700;">≡</span>
+  <span style="display: flex; flex-direction: column; gap: 6px; line-height: 1.15;"><b style="font-size: 36px; font-weight: 600;">Nombre del recurso</b><span style="font-size: 23px; color: #5f6368;">Documento · te llega por DM</span></span>
+</div>
+
+<!-- Recurso tapado: una captura del recurso borrosa, con un candado encima. Para el recurso hypeado (R4): se ve que
+     existe y no se lee qué es. En el editor: elegí una captura y tocá «Tapar». A mano: filter: blur(14px) en la imagen
+     y este candado como último hijo de la .captura. -->
+<div data-recurso="tapado" data-nombre="Recurso tapado" class="captura" data-caja="recurso tapado" style="left: 240px; top: 560px; width: 600px; height: 760px; background: #d9d4cb;">
+  <img alt="" style="filter: blur(14px); transform: scale(1.08);" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='8'%3E%3Crect width='6' height='8' fill='%23cfc8bc'/%3E%3Crect y='1' width='5' height='1' fill='%23ffffff'/%3E%3Crect y='3' width='4' height='1' fill='%23ffffff'/%3E%3Crect y='5' width='5' height='1' fill='%23ffffff'/%3E%3C/svg%3E">
+  <span data-tapa style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 150px; font-family: var(--emoji);">🔒</span>
+</div>
+
+</main>
+</body></html>
