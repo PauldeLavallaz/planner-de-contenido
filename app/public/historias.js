@@ -1065,12 +1065,22 @@ const seHasText = x => !x.matches('.sticker') && !x.closest('[data-sin-chequeo]'
 function seWarn(el) {
   if (!el || seKind(el) === 'sticker') return [];
   const r = seInk(el) || el.getBoundingClientRect(), out = [];
-  if (seHasText(el) && (r.top < SE_ARRIBA || r.bottom > SE_ABAJO)) out.push('Fuera de la zona segura: Instagram tapa los 250 px de arriba y los 270 de abajo.');
+  const tr = seHasText(el) ? seTextInk(el) : null;
+  if (tr && (tr.top < SE_ARRIBA || tr.bottom > SE_ABAJO)) out.push('Fuera de la zona segura: Instagram tapa los 250 px de arriba y los 270 de abajo.');
   const g = seWarnTarget(el), rg = seInk(g) || g.getBoundingClientRect();
   if (Math.abs(rg.left + rg.width / 2 - 540) > SE_TOL_CENTRO) out.push('No está centrado sobre el eje vertical.');
   return out;
 }
 // Chequeo en vivo: lo que el render frena al guardar se ve mientras se edita, cada aviso con su arreglo.
+// Los renglones escritos, sin el relleno de la caja: la zona segura se mide sobre el texto, como en render.py.
+function seTextInk(x) {
+  const rs = [], w = se.d.createTreeWalker(x, 4);
+  while (w.nextNode()) { const n = w.currentNode, p = n.parentElement;
+    if (!n.textContent.trim() || !p || p.closest('.emoji, .sticker, [data-sin-chequeo], script, style')) continue;
+    const g = se.d.createRange(); g.selectNodeContents(n); rs.push(...[...g.getClientRects()].filter(r => r.width > 1 && r.height > 1)); }
+  if (!rs.length) return null;
+  return { top: Math.min(...rs.map(r => r.top)), bottom: Math.max(...rs.map(r => r.bottom)) };
+}
 function seWords() {
   let n = 0; const w = se.d.createTreeWalker(se.root, 4);
   while (w.nextNode()) { const p = w.currentNode.parentElement;
@@ -1085,10 +1095,10 @@ function seIssues() {
   for (const x of se.root.children) {
     if (seLayer(x) || x.matches('script, style, audio')) continue;
     const r = seInk(x); if (!r) continue;
-    const name = seLabel(x), dx = Math.round(r.left + r.width / 2 - 540);
+    const name = seLabel(x), dx = Math.round(r.left + r.width / 2 - 540), tr = seHasText(x) ? seTextInk(x) : null;
     if (Math.abs(dx) > SE_TOL_CENTRO) out.push({ el: x, fix: 'centrar', txt: `${name} está corrido ${Math.abs(dx)} px a la ${dx > 0 ? 'derecha' : 'izquierda'}: todo va centrado.` });
-    if (seHasText(x) && r.top < SE_ARRIBA) out.push({ el: x, fix: 'bajar', dy: SE_ARRIBA + 20 - r.top, txt: `${name} queda arriba, donde Instagram pone su barra.` });
-    else if (seHasText(x) && r.bottom > SE_ABAJO) out.push({ el: x, fix: 'subir', dy: SE_ABAJO - 20 - r.bottom, txt: `${name} queda abajo, donde va la barra de respuesta.` });
+    if (tr && tr.top < SE_ARRIBA) out.push({ el: x, fix: 'bajar', dy: SE_ARRIBA + 20 - tr.top, txt: `${name} queda arriba, donde Instagram pone su barra.` });
+    else if (tr && tr.bottom > SE_ABAJO) out.push({ el: x, fix: 'subir', dy: SE_ABAJO - 20 - tr.bottom, txt: `${name} queda abajo, donde va la barra de respuesta.` });
   }
   const n = seWords();
   if (se.i === 0 && n > SE_GANCHO_MAX) out.push({ txt: `El gancho tiene ${n} palabras: un gancho que funciona tiene ${SE_GANCHO_MAX} o menos. Dejá un titular corto y pasá el dato a la historia siguiente.` });
