@@ -116,7 +116,7 @@ Claude Code puede armar la semana entera: pedile «armá la semana de historias�
 - **agrupar y desagrupar:** un bloque con varias cajas se elige entero; **Desagrupar** (o Cmd+Shift+G) deja cada pieza suelta en su lugar. Con Shift+clic elegís varias, que se mueven juntas, y **Agrupar** (o Cmd+G) las une;
 - **recortar:** en una imagen, **✂️ Recortar** (o doble clic) y arrastrás los bordes como en Canva; adentro del recorte la imagen se encuadra arrastrándola. **🔒 Tapar** la desenfoca con un candado, para mostrar un recurso sin revelarlo;
 - a la izquierda:
-  - **Agregar:** texto, emojis, flechas, la zona segura del sticker y **Recursos** listos (chat de WhatsApp, archivo del recurso), de `motor-historias/recursos.html`;
+  - **Agregar:** el **titular grande** y la **etiqueta** del gancho, texto en caja, resaltado o suelto, emojis, flechas, el lugar para un sticker y **Recursos** listos (chat de WhatsApp, archivo del recurso), de `motor-historias/recursos.html`;
   - **Imágenes:** subidas, arrastradas o pegadas con Cmd+V, o de tu carpeta de fotos;
   - **Fondo:** foto, color liso o **video**. El video se sube del teléfono o la compu (MP4, MOV o WebM); el planner lo pasa a color normal (también los del iPhone en HDR) y elegís el tramo, hasta 60 s;
   - **Audio:** la **voz en off**. Subís un audio o elegís uno de `<semana>/voces/`, ajustás en qué segundo empieza y la probás con el video. La historia dura lo que la voz;

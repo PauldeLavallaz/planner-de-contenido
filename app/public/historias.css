@@ -234,6 +234,8 @@
 .pv.resalte { background: #fdcb58; color: #000; border-radius: 5px; font-family: var(--sans); }
 .pv.translucida { background: #0000008c; color: #fff; }
 .pv.suelto, .pv.ninguno { color: var(--ink); text-shadow: 0 1px 6px #0003; padding: 4px 0; }
+.pv.titular { font: 800 19px/1 var(--sans); letter-spacing: -.02em; color: var(--ink); padding: 2px 0; }
+.pv.etiqueta { font: 700 11.5px/1 var(--sans); background: #fff; color: #000; border-radius: 6px; padding: 5px 9px; box-shadow: 0 0 0 1px var(--line); }
 .se-fondo-foto { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .se-fondo-foto img { width: 54px; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 6px; }
 .se-layer { display: flex; align-items: center; gap: 2px; border-radius: 7px; padding: 2px; font-size: 12.5px; }

@@ -738,7 +738,11 @@ function seCropPanEnd() { const p = se.cpan; se.cpan = null; if (p?.moved) sePus
 function seAdd(kind, value) {
   seChange(() => {
     const d = se.d; let el;
-    if (kind === 'texto') { el = d.createElement('div'); el.className = 'bloque'; el.style.top = '860px'; el.innerHTML = value === 'resalte' ? '<p class="parejo"><span class="resalte clasica" style="font-size: 56px;">Texto nuevo</span></p>' : value === 'suelto' ? '<p class="serif suelto parejo" style="font-size: 60px;">Texto nuevo</p>' : '<p class="caja serif parejo" style="font-size: 56px;">Texto nuevo</p>'; }
+    // Titular y etiqueta del gancho («Una frase manda» en references/diseno.md): con el estilo escrito en el elemento,
+    // así funcionan aunque la copia del motor de la semana no traiga .titular ni .etiqueta.
+    if (kind === 'texto' && value === 'titular') { el = d.createElement('div'); el.className = 'bloque'; el.style.top = '600px'; el.innerHTML = '<p class="clasica suelto parejo" style="font-size: 96px; font-weight: 800; letter-spacing: -.03em; line-height: 1.02;">Titular corto</p>'; }
+    else if (kind === 'texto' && value === 'etiqueta') { el = d.createElement('div'); el.className = 'bloque'; el.style.top = '500px'; el.innerHTML = '<p class="parejo"><span class="caja blanca clasica" style="font-size: 38px; font-weight: 700; border-radius: .3em; padding: .2em .5em .24em;">Etiqueta</span></p>'; }
+    else if (kind === 'texto') { el = d.createElement('div'); el.className = 'bloque'; el.style.top = '860px'; el.innerHTML = value === 'resalte' ? '<p class="parejo"><span class="resalte clasica" style="font-size: 56px;">Texto nuevo</span></p>' : value === 'suelto' ? '<p class="serif suelto parejo" style="font-size: 60px;">Texto nuevo</p>' : '<p class="caja serif parejo" style="font-size: 56px;">Texto nuevo</p>'; }
     else if (kind === 'emoji') { el = d.createElement('div'); el.className = 'abs emoji'; el.style.cssText = 'top: 880px; font-size: 140px; line-height: 1;'; el.textContent = value || '👇'; }
     else if (kind === 'flecha') { const curva = value === 'curva'; el = d.createElementNS('http://www.w3.org/2000/svg', 'svg'); el.setAttribute('class', 'lapiz'); el.setAttribute('viewBox', curva ? '0 0 110 60' : '0 0 100 150'); el.setAttribute('style', curva ? 'top: 900px; width: 180px; height: 98px;' : 'top: 880px; width: 110px; height: 165px;'); el.innerHTML = curva ? '<path d="M6 34 C 34 12, 70 12, 98 30"/><path d="M78 12 L100 31 L76 48"/>' : '<path d="M50 8 C 62 46, 38 88, 50 136"/><path d="M28 110 L50 140 L72 110"/>'; }
     else if (kind === 'sticker') { el = d.createElement('div'); el.className = 'sticker'; el.dataset.sticker = value || 'zona segura'; el.style.cssText = 'left: 240px; top: 1300px; width: 600px; height: 200px;'; }
@@ -1156,6 +1160,8 @@ function seDrawer() {
   box.hidden = !seTab; if (!seTab || !se?.root) return;
   if (seTab === 'agregar') {
     box.innerHTML = `<h4>Texto</h4><div class="se-adds">
+        <button data-act="add" data-val="texto:titular" class="se-add" title="La frase que manda en el gancho: corta y grande"><span class="pv titular">Titular grande</span></button>
+        <button data-act="add" data-val="texto:etiqueta" class="se-add" title="La chica de arriba del titular («Ya te lo advertí»)"><span class="pv etiqueta">Etiqueta</span></button>
         <button data-act="add" data-val="texto:caja" class="se-add"><span class="pv caja">Texto en caja</span></button>
         <button data-act="add" data-val="texto:resalte" class="se-add"><span class="pv resalte">Texto resaltado</span></button>
         <button data-act="add" data-val="texto:suelto" class="se-add"><span class="pv suelto">Texto suelto</span></button></div>
