@@ -108,7 +108,7 @@ Claude Code puede armar la semana entera: pedile «armá la semana de historias�
 
 ## El editor
 
-**Editar** en la vista grande abre la historia en un editor del estilo de Canva:
+**Editar** en la vista grande, o el ✏️ que aparece sobre cada miniatura de la semana, abre la historia en un editor del estilo de Canva:
 
 - tocás un texto, emoji o imagen y lo arrastrás (se mueve mientras tenés el botón apretado), cambiás su tamaño o lo girás, con imán al centro y a las zonas seguras;
 - arriba, la barra cambia según lo elegido: letra, tamaño, color, fondo del texto (caja o resaltado) y espaciado;
@@ -120,7 +120,7 @@ Claude Code puede armar la semana entera: pedile «armá la semana de historias�
   - **Imágenes:** subidas, arrastradas o pegadas con Cmd+V, o de tu carpeta de fotos;
   - **Fondo:** foto, color liso o **video**. El video se sube del teléfono o la compu (MP4, MOV o WebM); el planner lo pasa a color normal (también los del iPhone en HDR) y elegís el tramo, hasta 60 s;
   - **Audio:** la **voz en off**. Subís un audio o elegís uno de `<semana>/voces/`, ajustás en qué segundo empieza y la probás con el video. La historia dura lo que la voz;
-  - **Capas** y el **chequeo** del render.
+  - **Capas** y el **Chequeo**, que va en vivo: un número rojo sobre el botón cuenta lo que está corrido del eje, fuera de la zona segura o es demasiado largo (más de 20 palabras en el gancho o de 47 en cualquier historia), cada aviso con su arreglo. En la barra, **⚠ Centrar** corrige lo elegido. Al guardar, el render mide además el contraste, los renglones disparejos y las caras tapadas.
 
 **Guardar y renderizar** escribe el HTML, vuelve a sacar el PNG con el motor y muestra el chequeo. Con video de fondo o voz en off saca también el MP4, con la voz mezclada: esa historia se publica como video. La versión anterior queda en `tmp/ediciones/`. Para el video y la voz hace falta ffmpeg. Si la historia ya estaba en Postiz, el planner la marca «Imagen nueva» y se reemplaza con la próxima propuesta de **Programar**.
 

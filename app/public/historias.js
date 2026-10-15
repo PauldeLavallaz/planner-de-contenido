@@ -130,7 +130,7 @@ function renderStories() {
       ? s.historias.map((img, i) => {
           const h = byImg[img] || {}, q = cola[img], hand = needsHand(h), from = img.includes(`/${s.orig}_`) ? '' : ' moved', fbn = stories.data.feedback?.[s.orig]?.historias?.[img] || 0;
           const st = q ? (q.estado === 'publicada' ? '<span class="q ok">Publicada</span>' : q.cuenta && q.cuenta !== mc && s.publicar === 'postiz' ? `<span class="q warn" title="Está agendada en @${esc(q.cuenta)}: al confirmar la propuesta pasa a @${esc(mc)}">Pasa a @${esc(mc)}</span>` : q.cambio ? '<span class="q warn" title="Cambiaste la foto: se reemplaza en Postiz al confirmar la propuesta">Imagen nueva</span>' : `<span class="q">En Postiz${q.cuando ? ' · ' + esc(new Date(q.cuando).toLocaleTimeString('es-AR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })) : ''}</span>`) : '';
-          return `<button class="s-story${from}${s.publicar === 'postiz' && hand ? ' hand' : ''}" draggable="true" data-story="${esc(s.orig)}|${i}" data-img="${esc(img)}" title="${esc((h.texto || '') + (h.sticker ? ' · Sticker: ' + h.sticker : ''))}"><img src="/api/planner/poster?path=${esc(encodeURIComponent(img))}&v=${h.mtime || 0}" alt="" loading="lazy" draggable="false"><span class="n">${i + 1}</span>${h.video ? '<span class="s-vid" title="Video con voz en off">▶ video</span>' : ''}${fbn ? `<span class="s-fbn" title="${fbn} nota${fbn === 1 ? '' : 's'} de feedback pendiente${fbn === 1 ? '' : 's'}">💬 ${fbn}</span>` : ''}${st}${h.sticker && !/^zona segura/i.test(h.sticker) ? `<span class="stk">${hand ? '✋ ' : ''}${esc(h.sticker.split(':')[0])}</span>` : ''}</button>`;
+          return `<button class="s-story${from}${s.publicar === 'postiz' && hand ? ' hand' : ''}" draggable="true" data-story="${esc(s.orig)}|${i}" data-img="${esc(img)}" title="${esc((h.texto || '') + (h.sticker ? ' · Sticker: ' + h.sticker : ''))}"><img src="/api/planner/poster?path=${esc(encodeURIComponent(img))}&v=${h.mtime || 0}" alt="" loading="lazy" draggable="false"><span class="n">${i + 1}</span>${h.video ? '<span class="s-vid" title="Video con voz en off">▶ video</span>' : ''}${h.editable ? '<span class="s-edit" data-edit-story title="Abrir el editor">✏️ Editar</span>' : ''}${fbn ? `<span class="s-fbn" title="${fbn} nota${fbn === 1 ? '' : 's'} de feedback pendiente${fbn === 1 ? '' : 's'}">💬 ${fbn}</span>` : ''}${st}${h.sticker && !/^zona segura/i.test(h.sticker) ? `<span class="stk">${hand ? '✋ ' : ''}${esc(h.sticker.split(':')[0])}</span>` : ''}</button>`;
         }).join('')
       : `<span class="s-free">${esc(dia.tema || 'Sin historias')}</span>`;
     const num = (k, ph, label) => `<input inputmode="numeric" pattern="[0-9]*" data-smetric="${k}" data-date="${d}" data-cuenta="${esc(mc)}" value="${Number.isInteger(m[k]) ? m[k] : ''}" placeholder="${ph}" title="${label}" aria-label="${label} del ${esc(dayLong(d))}">`;
@@ -231,7 +231,17 @@ const SE_CSS = `
   .fondo, .atenuado { cursor: grab; }
   .moveable-control-box { z-index: 2000 !important; }
   .se-multi { outline: 3px solid rgba(56, 151, 240, .95) !important; outline-offset: 6px; }
-  .se-crop { outline: 4px dashed #fdcb58 !important; outline-offset: 0; cursor: grab !important; }`;
+  .se-crop { outline: 4px dashed #fdcb58 !important; outline-offset: 0; cursor: grab !important; }
+  /* Zonas seguras sin tapar la historia: lo que tapa Instagram en gris translúcido con su borde punteado, y el eje
+     del centro, porque todo va centrado (el chequeo del motor lo mide). */
+  .guias .historia::after { background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .8) 0 16px, transparent 16px 30px) 0 248px / 100% 3px no-repeat,
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .8) 0 16px, transparent 16px 30px) 0 1649px / 100% 3px no-repeat,
+    repeating-linear-gradient(180deg, rgba(56, 151, 240, .55) 0 14px, transparent 14px 28px) 539px 0 / 2px 100% no-repeat,
+    linear-gradient(rgba(18, 17, 14, .34), rgba(18, 17, 14, .34)) 0 0 / 100% 250px no-repeat,
+    linear-gradient(rgba(18, 17, 14, .34), rgba(18, 17, 14, .34)) 0 1650px / 100% 270px no-repeat !important; }
+  .guias .sticker { outline: 3px dashed rgba(255, 255, 255, .85) !important; background: rgba(18, 17, 14, .22) !important; }
+  .guias .sticker::before { color: #fff !important; text-shadow: 0 1px 4px rgba(0, 0, 0, .5); }`;
 const SE_MEDIA = '.captura, .recorte, .sticker, svg, img';
 const seIsMedia = el => el.matches(SE_MEDIA) || !!el.closest('svg');
 const seTop = el => { let e = el; while (e && e.parentElement && e.parentElement !== se.root) e = e.parentElement; return e && e.parentElement === se.root ? e : null; };
@@ -266,7 +276,8 @@ const seLabel = el => {
   if (el.matches('.atenuado')) return 'Oscurecer la foto';
   if (el.parentElement === se.root && seIsGroup(el)) { const t = (el.innerText || el.textContent).replace(/\s+/g, ' ').trim(); return `▣ Grupo de ${seGroupItems(el).length}${t ? ` · «${t.length > 36 ? t.slice(0, 36) + '…' : t}»` : ''}`; }
   const k = seKind(el);
-  if (k === 'sticker') return /^zona segura/i.test(el.dataset.sticker || '') || !el.dataset.sticker ? 'Zona segura' : `Zona segura: ${el.dataset.sticker}`;
+  // El lugar que se le deja a un sticker de Instagram (en el HTML, data-sticker="zona segura" o el sticker que va).
+  if (k === 'sticker') return /^zona segura/i.test(el.dataset.sticker || '') || !el.dataset.sticker ? 'Lugar para un sticker' : `Lugar del sticker: ${el.dataset.sticker}`;
   if (k === 'dibujo') return 'Flecha o dibujo';
   if (k === 'imagen') return el.dataset.caja ? `Imagen: ${el.dataset.caja}` : 'Imagen';
   if (k === 'emoji') return `Emoji ${el.textContent.trim()}`;
@@ -339,7 +350,7 @@ function seSetup() {
   mv.on('rotateStart', e => { if (se.editing || se.busy) { e.stop(); return; } se.g = { el: e.target, rot0: seRotation(e.target), before: seSnap() }; })
     .on('rotate', e => { const g = se.g; if (!g) return; seSetRotation(g.el, g.rot0 + e.dist); })
     .on('rotateEnd', e => { const g = se.g; se.g = null; if (g && e.isDrag) sePush(g.before); mv.updateRect(); seSide(); });
-  seFreeze(); (d.fonts ? d.fonts.ready : Promise.resolve()).then(() => { seFreeze(); mv.updateRect(); });
+  seFreeze(); (d.fonts ? d.fonts.ready : Promise.resolve()).then(() => { seFreeze(); mv.updateRect(); seIssueBadge(); if (seTab === 'chequeo') seDrawer(); });
   d.addEventListener('pointerdown', e => { se.down = e.button === 0; }, true); d.addEventListener('pointerup', () => { se.down = false; }, true); d.addEventListener('pointercancel', () => { se.down = false; }, true);
   d.addEventListener('pointerdown', seDown, true); d.addEventListener('pointermove', seMove); d.addEventListener('pointerup', seUp); d.addEventListener('pointercancel', seUp);
   d.addEventListener('dblclick', seDbl); d.addEventListener('keydown', seKey); d.addEventListener('paste', sePaste);
@@ -426,7 +437,23 @@ function seSetSize(el, W, H, r0) {
 }
 const seRotation = el => { const m = /rotate\((-?[\d.]+)deg\)/.exec(el.style.transform || ''); return m ? parseFloat(m[1]) : 0; };
 function seSetRotation(el, deg) { deg = Math.round(((deg + 540) % 360) - 180); el.style.transform = (el.style.transform || '').replace(/\s*rotate\([^)]*\)/, '').trim() + (deg ? ` rotate(${deg}deg)` : ''); if (!el.style.transform.trim()) el.style.removeProperty('transform'); }
-function seCenter(el) { const r = el.getBoundingClientRect(), dx = Math.round(540 - (r.left + r.width / 2)); if (dx) seMoveBy(el, dx, 0); }
+function seCenter(el) { const r = seInk(el) || el.getBoundingClientRect(), dx = Math.round(540 - (r.left + r.width / 2)); if (dx) seMoveBy(el, dx, 0); }
+// Lo que se ve de un elemento: las cajas, imágenes y renglones de adentro, no el contenedor (un .bloque ocupa todo el
+// ancho aunque su texto esté corrido). Es lo que mide el chequeo del render.
+function seInk(x) {
+  const rs = [], d = se.d;
+  const walk = e => {
+    if (e.matches('script, style, audio, br')) return;
+    const cs = se.w.getComputedStyle(e); if (cs.display === 'none' || cs.visibility === 'hidden') return;
+    if (e.matches('.caja, .resalte, img, svg, video, .captura, .recorte, .sticker, [data-recurso]')) { rs.push(e.getBoundingClientRect()); return; }
+    if ([...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) { const g = d.createRange(); g.selectNodeContents(e); rs.push(...g.getClientRects()); return; }
+    [...e.children].forEach(walk);
+  };
+  walk(x);
+  const ok = rs.filter(r => r.width > 1 && r.height > 1); if (!ok.length) return null;
+  const l = Math.min(...ok.map(r => r.left)), t = Math.min(...ok.map(r => r.top)), rr = Math.max(...ok.map(r => r.right)), b = Math.max(...ok.map(r => r.bottom));
+  return { left: l, top: t, right: rr, bottom: b, width: rr - l, height: b - t };
+}
 const seBoxEl = el => el.matches('.caja, .resalte') ? el : el.querySelector('.caja, .resalte') || el;
 function seBoxValue(el) { const b = seBoxEl(el), c = b.classList; if (c.contains('caja')) return c.contains('blanca') ? 'caja blanca' : c.contains('color') ? 'caja color' : c.contains('translucida') ? 'caja translucida' : 'caja'; if (c.contains('resalte')) return c.contains('negro') ? 'resalte negro' : c.contains('color') ? 'resalte color' : 'resalte'; return 'ninguno'; }
 function seSetBox(el, v) { const boxes = el.matches('.caja, .resalte') ? [el] : [...el.querySelectorAll('.caja, .resalte')]; for (const b of boxes.length ? boxes : [el]) { b.classList.remove(...SE_BOX_CLASSES); if (v !== 'ninguno') b.classList.add(...v.split(' ')); } }
@@ -1027,25 +1054,62 @@ function seSetBoxStyle(el, style) {
   if (style !== 'translucida') seColorAct('cajacolor', color === 'acento' ? 'acento' : color);
 }
 function seSaveButton() { $('seSave').disabled = !se?.dirty || se.busy; $('seSave').textContent = se?.busy ? (se.root && (seVideo() || seVoz()) ? 'Renderizando el video…' : 'Renderizando…') : 'Guardar y renderizar'; $('seUndo').disabled = !se?.undo.length || se?.busy; $('seRedo').disabled = !se?.redo.length || se?.busy; }
+// Los mismos números que el chequeo de render.py: el centro a 14 px del eje y el texto entre 240 y 1660 px.
+const SE_TOL_CENTRO = 14, SE_ARRIBA = 240, SE_ABAJO = 1660, SE_GANCHO_MAX = 20, SE_HISTORIA_MAX = 47;
+const seWarnTarget = el => el.closest('[data-grupo]') || seTop(el) || el;
+const seHasText = x => !x.matches('.sticker') && !x.closest('[data-sin-chequeo]') && !x.matches('[data-sin-chequeo]') && /[\p{L}\p{N}]/u.test(x.textContent);
 function seWarn(el) {
   if (!el || seKind(el) === 'sticker') return [];
-  const r = el.getBoundingClientRect(), out = [];
-  if (r.top < 250 || r.bottom > 1650) out.push('Fuera de la zona segura: Instagram tapa los 250 px de arriba y los 270 de abajo.');
-  const g = el.closest('[data-grupo]') || seTop(el) || el, rg = g.getBoundingClientRect();
-  if (Math.abs(rg.left + rg.width / 2 - 540) > 4) out.push('No está centrado sobre el eje vertical.');
+  const r = seInk(el) || el.getBoundingClientRect(), out = [];
+  if (seHasText(el) && (r.top < SE_ARRIBA || r.bottom > SE_ABAJO)) out.push('Fuera de la zona segura: Instagram tapa los 250 px de arriba y los 270 de abajo.');
+  const g = seWarnTarget(el), rg = seInk(g) || g.getBoundingClientRect();
+  if (Math.abs(rg.left + rg.width / 2 - 540) > SE_TOL_CENTRO) out.push('No está centrado sobre el eje vertical.');
   return out;
 }
-function seSide() { if (!se) return; seSaveButton(); seBar(); seDrawer(); }
+// Chequeo en vivo: lo que el render frena al guardar se ve mientras se edita, cada aviso con su arreglo.
+function seWords() {
+  let n = 0; const w = se.d.createTreeWalker(se.root, 4);
+  while (w.nextNode()) { const p = w.currentNode.parentElement;
+    if (!p || p.closest('[data-sin-chequeo], .sticker, .emoji, style, script')) continue;
+    const cs = se.w.getComputedStyle(p); if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    n += (w.currentNode.textContent.match(/[\p{L}\p{N}]+/gu) || []).length; }
+  return n;
+}
+function seIssues() {
+  if (!se?.root || !se.d) return [];
+  const out = [];
+  for (const x of se.root.children) {
+    if (seLayer(x) || x.matches('script, style, audio')) continue;
+    const r = seInk(x); if (!r) continue;
+    const name = seLabel(x), dx = Math.round(r.left + r.width / 2 - 540);
+    if (Math.abs(dx) > SE_TOL_CENTRO) out.push({ el: x, fix: 'centrar', txt: `${name} está corrido ${Math.abs(dx)} px a la ${dx > 0 ? 'derecha' : 'izquierda'}: todo va centrado.` });
+    if (seHasText(x) && r.top < SE_ARRIBA) out.push({ el: x, fix: 'bajar', dy: SE_ARRIBA + 20 - r.top, txt: `${name} queda arriba, donde Instagram pone su barra.` });
+    else if (seHasText(x) && r.bottom > SE_ABAJO) out.push({ el: x, fix: 'subir', dy: SE_ABAJO - 20 - r.bottom, txt: `${name} queda abajo, donde va la barra de respuesta.` });
+  }
+  const n = seWords();
+  if (se.i === 0 && n > SE_GANCHO_MAX) out.push({ txt: `El gancho tiene ${n} palabras: un gancho que funciona tiene ${SE_GANCHO_MAX} o menos. Dejá un titular corto y pasá el dato a la historia siguiente.` });
+  else if (n > SE_HISTORIA_MAX) out.push({ txt: `Tiene ${n} palabras: una historia se lee bien con ${SE_HISTORIA_MAX} o menos. Recortá o partila en dos.` });
+  return out;
+}
+function seFixIssue(x) { if (!x?.el) return; if (x.fix === 'centrar') seCenter(x.el); else if (x.dy) seMoveBy(x.el, 0, Math.round(x.dy)); }
+function seIssueBadge() { const n = se?.root ? seIssues().length : 0, b = $('seIssueN'); if (!b) return; b.hidden = !n; b.textContent = n; }
+function seSide() { if (!se) return; seSaveButton(); seBar(); seDrawer(); seIssueBadge(); }
 const seB = (act, label, o = {}) => `<button class="se-b ${o.on ? 'on' : ''} ${o.cls || ''}" data-act="${act}"${o.val != null ? ` data-val="${esc(o.val)}"` : ''}${o.pop ? ` data-pop="${o.pop}"` : ''} title="${esc(o.title || '')}" ${o.disabled ? 'disabled' : ''}>${label}</button>`;
 const seSwatch = c => c === 'acento' ? seAcentoHex() : c || 'transparent';
 const seColorBtn = (act, cur, title, kind = 'fill', extra = {}) => `<button class="se-b se-cb ${kind}" data-pop="color" data-act="${act}" data-cur="${esc(cur || '')}" data-auto="${esc(extra.auto || '')}" title="${esc(title)}" ${extra.disabled ? 'disabled' : ''}>${kind === 'text' ? `<span class="se-a">A</span><i style="background:${seSwatch(cur) === 'transparent' ? '#000' : seSwatch(cur)}"></i>` : kind === 'hl' ? `<span class="se-hl" style="background:${seSwatch(cur)};color:${cur ? seOn(seSwatch(cur)) : 'inherit'}">ab</span>` : `<i class="sq" style="background:${seSwatch(cur)}"></i>`}${extra.label ? `<span>${extra.label}</span>` : ''}</button>`;
 const seStep = (key, val, title, unit = '') => `<span class="se-step" title="${esc(title)}"><button data-step="${key}" data-d="-1" aria-label="Menos">−</button><input data-stepin="${key}" value="${val}" aria-label="${esc(title)}"><button data-step="${key}" data-d="1" aria-label="Más">+</button>${unit ? `<small>${unit}</small>` : ''}</span>`;
 const seSep = '<span class="se-sep"></span>';
+// El aviso de lo elegido: si está corrido, el botón lo centra; si está fuera de la zona, lo dice.
+function seWarnChip(el) {
+  const w = seWarn(el); if (!w.length) return '';
+  const centro = w.find(x => x.startsWith('No está centrado'));
+  return centro ? seB('centrar-aviso', '⚠ Centrar', { cls: 'warn', title: w.join(' ') + ' Tocá para centrarlo.' }) : `<span class="se-warn" title="${esc(w.join(' '))}">⚠ ${esc(w[0].split(':')[0])}</span>`;
+}
 function seBar() {
   const bar = $('seBar'); if (!se?.root) { bar.innerHTML = '<span class="muted">Cargando la historia…</span>'; return; }
   const el = se.sel, k = seKind(el);
   const grupo = el && seIsGroup(seTop(el) || el) ? seB('desagrupar', '⧈ Desagrupar', { title: 'Separar las piezas para moverlas sueltas (Cmd+Shift+G)' }) : '';
-  const right = el ? `<span class="se-grow"></span>${grupo}${seWarn(el).length ? `<span class="se-warn" title="${esc(seWarn(el).join(' '))}">⚠ ${esc(seWarn(el)[0].split(':')[0])}</span>` : ''}${seB('pos', 'Posición ▾', { pop: 'pos', title: 'Centrar, traer adelante, enviar atrás' })}${seB('duplicar', '⧉', { title: 'Duplicar (Cmd+D)' })}${seB('borrar', '🗑', { title: 'Borrar (Supr)', cls: 'danger' })}` : '';
+  const right = el ? `<span class="se-grow"></span>${grupo}${seWarnChip(el)}${seB('pos', 'Posición ▾', { pop: 'pos', title: 'Centrar, traer adelante, enviar atrás' })}${seB('duplicar', '⧉', { title: 'Duplicar (Cmd+D)' })}${seB('borrar', '🗑', { title: 'Borrar (Supr)', cls: 'danger' })}` : '';
   let html = '';
   if (se.editing) {
     const r = seMarked(), at = r && seAt(r.startContainer, r.startOffset), M = r && seMarkUp(at, se.editing, SE_HL), C = r && seMarkUp(at, se.editing, SE_COL);
@@ -1097,7 +1161,7 @@ function seDrawer() {
         <button data-act="add" data-val="texto:suelto" class="se-add"><span class="pv suelto">Texto suelto</span></button></div>
       <h4>Emojis</h4><div class="se-emojis">${SE_EMOJIS.map(x => `<button data-act="add" data-val="emoji:${x}">${x}</button>`).join('')}</div>
       <h4>Flechas</h4><div class="se-adds row"><button data-act="add" data-val="flecha:abajo" class="se-add">⤵︎ Hacia abajo</button><button data-act="add" data-val="flecha:curva" class="se-add">↷ Curva</button></div>
-      <h4>Zona segura</h4><div class="se-adds row"><button data-act="add" data-val="sticker:zona segura" class="se-add">▭ Zona segura</button></div>
+      <h4>Sticker</h4><div class="se-adds row"><button data-act="add" data-val="sticker:zona segura" class="se-add" title="Deja libre el lugar de un sticker de Instagram (encuesta, link, mención): el diseño no lo tapa">▭ Lugar para un sticker</button></div>
       <h4>Recursos</h4><div class="se-adds">${se.recursos ? (se.recursos.map(r => `<button data-act="add-recurso" data-val="${esc(r.id)}" class="se-add">${r.id === 'chat' ? '💬' : r.id === 'archivo' ? '📄' : '✨'} ${esc(r.nombre)}</button>`).join('') || '<p class="hint">No encontré motor-historias/recursos.html.</p>') : '<p class="hint">Cargando…</p>'}</div>
       <p class="hint">Para tapar una captura del recurso, elegila y tocá «Tapar». El chat de WhatsApp recrea un chat real o una broma que se nota: nunca una reacción inventada.</p>`;
     if (!se.recursos && !se.recursosLoading) { se.recursosLoading = true; api('stories/recursos').then(r => { const doc = new DOMParser().parseFromString(r.html || '', 'text/html'); se.recursosDoc = doc; se.recursos = [...doc.querySelectorAll('.historia > [data-recurso]')].filter(x => x.dataset.recurso !== 'tapado').map(x => ({ id: x.dataset.recurso, nombre: x.dataset.nombre || x.dataset.recurso })); }, () => { se.recursos = []; }).finally(() => { if (se) { se.recursosLoading = false; if (seTab === 'agregar') seDrawer(); } }); }
@@ -1127,7 +1191,9 @@ function seDrawer() {
     const items = [...se.root.children].filter(x => !x.matches('script, audio')).reverse();
     box.innerHTML = `<h4>Capas</h4><p class="hint">De adelante hacia atrás. Tocá una para elegirla.</p>${items.map(x => `<div class="se-layer ${x === se.sel || x.contains(se.sel) ? 'on' : ''} ${seLayer(x) ? 'fija' : ''}"><button class="se-layer-name" data-act="layer" data-val="${esc(x.dataset.se || '')}">${esc(seLabel(x))}</button>${seLayer(x) ? '' : `<button class="icon" data-act="layer-up" data-val="${esc(x.dataset.se || '')}" title="Adelante">↑</button><button class="icon" data-act="layer-down" data-val="${esc(x.dataset.se || '')}" title="Atrás">↓</button>`}</div>`).join('')}`;
   } else if (seTab === 'chequeo') {
-    box.innerHTML = `<h4>Chequeo del render</h4>${se.check?.html || '<p class="hint">Al guardar, la historia se renderiza y acá aparecen los avisos (texto fuera de lugar, poco contraste, caras tapadas) y cómo quedó.</p>'}${se.check?.img ? `<img class="se-result-img" src="${esc(se.check.img)}" alt="Historia renderizada">` : ''}`;
+    const is = seIssues(), arreglables = is.filter(x => x.el && x.fix).length;
+    box.innerHTML = `<h4>Ahora</h4>${is.length ? `${arreglables > 1 ? `<div class="se-adds row">${seB('issue-all', `Arreglar los ${arreglables}`, { cls: 'primary' })}</div>` : ''}<ul class="se-issues">${is.map((x, k) => `<li><span>${esc(x.txt)}</span>${x.el ? `<span class="se-issue-acts">${seB('issue-pick', 'Elegir', { val: k })}${x.fix ? seB('issue-fix', x.fix === 'centrar' ? 'Centrar' : x.fix === 'bajar' ? 'Bajar' : 'Subir', { val: k, cls: 'primary' }) : ''}</span>` : ''}</li>`).join('')}</ul>` : '<p class="hint ok">Todo centrado, adentro de la zona segura y con un largo que se lee de un vistazo.</p>'}
+      <h4>Al guardar</h4>${se.check?.html || '<p class="hint">El render mide además el contraste, los renglones disparejos y las caras tapadas.</p>'}${se.check?.img ? `<img class="se-result-img" src="${esc(se.check.img)}" alt="Historia renderizada">` : ''}`;
   }
 }
 // Un solo popover para todo: colores, letra, fondo del texto, emoji, posición, interlineado, sticker.
@@ -1228,6 +1294,10 @@ document.querySelector('#storyEditor').addEventListener('click', e => {
     case 'editar': return el && seStartEdit(el);
     case 'agrupar': return seGroup();
     case 'desagrupar': return seUngroup(el ? seTop(el) || el : null);
+    case 'centrar-aviso': return el && seChange(() => seCenter(seWarnTarget(el)));
+    case 'issue-fix': { const x = seIssues()[+val]; return x && seChange(() => seFixIssue(x)); }
+    case 'issue-pick': { const x = seIssues()[+val]; return x?.el && seSelect(x.el); }
+    case 'issue-all': return seChange(() => { for (let k = 0; k < 20; k++) { const x = seIssues().find(y => y.el && y.fix); if (!x) break; seFixIssue(x); } });
     case 'multi-centrar': return seChange(() => { const r = seUnion([...se.multi]), dx = Math.round(540 - (r.left + r.width / 2)); if (dx) se.multi.forEach(x => seMoveBy(x, dx, 0)); });
     case 'multi-borrar': { const l = [...se.multi]; seSelectMany([]); return seChange(() => l.forEach(x => x.remove())); }
     case 'recortar': return el && seStartCrop(el);
@@ -1574,7 +1644,10 @@ document.addEventListener('click', e => {
   const t = e.target;
   const swk = t.closest('[data-sweek]'); if (swk) { week = monday(swk.dataset.sweek); render(); scrollTo({ top: 0 }); return; }
   const sqb = t.closest('[data-sqfb]'); if (sqb) { openSeqFeedback(sqb.dataset.sqfb); return; }
-  const st = t.closest('[data-story]'); if (st) { openStory(st.dataset.story); return; }
+  // ✏️ Editar sobre la miniatura: entra directo al editor, sin pasar por la vista de la historia.
+  const ed = t.closest('[data-edit-story]'), st = t.closest('[data-story]');
+  if (ed && st) { const [orig, i] = st.dataset.story.split('|'), s = allSeqs().find(x => x.orig === orig); if (s) { sbState = { s, i: Number(i) || 0, byImg: storyByImg() }; openEditor(); } return; }
+  if (st) { openStory(st.dataset.story); return; }
   const sdm = t.closest('[data-sdm]'); if (sdm) { const r = [...(stories.data?.semana?.recursos || []), ...(stories.data?.entrantes || []).map(x => x.recurso).filter(Boolean)].find(x => x.id === sdm.dataset.sdm); if (r?.dm) copyText(r.dm, 'DM copiado.'); return; }
   const sc = t.closest('[data-scopy]'); if (sc) { copyText(sc.dataset.scopy, 'Link copiado.'); }
 });
