@@ -477,7 +477,7 @@ export function notaDeCambio(run: string, pieza: string, campo: string, actual: 
   const file = abierta?.file || now.toISOString().replace(/[-:.]/g, '').replace('T', '-').slice(0, 18) + '-' + randomUUID().slice(0, 4) + '-planner.json';
   const { file: _f, ...prev } = abierta || {};
   const nota = { tipo: 'guion', etapa, run, pieza, created_at: now.toISOString(), by: BY, ...prev,
-    text: `${texto} ${que} está hecho con «${hecho?.nombre || hecho?.id || 'lo de antes'}»: rehacelo.`, audio: null, audio_mime: null, audio_seconds: null,
+    text: `${texto} ${que} está hecho ${hecho?.nombre || hecho?.id ? `con «${hecho.nombre || hecho.id}»` : ({ look: 'sin un look elegido', titulo: 'con el título del estilo' } as any)[campo] || 'con lo de antes'}: rehacelo.`, audio: null, audio_mime: null, audio_seconds: null,
     transcript: null, estado: 'pendiente', cambio_de: { campo, de: hecho, a: nuevo }, updated_at: now.toISOString() };
   mkdirSync(fb, { recursive: true }); writeJson(resolve(fb, file), nota);
   return nota;
