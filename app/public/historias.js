@@ -7,7 +7,7 @@ const TIPO_NAME = { venta: 'Venta', recurso: 'Recurso', conciencia: 'Conciencia'
 const CIERRE_NAME = { encuesta: 'Sin pedido · encuesta', slider: 'Sin pedido · slider', caja: 'Caja de preguntas', ninguno: 'Sin pedido' };
 const STORY_METRIC_KEYS = ['respuestas', 'vistas_primera', 'vistas_ultima'];
 const MODE_NAME = { postiz: 'Postiz', mano: 'A mano', no: 'No se publica' };
-const STORY_DEFAULT_HOUR = '10:00';
+const STORY_DEFAULT_HOUR = '15:00'; // la hora de la primera historia de un día que pasa a Postiz
 const STORY_GAP_MIN = 2; // minutos entre historias para que salgan en orden (igual que engine/historias.py)
 const storyTime = (hora, i) => fromMin(toMin(hora || STORY_DEFAULT_HOUR) + i * STORY_GAP_MIN);
 let stories = { week: null, cuenta: '', data: null, error: null };
@@ -28,8 +28,10 @@ const acctName = p => { const a = (stories.data?.cuentas || []).find(x => x.prof
 const sumRespuestas = (from, to) => Object.entries(stories.data?.metricas || {}).filter(([d]) => d >= from && d <= to).reduce((s, [, m]) => s + (m.respuestas || 0), 0);
 const hasRespuestas = (from, to) => Object.entries(stories.data?.metricas || {}).some(([d, m]) => d >= from && d <= to && Number.isInteger(m.respuestas));
 const pct = (a, b) => Number.isInteger(a) && Number.isInteger(b) && b > 0 ? Math.round(a / b * 1000) / 10 : null;
-// Un sticker interactivo (encuesta, link, mención, caja) no sale por la API de Instagram: esa historia va a mano.
-const needsHand = h => typeof h?.sticker === 'string' && h.sticker.trim() && !/opcional/i.test(h.sticker) && !/^(zona segura\s*(\+\s*)?)+$/i.test(h.sticker.trim());
+// Ninguna historia va a mano: todas salen por Postiz tal como están y un sticker anotado en semana.json no se sube ni
+// frena nada. Las historias se diseñan sin stickers interactivos: el cierre va escrito («Respondé…»). Igual que
+// storyNeedsHand del servidor.
+const needsHand = () => false;
 const storyByImg = () => Object.fromEntries([...(stories.data?.semana?.dias || []), ...(stories.data?.entrantes || []).map(e => e.dia)].flatMap(d => d.historias.map(h => [h.imagen, h])));
 const defaultSeq = dia => ({ fecha: dia.fecha, historias: dia.historias.map(h => h.imagen), publicar: 'no', hora: null });
 // Las secuencias tal como quedan con el borrador: cada una conserva su día original (tipo, fórmula, recurso).
@@ -85,6 +87,44 @@ function moveSeq(orig, date) {
   }
   return saveSeqOne(s, { fecha: date }, `Secuencia movida al ${dayLong(date)}.`, here ? null : date);
 }
+// Dejar un día libre: la secuencia del día y las que le siguen pegadas se corren un día, salteando el domingo, hasta el
+// primer día vacío, también en las semanas siguientes. Cada una se guarda en el borrador de su semana de origen, de la
+// última a la primera, así cada una cae en un día ya libre. Postiz no cambia hasta Programar y la confirmación.
+const isSunday = d => new Date(d + 'T12:00:00Z').getUTCDay() === 0;
+const nextWorkday = d => { const n = dateAdd(d, 1); return isSunday(n) ? dateAdd(n, 1) : n; };
+const seqsOfWeek = (data, w) => [
+  ...(data?.semana?.dias || []).map(dia => ({ orig: dia.fecha, src: w, dia, ...defaultSeq(dia), ...(data.draft?.secuencias?.[dia.fecha] || {}) })),
+  ...(data?.entrantes || []).map(e => ({ orig: e.orig, src: e.semana, dia: e.dia, entrante: true, ...e.secuencia })),
+].filter(s => monday(s.fecha) === w && s.historias.length);
+async function freeDay(date) {
+  if (date < todayStr()) return toast('Ese día ya pasó.');
+  const cuenta = stories.data.cuenta, semanas = new Map([[week, stories.data]]), moves = [];
+  const of = async w => { if (!semanas.has(w)) semanas.set(w, await api('stories?week=' + w + '&cuenta=' + encodeURIComponent(cuenta)).catch(() => null)); return semanas.get(w); };
+  for (let d = date; moves.length < 21;) {
+    const w = monday(d), s = seqsOfWeek(await of(w), w).find(x => x.fecha === d); if (!s) break;
+    const to = nextWorkday(d); moves.push({ s, from: d, to }); d = to;
+  }
+  if (!moves.length) return toast('Ese día ya está libre.');
+  if (!confirm(`¿Dejar libre el ${dayLong(date)}?\n\n${moves.map(m => `${dayLong(m.from)} → ${dayLong(m.to)}`).join('\n')}\n\nEl domingo queda libre. Postiz no cambia hasta que programes y confirmes.`)) return;
+  const n = moves.length, msg = `${dayLong(date)} libre: ${n === 1 ? 'su secuencia pasó' : n + ' secuencias pasaron'} al día siguiente.`;
+  return shiftSeqs(moves.slice().reverse().map(m => [m.s, m.to]), msg, () => shiftSeqs(moves.map(m => [{ ...m.s, fecha: m.to }, m.from]), 'Volvieron a su día.'));
+}
+// Guarda varias secuencias, cada una en el borrador de su semana de origen, en el orden dado.
+function shiftSeqs(pairs, message, undo) {
+  sSaving = sSaving.then(async () => {
+    let revision = stories.data.draft.revision;
+    try {
+      setSave('Guardando…');
+      for (const [s, fecha] of pairs) {
+        const secuencia = { fecha, historias: s.historias, publicar: s.publicar, hora: s.publicar === 'postiz' ? (s.hora || STORY_DEFAULT_HOUR) : (s.hora || null), ...(s.cuenta && s.cuenta !== stories.data.cuenta ? { cuenta: s.cuenta } : {}) };
+        ({ revision } = await api('stories/seq', post({ cuenta: stories.data.cuenta, semana: s.src, orig: s.orig, revision, secuencia })));
+      }
+      setSave('Guardado'); toast(message, undo || null);
+    } catch (e) { setSave(''); toast(e.message); }
+    stories.week = null; await loadStories();
+  });
+  return sSaving;
+}
 const seqsFrom = draft => { const d = draft?.secuencias || {}; return stories.data.semana.dias.map(dia => ({ orig: dia.fecha, dia, ...defaultSeq(dia), ...(d[dia.fecha] || {}) })); };
 function renderStories() {
   const end = dateAdd(week, 6);
@@ -102,6 +142,9 @@ function renderStories() {
   $('sSummary').innerHTML = hasRespuestas(week, end)
     ? `<span><b>${total}</b>respuestas</span>${hasRespuestas(dateAdd(week, -7), dateAdd(week, -1)) ? `<span class="${diff > 0 ? 'up' : diff < 0 ? 'down' : ''}">${diff > 0 ? '+' : ''}${diff} contra la semana anterior (${prevTotal})</span>` : ''}${best ? `<span>Mejor día: ${esc(dayLong(best))} · ${metricsOf(best).respuestas}</span>` : ''}`
     : sem ? '<span>Sin respuestas cargadas</span>' : '';
+  // Avisos de las historias en cadena de las últimas 24 h: una que falló, se demora o salió tarde.
+  const avisos = stories.data.avisos_cadena || [];
+  if (avisos.length) $('sSummary').innerHTML += avisos.slice(-3).map(x => `<span class="s-aviso" title="${esc(x.texto)}">⚠ ${esc(x.titulo)}: ${esc(x.texto)}</span>`).join('');
   if (!sem && !entrantes().length) {
     $('sActions').hidden = true;
     const weeks = stories.data.weeks || [], nextW = weeks.find(w => w > week) || weeks[weeks.length - 1];
@@ -129,7 +172,7 @@ function renderStories() {
     const seqHtml = s.historias.length
       ? s.historias.map((img, i) => {
           const h = byImg[img] || {}, q = cola[img], hand = needsHand(h), from = img.includes(`/${s.orig}_`) ? '' : ' moved', fbn = stories.data.feedback?.[s.orig]?.historias?.[img] || 0;
-          const st = q ? (q.estado === 'publicada' ? '<span class="q ok">Publicada</span>' : q.cuenta && q.cuenta !== mc && s.publicar === 'postiz' ? `<span class="q warn" title="Está agendada en @${esc(q.cuenta)}: al confirmar la propuesta pasa a @${esc(mc)}">Pasa a @${esc(mc)}</span>` : q.cambio ? '<span class="q warn" title="Cambiaste la foto: se reemplaza en Postiz al confirmar la propuesta">Imagen nueva</span>' : `<span class="q">En Postiz${q.cuando ? ' · ' + esc(new Date(q.cuando).toLocaleTimeString('es-AR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })) : ''}</span>`) : '';
+          const st = q ? (q.estado === 'publicada' ? '<span class="q ok">Publicada</span>' : q.cuenta && q.cuenta !== mc && s.publicar === 'postiz' ? `<span class="q warn" title="Está agendada en @${esc(q.cuenta)}: al confirmar la propuesta pasa a @${esc(mc)}">Pasa a @${esc(mc)}</span>` : q.cambio ? '<span class="q warn" title="Cambiaste la foto: se reemplaza en Postiz al confirmar la propuesta">Imagen nueva</span>' : q.estado === 'en_revision' ? `<span class="q" title="Espera en Postiz como borrador: sale apenas se publica la anterior y llega su hora">En cadena${q.cuando ? ' · ' + esc(new Date(q.cuando).toLocaleTimeString('es-AR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })) : ''}</span>` : `<span class="q">En Postiz${q.cuando ? ' · ' + esc(new Date(q.cuando).toLocaleTimeString('es-AR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })) : ''}</span>`) : '';
           return `<button class="s-story${from}${s.publicar === 'postiz' && hand ? ' hand' : ''}" draggable="true" data-story="${esc(s.orig)}|${i}" data-img="${esc(img)}" title="${esc((h.texto || '') + (h.sticker ? ' · Sticker: ' + h.sticker : ''))}"><img src="/api/planner/poster?path=${esc(encodeURIComponent(img))}&v=${h.mtime || 0}" alt="" loading="lazy" draggable="false"><span class="n">${i + 1}</span>${h.video ? '<span class="s-vid" title="Video con voz en off">▶ video</span>' : ''}${h.editable ? '<span class="s-edit" data-edit-story title="Abrir el editor">✏️ Editar</span>' : ''}${fbn ? `<span class="s-fbn" title="${fbn} nota${fbn === 1 ? '' : 's'} de feedback pendiente${fbn === 1 ? '' : 's'}">💬 ${fbn}</span>` : ''}${st}${h.sticker && !/^zona segura/i.test(h.sticker) ? `<span class="stk">${hand ? '✋ ' : ''}${esc(h.sticker.split(':')[0])}</span>` : ''}</button>`;
         }).join('')
       : `<span class="s-free">${esc(dia.tema || 'Sin historias')}</span>`;
@@ -142,13 +185,13 @@ function renderStories() {
     const handAt = s.historias.map((img, i) => needsHand(byImg[img]) ? `${i + 1} a las ${storyTime(s.hora, i)}` : null).filter(Boolean);
     const hands = handAt.length;
     const pub = s.historias.length ? `<div class="s-pub" data-seq="${esc(s.orig)}">
-        <div class="seg">${['postiz', 'mano', 'no'].map(k => `<button class="${s.publicar === k ? 'on' : ''}" data-pub="${k}" title="${k === 'postiz' ? 'Se agenda en Postiz cuando confirmes en el chat' : k === 'mano' ? 'La subís vos desde Instagram' : 'No sale'}">${MODE_NAME[k]}</button>`).join('')}</div>
+        <div class="seg">${(s.publicar === 'mano' ? ['postiz', 'mano', 'no'] : ['postiz', 'no']).map(k => `<button class="${s.publicar === k ? 'on' : ''}" data-pub="${k}" title="${k === 'postiz' ? 'Se agenda en Postiz cuando confirmes en el chat' : k === 'mano' ? 'La subís vos desde Instagram' : 'No sale'}">${MODE_NAME[k]}</button>`).join('')}</div>
         ${s.publicar !== 'no' ? '<div class="s-publine">' : ''}${s.publicar !== 'no' && cuentas.length > 1 ? `<label class="s-cuenta" title="Desde qué Instagram sale esta secuencia"><select data-scuenta="${esc(s.orig)}" aria-label="Cuenta de Instagram">${cuentas.map(a => `<option value="${esc(a.profile)}" ${a.profile === mc ? 'selected' : ''}>@${esc(a.profile)}</option>`).join('')}</select></label>` : ''}
         ${s.publicar === 'postiz' ? `<label class="s-hora">a las <input data-hora="${esc(s.orig)}" value="${esc(s.hora || STORY_DEFAULT_HOUR)}" inputmode="numeric" aria-label="Hora de la primera historia"></label>` : ''}${s.publicar !== 'no' ? '</div>' : ''}
         ${s.publicar === 'postiz' ? `${hands ? `<span class="s-hand" title="Instagram no deja publicar ese sticker por la API: la subís vos a esa hora, en su lugar de la secuencia">✋ A mano: ${esc(handAt.join(' · '))}</span>` : ''}` : ''}
       </div>` : '';
     return `<section class="s-row tipo-${tipo} ${s.historias.length ? 'con-historias' : ''} ${tipo === 'libre' && !s.historias.length ? 'libre' : ''} ${d === today ? 'today' : ''} ${moved ? 'moved' : ''}" data-srow="${d}" data-seq="${esc(s.orig)}" aria-label="${esc(dayLong(d))}">
-      <div class="s-day"><div class="s-dayname"><span class="s-handle" draggable="true" data-seqdrag="${esc(s.orig)}" title="Arrastrá para cambiar de día" aria-label="Mover la secuencia a otro día">⋮⋮</span>${s.historias.length ? `<button class="s-move" data-smove="${esc(s.orig)}" title="Cambiar de día, también a otra semana"><span class="day-name">${esc(dayShort(d))}</span><span class="day-num">${Number(d.slice(8))}</span></button><input type="date" class="s-movedate" data-smovedate="${esc(s.orig)}" value="${esc(s.fecha)}" min="${dateAdd(s.orig, -28)}" max="${dateAdd(s.orig, 84)}" tabindex="-1" aria-hidden="true">` : `<span class="day-name">${esc(dayShort(d))}</span><span class="day-num">${Number(d.slice(8))}</span>`}${moved ? `<span class="s-was">era ${esc(monday(s.orig) === week ? `${dayShort(s.orig)} ${Number(s.orig.slice(8))}` : dayLong(s.orig))}</span>` : ''}</div>
+      <div class="s-day"><div class="s-dayname"><span class="s-handle" draggable="true" data-seqdrag="${esc(s.orig)}" title="Arrastrá para cambiar de día" aria-label="Mover la secuencia a otro día">⋮⋮</span>${s.historias.length ? `<button class="s-move" data-smove="${esc(s.orig)}" title="Cambiar de día, también a otra semana"><span class="day-name">${esc(dayShort(d))}</span><span class="day-num">${Number(d.slice(8))}</span></button><input type="date" class="s-movedate" data-smovedate="${esc(s.orig)}" value="${esc(s.fecha)}" min="${dateAdd(s.orig, -28)}" max="${dateAdd(s.orig, 84)}" tabindex="-1" aria-hidden="true">` : `<span class="day-name">${esc(dayShort(d))}</span><span class="day-num">${Number(d.slice(8))}</span>`}${moved ? `<span class="s-was">era ${esc(monday(s.orig) === week ? `${dayShort(s.orig)} ${Number(s.orig.slice(8))}` : dayLong(s.orig))}</span>` : ''}${s.historias.length && d >= today ? `<button class="s-libre" data-sfree="${d}" title="Dejar este día libre: esta secuencia y las que siguen se corren un día (el domingo queda libre)">Dejar libre</button>` : ''}</div>
         <span class="s-tipo">${TIPO_NAME[tipo] || esc(tipo)}${dia.formula && dia.formula !== 'Libre' ? `<span>${esc(dia.formula)}</span>` : ''}</span>
         ${s.historias.length ? `<p class="s-tema" title="${esc((dia.tema || '') + (dia.relacionada ? ' · ' + dia.relacionada : ''))}">${esc(dia.tema || '')}</p>` : ''}${pub}${metrics}</div>
       <div class="s-seq" data-seqdrop="${esc(s.orig)}">${seqHtml}</div>
@@ -179,7 +222,8 @@ async function saveStoryMetric(input) {
   try { setSave('Guardando…'); const r = await api('stories/metrics', post(body)); stories.data.metricas_cuentas = { ...(stories.data.metricas_cuentas || {}), [r.cuenta]: r.metricas }; if (r.cuenta === stories.data.cuenta) stories.data.metricas = r.metricas; setSave('Guardado'); if (!document.activeElement?.matches('[data-smetric]')) renderStories(); else { const keep = document.activeElement.dataset; renderStories(); document.querySelector(`[data-smetric="${keep.smetric}"][data-date="${keep.date}"]`)?.focus(); } }
   catch (e) { setSave(''); toast(e.message); }
 }
-// Controles: publicar (Postiz, a mano o no) y la hora de la primera historia; las siguientes salen de a un minuto.
+// Controles: publicar (Postiz o no; «A mano» sólo aparece en un borrador viejo que lo tenía) y la hora de la primera
+// historia; las siguientes salen de a dos minutos.
 function setStoryPub(orig, patch) {
   const e = entrantes().find(x => x.orig === orig); if (e) return saveSeqOne(e, patch);
   const list = storySeqs(), s = list.find(x => x.orig === orig); if (!s) return;
@@ -1496,7 +1540,7 @@ $('spPrepare').onclick = async () => {
     $('spPrepare').disabled = true; await sSaving;
     const r = await api('stories/proposal', post({ week: stories.week, cuenta: stories.data.cuenta, revision: stories.data.draft.revision }));
     $('spResult').hidden = false;
-    $('spResult').innerHTML = `<p class="hint">Pegá este mensaje en Claude Code: ${r.feedback ? 'corrige el feedback' + (r.prompt.includes('historias.py aplicar') ? ', agenda lo que va a Postiz y te avisa lo que va a mano.' : '.') : 'agenda las historias en Postiz y te avisa las que van a mano.'}</p><textarea readonly aria-label="Mensaje de confirmación">${esc(r.prompt)}</textarea><button class="primary" id="spCopy">${ICON.copy} Copiar mensaje</button>`;
+    $('spResult').innerHTML = `<p class="hint">Pegá este mensaje en Claude Code: ${r.feedback ? 'corrige el feedback' + (r.prompt.includes('historias.py aplicar') ? ' y agenda las historias en Postiz.' : '.') : 'agenda las historias en Postiz.'}</p><textarea readonly aria-label="Mensaje de confirmación">${esc(r.prompt)}</textarea><button class="primary" id="spCopy">${ICON.copy} Copiar mensaje</button>`;
     $('spCopy').onclick = () => copyText(r.prompt, 'Copiado. Pegalo en el chat.');
   } catch (e) { toast(e.message); $('spPrepare').disabled = false; }
 };
@@ -1515,7 +1559,7 @@ function showStory() {
   $('sbImg').hidden = !!vid; sv.hidden = !vid;
   if (vid) { if (sv.dataset.src !== vid) { sv.dataset.src = vid; sv.src = vid; } sv.play().catch(() => {}); }
   else if (sv.dataset.src) { sv.pause(); sv.removeAttribute('src'); delete sv.dataset.src; sv.load(); }
-  // Dos botones, editar y feedback; el feedback se abre al costado. Arriba, si hace falta, el aviso de que va a mano.
+  // Dos botones, editar y feedback; el feedback se abre al costado. El aviso «Va a mano» sólo queda para un borrador viejo.
   $('sbChip').hidden = !needsHand(h); $('sbChip').textContent = needsHand(h) ? '✋ Va a mano: ' + h.sticker.split(/[(:]/)[0].trim() : ''; $('sbChip').title = h.sticker || '';
   $('sbEdit').hidden = !h.editable;
   $('sbPrev').disabled = i === 0; $('sbNext').disabled = i === s.historias.length - 1;
@@ -1550,7 +1594,8 @@ async function loadStoryFeedback(key, img) {
 const sfbMine = (st, e) => e.alcance !== 'secuencia' && e.imagen?.split('/').pop() === st.img.split('/').pop();
 function renderStoryFeedback(key) {
   const st = sfbx[key], cfg = SFB[key], box = $(cfg.box); if (!st || !box) return;
-  const list = key === 'sb' ? st.entries.filter(e => sfbMine(st, e)) : [...st.entries].sort((a, b) => (a.alcance === 'secuencia' ? 0 : 1) - (b.alcance === 'secuencia' ? 0 : 1) || (a.n || 0) - (b.n || 0));
+  // En orden de creación, como un chat: la última nota grabada queda al final, así no se borra la equivocada.
+  const list = key === 'sb' ? st.entries.filter(e => sfbMine(st, e)) : st.entries;
   const pend = st.entries.filter(fbOpen), mineN = list.filter(fbOpen).length, others = pend.length - mineN;
   const entry = e => `<div class="fb-entry ${e.estado === 'aplicado' ? 'done' : ''}"><div class="fb-head">${key === 'dia' ? `<span class="tag ${e.alcance === 'secuencia' ? 'accent' : ''}">${e.alcance === 'secuencia' ? 'General' : 'Historia ' + (e.n || '?')}</span>` : ''}<span>${esc(new Date(e.created_at).toLocaleString('es-AR', { timeZone: TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace('.', ''))}</span><span class="tag ${FB_STATE[e.estado]?.[1] ?? 'accent'}">${FB_STATE[e.estado]?.[0] ?? 'Pendiente'}</span><button class="icon fb-del" data-sfbdel="${esc(e.file)}" aria-label="Borrar nota">${ICON.trash}</button></div>${e.text ? `<p class="fb-text">${esc(e.text)}</p>` : ''}${e.audio ? `<audio src="${esc(mediaUrl(e.audio))}" controls preload="metadata"></audio>` : ''}${e.transcript ? `<p class="hint">«${esc(e.transcript)}»</p>` : ''}${e.cambio ? `<p class="hint">${esc(e.cambio)}</p>` : ''}</div>`;
   const rec = st.rec, clip = st.clip;
@@ -1565,6 +1610,8 @@ function renderStoryFeedback(key) {
       ${rec ? `<button class="secondary rec on" data-sfb="rec" title="Detener y guardar">${ICON.stop}<span data-sfb="time">${clock((performance.now() - rec.start) / 1000)}</span></button>` : `<button class="secondary rec" data-sfb="rec" title="Grabar audio" aria-label="Grabar audio" ${st.saving ? 'disabled' : ''}>${ICON.mic}</button>`}
     </div>
     <button class="primary fb-copy" data-sfb="copy" ${st.prompt ? '' : 'disabled'} title="Copia todas las notas pendientes del día (${others ? 'incluye ' + others + ' de otras historias o de la secuencia' : 'las de esta historia'})">${ICON.copy} Copiar para Claude Code${dayPend ? ` · ${dayPend}` : ''}</button>`;
+  // La lista abre abajo, en la última nota, y baja sola cuando entra una nueva.
+  const fl = box.querySelector('.fb-list'); if (fl && list.length > (st.shown || 0)) fl.scrollTop = fl.scrollHeight; st.shown = list.length;
   const q = n => box.querySelector(`[data-sfb="${n}"]`);
   q('text').oninput = e => { st.text = e.target.value; };
   q('text').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); if (st.text.trim()) saveStoryFeedback(key, null); } };
@@ -1644,10 +1691,10 @@ $('sGrid').addEventListener('change', e => {
   if (e.target.matches('[data-smetric]')) saveStoryMetric(e.target);
   else if (e.target.matches('[data-smovedate]')) moveSeq(e.target.dataset.smovedate, e.target.value);
   else if (e.target.matches('[data-scuenta]')) setStoryPub(e.target.dataset.scuenta, { cuenta: e.target.value === stories.data.cuenta ? undefined : e.target.value });
-  else if (e.target.matches('[data-hora]')) { const t = parseTime(e.target.value); if (!t) { toast('Hora inválida: usá 10:00.'); e.target.value = ''; return; } setStoryPub(e.target.dataset.hora, { hora: t }); }
+  else if (e.target.matches('[data-hora]')) { const t = parseTime(e.target.value); if (!t) { toast('Hora inválida: usá 15:00.'); e.target.value = ''; return; } setStoryPub(e.target.dataset.hora, { hora: t }); }
 });
 $('sGrid').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[data-smetric], [data-hora]')) { e.preventDefault(); e.target.blur(); } });
-$('sGrid').addEventListener('click', e => { const mv = e.target.closest('[data-smove]'); if (mv) { const inp = mv.parentElement.querySelector('[data-smovedate]'); try { inp.showPicker(); } catch { inp.focus(); } return; } const b = e.target.closest('[data-pub]'); if (b) { setStoryPub(b.closest('[data-seq]').dataset.seq, { publicar: b.dataset.pub }); } });
+$('sGrid').addEventListener('click', e => { const fr = e.target.closest('[data-sfree]'); if (fr) { freeDay(fr.dataset.sfree); return; } const mv = e.target.closest('[data-smove]'); if (mv) { const inp = mv.parentElement.querySelector('[data-smovedate]'); try { inp.showPicker(); } catch { inp.focus(); } return; } const b = e.target.closest('[data-pub]'); if (b) { setStoryPub(b.closest('[data-seq]').dataset.seq, { publicar: b.dataset.pub }); } });
 $('sCuenta').onchange = () => { sCuenta = $('sCuenta').value; store.set('sCuenta', sCuenta); render(); };
 $('sPrev').onclick = () => { week = dateAdd(week, -7); render(); };
 $('sNext').onclick = () => { week = dateAdd(week, 7); render(); };

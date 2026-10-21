@@ -1,12 +1,12 @@
 // Historias: la semana de historias en formato horizontal (una fila por día, la secuencia una al lado de la otra y el
-// recurso fijo a la derecha), con controles para publicarlas por Postiz o a mano, las respuestas por día, feedback
+// recurso fijo a la derecha), con controles para publicarlas por Postiz, las respuestas por día, feedback
 // escrito o grabado por historia o por secuencia, y un editor tipo Canva sobre el HTML de cada historia.
 // Cada semana es una carpeta dentro de historias/ (config → historias.carpeta) con su semana.json; ver docs/historias.md.
 import type { Hono } from 'hono';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync, copyFileSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { CONFIG_PATH, MOTOR_DIR, PYTHON, REPO_DIR, paths } from './config.ts';
+import { CONFIG_PATH, ENGINE_DIR, MOTOR_DIR, PYTHON, REPO_DIR, paths } from './config.ts';
 import { exec, fileRead, markFeedbackSent, OPEN, posix, readFeedback, ROOT, STATE, TYPES, validatePlannerFeedback, within, write } from './publication-planner.ts';
 
 const STORIES = () => paths().stories;
@@ -92,9 +92,10 @@ export function storyQueue() {
   for (const f of ['inbox', 'agendado', 'publicado']) walk(resolve(paths().publish, f));
   return out;
 }
-// Un sticker interactivo (encuesta, link, mención, caja de preguntas, slider) no sale por la API de Instagram: esa
-// historia va a mano. Uno marcado «(opcional)» se omite; la «zona segura» del editor tampoco obliga.
-export const storyNeedsHand = (sticker: any) => typeof sticker === 'string' && !!sticker.trim() && !/opcional/i.test(sticker) && !/^(zona segura\s*(\+\s*)?)+$/i.test(sticker.trim());
+// Ninguna historia va a mano: todas salen por Postiz tal como están. Instagram no deja poner stickers interactivos por
+// la API, así que las historias se diseñan sin ellos (el cierre va escrito: «Respondé…»); un sticker que haya quedado
+// anotado en semana.json no se sube y no frena nada. «A mano» sólo sigue en un borrador viejo que lo tenía.
+export const storyNeedsHand = (_sticker: any) => false;
 // Una secuencia también pasa a otra semana (por ejemplo, del jueves al lunes siguiente). El borrador la sigue guardando
 // en su semana de origen; se ve, se edita y se programa en la semana del día al que va. Hasta 4 semanas antes o 12
 // después del día original, y nunca sobre un día que ya tiene otra secuencia con historias.
@@ -134,8 +135,9 @@ export function validateStoryDraft(body: any, manifest: any, ocupados: Map<strin
   }
   return body;
 }
+// Las cuentas van sin «@»: al pegar el mensaje en Claude Code, la @ abre el selector de archivos y cambia el texto.
 export function storyProposalPrompt(id: string, file: string, n: number, manual: number, cuentas: string[] = []) {
-  return `Confirmo la propuesta de historias ${id} del planner (${file}). Aplicala con python3 engine/historias.py aplicar ${id} --ejecutar: ${n} historia${n === 1 ? '' : 's'} a Postiz${manual ? ` y ${manual} para subir a mano (avisame cuáles)` : ''}${cuentas.length ? `, en ${cuentas.map(c => '@' + c).join(' y ')}` : ''}.`;
+  return `Confirmo la propuesta de historias ${id} del planner (${file}). Aplicala con python3 engine/historias.py aplicar ${id} --ejecutar: ${n} historia${n === 1 ? '' : 's'} a Postiz${manual ? ` y ${manual} para subir a mano (avisame cuáles)` : ''}${cuentas.length ? `, desde ${cuentas.length > 1 ? 'las cuentas' : 'la cuenta'} de Instagram ${cuentas.join(' y ')}` : ''}.`;
 }
 export function validateStoryMetrics(body: any) {
   if (!body || !/^\d{4}-\d{2}-\d{2}$/.test(body.date || '') || new Date(body.date + 'T12:00:00Z').toISOString().slice(0, 10) !== body.date) throw new Error('Día inválido');
@@ -268,7 +270,28 @@ let storyBusy = false;
 const FUENTE_TYPES: Record<string, string> = { ...TYPES, '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.gif': 'image/gif', '.json': 'application/json; charset=utf-8' };
 const IMG_UP: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'image/heic': '.heic', 'image/heif': '.heic' };
 
+// Historias en cadena: sólo la primera de cada día queda programada en Postiz; las siguientes son borradores que
+// `engine/historias.py cadena` publica de a una, cuando Postiz confirma la anterior (programar varias con dos minutos de
+// distancia no garantiza el orden). Mientras el planner está abierto lo corre cada minuto, y sólo si hay historias de
+// hoy en la cola sin publicar. Sus avisos (error, demora, atraso) quedan en historias-cadena.json y se ven en la pestaña.
+const todayIn = (timeZone: string) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+export function storiesToday() {
+  const hoy = todayIn(paths().timezone); let names: string[] = [];
+  try { names = readdirSync(resolve(paths().publish, 'agendado')); } catch { return false; }
+  return names.some(n => { if (!n.endsWith('.json')) return false; const d = fileRead(resolve(paths().publish, 'agendado', n), null); return d?.formato === 'story' && d.slot?.fecha === hoy && d.estado !== 'publicado'; });
+}
+let cadenaBusy = false;
+async function cadenaTick() {
+  if (cadenaBusy || process.env.PLANNER_CADENA === '0' || !storiesToday()) return;
+  cadenaBusy = true;
+  try { const { stdout } = await exec(PYTHON, [resolve(ENGINE_DIR, 'historias.py'), 'cadena'], { cwd: REPO_DIR, timeout: 600000, maxBuffer: 4 * 1024 * 1024 }); if (stdout.trim()) console.log(new Date().toISOString(), 'historias en cadena:', stdout.trim()); }
+  catch (e: any) { console.error(new Date().toISOString(), 'historias en cadena:', String(e?.stderr || e?.message || e).trim().slice(-800)); }
+  finally { cadenaBusy = false; }
+}
+const cadenaAvisos = () => { const desde = Date.now() - 24 * 3600_000; return (fileRead(resolve(STATE(), 'historias-cadena.json'), { avisos: [] }).avisos || []).filter((a: any) => Date.parse(a.at) >= desde); };
+
 export function registerStories(app: Hono) {
+  setInterval(cadenaTick, 60_000).unref();
   app.get('/api/planner/stories', c => {
     const week = c.req.query('week') || '', accts = igAccounts(), cuenta = c.req.query('cuenta') || accts[0].profile;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) return c.json({ error: 'Semana inválida' }, 400);
@@ -292,7 +315,7 @@ export function registerStories(app: Hono) {
     const semanasDe = (p: string) => Object.values(all).filter(e => e.cuenta === p).map(e => e.week).sort();
     return c.json({ week, cuenta, carpeta: relRoot(STORIES()), cuentas: accts.map(a => ({ profile: a.profile, label: a.label, marca: a.marca, semanas: semanasDe(a.profile) })), weeks: semanasDe(cuenta), semana: sem,
       metricas: metricsOf(metrics, cuenta, accts), metricas_cuentas: Object.fromEntries(accts.map(a => [a.profile, metricsOf(metrics, a.profile, accts)])),
-      draft: { revision: drafts.revision || 0, ...(drafts.semanas?.[draftKey(cuenta, week, accts)] || { secuencias: {} }) }, cola, entrantes, feedback: fb, feedback_sin_aplicar: sinAplicar });
+      draft: { revision: drafts.revision || 0, ...(drafts.semanas?.[draftKey(cuenta, week, accts)] || { secuencias: {} }) }, cola, entrantes, feedback: fb, feedback_sin_aplicar: sinAplicar, avisos_cadena: cadenaAvisos() });
   });
   app.post('/api/planner/stories/metrics', async c => {
     try {

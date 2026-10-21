@@ -53,6 +53,8 @@ elif cmd == 'posts:create':
         pid = 'p-' + uuid.uuid4().hex[:8]
         d['posts'].append({'id': pid, 'publishDate': body['date'], 'state': 'PUBLISHED' if body['type'] == 'now' else 'DRAFT' if body['type'] == 'draft' else 'QUEUE',
                            'content': p['value'][0]['content'], 'settings': p['settings'], 'integration': {'id': integ['id'], 'identifier': integ['identifier'], 'name': integ['name']}})
+        if body['type'] == 'now':  # publicado ya: Postiz devuelve el ID nativo del post
+            d['posts'][-1]['releaseId'] = str(17_000_000_000_000_000 + len(d['posts']))
         created.append({'postId': pid, 'integration': integ['id']})
     out(created)
 elif cmd == 'posts:list':

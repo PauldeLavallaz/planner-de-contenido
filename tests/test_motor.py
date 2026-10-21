@@ -235,6 +235,55 @@ class Motor(unittest.TestCase):
         # Las historias de la cola no aparecen como piezas en el planner.
         self.assertFalse([i for i in self.inventory()['items'] if 'historia-' in i['id']])
 
+    def test_historias_en_cadena(self):
+        # Sólo la primera del día queda programada; las siguientes son borradores que `cadena` publica de a una, cuando
+        # Postiz confirma la anterior y llegó su hora.
+        self.run_py('conectar.py')
+        run = self.content / 'historias/semana-cadena'
+        (run / 'historias').mkdir(parents=True)
+        day, _ = self.future(8)
+        imgs = []
+        for n in (1, 2, 3):
+            png = run / f'historias/{day}_{n}_recurso.png'
+            png.write_bytes(os.urandom(700 + n))
+            imgs.append(png.relative_to(self.content).as_posix())
+        state = self.content / 'publicar/.planner'
+        state.mkdir(parents=True, exist_ok=True)
+        acciones = [{'orden': n, 'imagen': imgs[n - 1], 'video': None, 'fecha': day, 'hora': '15:00', 'cuenta': 'mimarca', 'cuenta_id': 'ig-main',
+                     'accion': 'agendar', 'sticker': None, 'a_mano': False, 'cola': None} for n in (1, 2, 3)]
+        (state / 'proposal-historias-c1.json').write_text(json.dumps({'id': 'c1', 'status': 'awaiting_chat_confirmation', 'run': 'historias/semana-cadena', 'acciones': acciones}))
+        self.assertIn('en cadena', self.run_py('historias.py', 'aplicar', 'c1').stdout)
+        self.run_py('historias.py', 'aplicar', 'c1', '--ejecutar')
+        db = self.tmp / 'postiz.json'
+        estados = [p['state'] for p in json.loads(db.read_text())['posts'] if p['publishDate'].startswith(day) and p['settings'].get('post_type') == 'story' and p['integration']['id'] == 'ig-main']
+        self.assertEqual(sorted(estados), ['DRAFT', 'DRAFT', 'QUEUE'])
+        cadena = lambda hora: self.run_py('historias.py', 'cadena', '--ahora', f'{day}T{hora}').stdout
+        self.assertEqual(cadena('14:00'), '')  # antes de la primera no consulta nada
+        self.assertNotIn('ahora', cadena('15:01'))  # la primera sigue programada: se espera
+        # Postiz publica la primera.
+        d = json.loads(db.read_text())
+        for p in d['posts']:
+            if p['publishDate'].startswith(day) and p['state'] == 'QUEUE' and p['integration']['id'] == 'ig-main' and p['settings'].get('post_type') == 'story':
+                p['state'], p['releaseId'] = 'PUBLISHED', '17999999999999999'
+        db.write_text(json.dumps(d))
+        self.assertNotIn('→ ahora', cadena('15:01'))  # la 2 todavía no llegó a su hora (15:02)
+        self.assertIn('→ ahora', cadena('15:03'))  # sale la 2
+        sidecars = {json.loads(f.read_text())['slug']: json.loads(f.read_text()) for f in (self.content / 'publicar/agendado').glob('*.json') if 'semana-cadena' in f.name}
+        dos = next(m for s, m in sidecars.items() if s.endswith('2-recurso'))
+        self.assertTrue(any(p.get('type') == 'now' for p in dos['postiz']['posts']))
+        self.assertNotIn('→ ahora', cadena('15:03'))  # la 3 espera su hora
+        out = cadena('15:30')  # sale tarde: avisa el atraso
+        self.assertIn('→ ahora', out)
+        avisos = json.loads((state / 'historias-cadena.json').read_text())['avisos']
+        self.assertIn('atrasada', avisos[-1]['titulo'])
+        self.assertEqual(cadena('15:31'), '')  # todo publicado: no consulta más
+        # Una de hoy cuya hora ya pasó no se agenda en el pasado.
+        hoy = datetime.now().date().isoformat()
+        (state / 'proposal-historias-c2.json').write_text(json.dumps({'id': 'c2', 'status': 'awaiting_chat_confirmation', 'run': 'historias/semana-cadena',
+            'acciones': [{**acciones[0], 'fecha': hoy, 'hora': '00:00'}]}))
+        self.run_py('historias.py', 'aplicar', 'c2', '--ejecutar', ok=False)
+        self.assertEqual(json.loads((state / 'proposal-historias-c2.json').read_text())['resultados'][0]['resultado'], 'fecha_pasada')
+
     def test_sincronizar_carpetas(self):
         state = self.content / 'publicar/.planner'
         state.mkdir(parents=True, exist_ok=True)
