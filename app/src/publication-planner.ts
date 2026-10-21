@@ -37,9 +37,17 @@ export function validatePlannerFeedback(body:any) {
     const buf=Buffer.from(body.audio,'base64');if(buf.length<200)throw new Error('El audio llegó vacío. Grabalo de nuevo.');
     audio={buf,ext:FEEDBACK_AUDIO[mime],mime};
   }
-  if(!text&&!audio)throw new Error('Escribí algo o grabá un audio.');
+  // El copy editado en el detalle viaja como una nota más, con el texto nuevo completo.
+  let copy:string|null=null;
+  if(body.copy!==undefined&&body.copy!==null){
+    if(typeof body.copy!=='string')throw new Error('Copy inválido');
+    copy=body.copy.replace(/\r\n/g,'\n').trim();
+    if(!copy)throw new Error('El copy no puede quedar vacío.');
+    if(copy.length>10000)throw new Error('El copy es demasiado largo.');
+  }
+  if(!text&&!audio&&copy===null)throw new Error('Escribí algo o grabá un audio.');
   const num=(v:any)=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<36000?Math.round(v*10)/10:null;
-  return {id:body.id,text,audio,video_time:num(body.video_time),audio_seconds:num(body.audio_seconds)};
+  return {id:body.id,text,audio,copy,video_time:num(body.video_time),audio_seconds:num(body.audio_seconds)};
 }
 export function feedbackDir(item:any) {
   if(typeof item.source==='string'&&item.source){
@@ -50,6 +58,8 @@ export function feedbackDir(item:any) {
   return resolve(STATE(),'feedback',String(item.id).replace(/[^\w.-]+/g,'_').slice(0,120));
 }
 export const rel=(p:string)=>within(ROOT(),p)?posix(relative(ROOT(),p)):p;
+// El copy que se le sube a la pieza: el texto general (el mismo para todas las redes), como lo muestra el detalle.
+export const captionOf=(item:any)=>{const c=item?.captions||{};return String(c.general||c.instagram||c.tiktok||c.youtube_description||Object.entries(c).find(([k,v])=>typeof v==='string'&&v&&!/_title$/.test(k))?.[1]||'');};
 export function readFeedback(dir:string) {
   if(!existsSync(dir))return [];
   // Por hora de creación: dos notas del mismo segundo no quedan en orden por el sufijo aleatorio del nombre.
@@ -68,6 +78,8 @@ const FEEDBACK_RULES=[
   '- Al terminar, en el JSON de cada nota poné estado «aplicado», aplicado_at y una línea de qué cambió en «cambio».',
 ];
 export const OPEN=(e:any)=>!e.estado||e.estado==='pendiente';
+// Sin corregir: pendiente o copiada sin que una sesión la haya tomado (en_curso) ni aplicado.
+const UNAPPLIED=(e:any)=>e.estado!=='aplicado'&&e.estado!=='en_curso';
 // Las notas de historias (tipo «historia») viven en la carpeta de la semana: no son de una pieza de la cola.
 export const pieceFeedback=(dir:string)=>readFeedback(dir).filter((e:any)=>e.tipo!=='historia');
 export const pendingFeedback=(item:any)=>pieceFeedback(feedbackDir(item)).filter(OPEN);
@@ -77,13 +89,21 @@ export function markFeedbackSent(dir:string, files:string[], via:string) {
   for(const f of files){const p=resolve(dir,f),e=fileRead(p,null);if(!e||!OPEN(e))continue;
     const tmp=p+'.tmp';writeFileSync(tmp,JSON.stringify({...e,estado:'enviado',enviado_at:now,enviado_via:via},null,2));renameSync(tmp,p);}
 }
+// Borrar una nota la mueve, con su audio, a feedback/.borradas: nada se pierde.
+function trashFeedback(dir:string,file:string){
+  const src=resolve(dir,file),trash=resolve(dir,'.borradas');mkdirSync(trash,{recursive:true});
+  const entry=fileRead(src,{});
+  if(entry.audio){const a=resolve(ROOT(),entry.audio);if(within(dir,a)&&existsSync(a))renameSync(a,resolve(trash,relative(dir,a)));}
+  renameSync(src,resolve(trash,file));
+}
 export function feedbackPrompt(item:any, dir:string, entries:any[]) {
-  const pending=entries.filter(e=>e.estado!=='aplicado'&&e.estado!=='en_curso');
+  const pending=entries.filter(UNAPPLIED);
   const busy=entries.filter(e=>e.estado==='en_curso');
   const run=typeof item.source==='string'&&item.source?item.source:null;
+  const copies=pending.filter(e=>e.tipo==='copy'),others=pending.filter(e=>e.tipo!=='copy');
   const lines=pending.map((e,n)=>{
-    const head=`${n+1}. ${new Date(e.created_at).toLocaleString('es-AR',{timeZone:paths().timezone,dateStyle:'short',timeStyle:'short'})}${e.video_time!=null?` · en el ${clock(e.video_time)} del video`:''}`;
-    const parts=[e.text?`   Texto: «${e.text}»`:'',e.audio?`   Audio: ${e.audio}${e.audio_seconds?` (${Math.round(e.audio_seconds)} s)`:''}. Transcribilo antes de actuar.`:''].filter(Boolean);
+    const head=`${n+1}. ${new Date(e.created_at).toLocaleString('es-AR',{timeZone:paths().timezone,dateStyle:'short',timeStyle:'short'})}${e.tipo==='copy'?' · Copy editado':''}${e.video_time!=null?` · en el ${clock(e.video_time)} del video`:''}`;
+    const parts=e.tipo==='copy'?[`   Copy nuevo, textual (reemplaza el actual en todas las redes):\n${e.copy}`]:[e.text?`   Texto: «${e.text}»`:'',e.audio?`   Audio: ${e.audio}${e.audio_seconds?` (${Math.round(e.audio_seconds)} s)`:''}. Transcribilo antes de actuar.`:''].filter(Boolean);
     return [head,...parts,`   Nota: ${rel(dir)}/${e.file}`].join('\n');
   });
   return [
@@ -100,9 +120,21 @@ export function feedbackPrompt(item:any, dir:string, entries:any[]) {
     ...(busy.length?['',`Ya en curso en otra sesión, no las repitas: ${busy.map(e=>e.file+(e.tomado_por?' ('+e.tomado_por+')':'')).join(', ')}`]:[]),
     '',
     'Implementá estos cambios:',
-    ...FEEDBACK_RULES,
-    '- No agendes, muevas ni publiques nada en Postiz.',
+    // Si sólo cambió el copy, no hay audios que transcribir ni una versión nueva que guardar aparte.
+    ...(others.length?FEEDBACK_RULES:FEEDBACK_RULES.filter(r=>!/transcribilos|guardá la versión corregida aparte/.test(r)).map(r=>r.replace(/«cambio»\.$/,'«cambio», y decime en una línea dónde quedó.'))),
+    ...(copies.length?copyRules(item):['- No agendes, muevas ni publiques nada en Postiz.']),
   ].filter((l,i,a)=>l!==''||a[i-1]!=='').join('\n');
+}
+// Cómo se aplica un copy editado en el planner: el texto va tal cual a la ficha y al archivo de texto de la pieza, y si
+// ya está en Postiz se recrea el post con el texto nuevo, en la misma fecha y hora.
+// En el mensaje de una propuesta (agenda) no va el «no agendes nada más»: esa misma propuesta trae la agenda.
+export function copyRules(item:any,soloFeedback=true){
+  const cola=resolve(ENGINE_DIR,'cola.py');
+  return [
+    '- Copy editado: es el texto que escribí yo; usalo textual (sólo arreglá un error de tipeo evidente). Si hay más de una nota de copy, vale la última.',
+    `- Reemplazalo en ${item?.sidecar?`la ficha de la cola (${item.sidecar}): captions.general y los textos por red que repetían el copy anterior (si una red tiene a propósito un texto distinto, por ejemplo uno más largo para LinkedIn, dejalo y avisame), y en `:item?'':'la ficha de la cola de cada pieza que ya entró (captions.general y los textos por red que repetían el copy anterior) y en '}el archivo de texto de la pieza (publish_kit.md, caption.txt o el que use). Un cambio de copy no es una versión nueva: no hace falta otro archivo ni volver a exportar.`,
+    `- Si la pieza ya está en Postiz, actualizá el texto sin cambiar fecha, hora, redes ni cuentas: \`python3 ${cola} mover <slug> --fecha <la misma> --hora <la misma>\` la recrea con el texto nuevo. Si alguna red ya salió, mover se frena: no lo fuerces y avisame. Pegar este mensaje es mi OK para ese reemplazo${soloFeedback?'; no agendes, muevas ni publiques nada más':''}.`,
+  ];
 }
 let cache:any=null, cacheAt=0, inFlight:Promise<any>|null=null;
 export const PLANNER_STAGES=['development','review','ready'];
@@ -202,9 +234,10 @@ export function proposalPrompt(id:string, agenda:number, feedback:any[]) {
     'Versiones: si un cambio trae requested_version, publicá ese archivo. Si la pieza está en la cola sin fecha, `cola.py reemplazar <slug> <archivo>`; si ya está agendada, quitar, reemplazar y volver a agendarla en la fecha pedida. Si todavía no está en la cola, `cola.py listo` con ese archivo.');
   if(feedback.length){
     lines.push('',`Contenido: aplicá el feedback que dejé en ${feedback.length===1?'una pieza':feedback.length+' piezas'} (campo «feedback» de la propuesta; cada nota y su audio están en la carpeta feedback de la pieza):`);
-    for(const f of feedback)lines.push(`- «${f.title}» · ${f.source||f.id} · ${f.notes.length===1?'1 nota':f.notes.length+' notas'}${f.notes.some((n:any)=>n.audio)?' (con audio)':''}`);
+    for(const f of feedback)lines.push(`- «${f.title}» · ${f.source||f.id} · ${f.notes.length===1?'1 nota':f.notes.length+' notas'}${f.notes.some((n:any)=>n.audio)?' (con audio)':''}${f.notes.some((n:any)=>n.tipo==='copy')?' (copy editado: el texto nuevo está en la nota)':''}`);
     lines.push('',...FEEDBACK_RULES);
-    if(agenda)lines.push('- Si una pieza tiene feedback de contenido y también un cambio de agenda en esta propuesta, primero corregí el contenido y agendá la versión nueva recién cuando yo la apruebe; el resto de la agenda va igual.');
+    if(feedback.some((f:any)=>f.notes.some((n:any)=>n.tipo==='copy')))lines.push(...copyRules(null,false));
+    if(agenda)lines.push('- Si una pieza tiene feedback de contenido y también un cambio de agenda en esta propuesta, primero corregí el contenido y agendá la versión nueva recién cuando yo la apruebe (si sólo cambia el copy, aplicalo y agendala con el texto nuevo); el resto de la agenda va igual.');
   }
   return lines.join('\n');
 }
@@ -323,6 +356,18 @@ export function registerPublicationPlanner(app:Hono) {
       if(!item)return c.json({error:'Esta pieza ya no está en el tablero.'},400);
       const dir=feedbackDir(item);mkdirSync(dir,{recursive:true});
       const now=new Date(),stamp=now.toISOString().replace(/[-:]/g,'').replace('T','-').slice(0,15)+'-'+randomUUID().slice(0,4);
+      if(body.copy!==null){
+        // Una edición del copy todavía sin copiar se reescribe en la misma nota; volver al copy que ya tiene la pieza la saca.
+        // Después de copiada (o mandada en una propuesta), otra edición es otra nota.
+        const actual=captionOf(item).replace(/\r\n/g,'\n').trim(),prev=[...pieceFeedback(dir)].reverse().find((e:any)=>e.tipo==='copy'&&UNAPPLIED(e));
+        if(prev&&OPEN(prev)&&body.copy===actual)trashFeedback(dir,prev.file);
+        else if(prev&&body.copy===prev.copy){}
+        else if(prev&&OPEN(prev)){const f=resolve(dir,prev.file),tmp=f+'.tmp';writeFileSync(tmp,JSON.stringify({...fileRead(f,{}),copy:body.copy,created_at:now.toISOString()},null,2));renameSync(tmp,f);}
+        else if(body.copy!==actual){const f=resolve(dir,stamp+'-planner.json'),tmp=f+'.tmp';
+          writeFileSync(tmp,JSON.stringify({id:item.id,title:item.title,source:item.source||null,video:item.primary?.path||null,status_planner:item.status,created_at:now.toISOString(),by:'planner',tipo:'copy',copy:body.copy,copy_anterior:actual,text:null,audio:null,estado:'pendiente'},null,2));renameSync(tmp,f);}
+        const entries=pieceFeedback(dir);
+        return c.json({dir:rel(dir),entries,prompt:entries.some(UNAPPLIED)?feedbackPrompt(item,dir,entries):null});
+      }
       let audio=null;
       if(body.audio){const target=resolve(dir,stamp+'-planner'+body.audio.ext),raw=resolve(dir,stamp+'-raw'+body.audio.ext);writeFileSync(raw,body.audio.buf);
         // MediaRecorder deja el webm sin duración: una copia con ffmpeg la escribe. Sin ffmpeg, queda el original tal cual.
@@ -352,10 +397,7 @@ export function registerPublicationPlanner(app:Hono) {
     if(!item)return c.json({error:'Esta pieza ya no está en el tablero.'},400);
     const dir=feedbackDir(item),src=resolve(dir,body.file);
     if(!existsSync(src))return c.json({error:'Esa nota ya no está.'},404);
-    const trash=resolve(dir,'.borradas');mkdirSync(trash,{recursive:true});
-    const entry=fileRead(src,{});
-    if(entry.audio){const a=resolve(ROOT(),entry.audio);if(within(dir,a)&&existsSync(a))renameSync(a,resolve(trash,relative(dir,a)));}
-    renameSync(src,resolve(trash,body.file));
+    trashFeedback(dir,body.file);
     const entries=pieceFeedback(dir);
     return c.json({dir:rel(dir),entries,prompt:entries.some(e=>e.estado!=='aplicado'&&e.estado!=='en_curso')?feedbackPrompt(item,dir,entries):null});
   });
@@ -372,7 +414,7 @@ export function registerPublicationPlanner(app:Hono) {
     if(body.revision!==draft.revision)return c.json({error:'Guardá primero la última versión.'},409);
     const data=await inventory();const changes=Object.entries(draft.changes).map(([id,value])=>({item:data.items.find((i:any)=>i.id===id),change:value as any}));
     // El feedback de contenido viaja en la misma propuesta que la agenda.
-    const feedback=data.items.filter((i:any)=>i.feedback_pending&&!['discarded','component','archived'].includes(i.status)).map((i:any)=>({id:i.id,title:i.title,status:i.status,source:i.source||null,video:i.primary?.path||null,feedback_dir:rel(feedbackDir(i)),notes:pendingFeedback(i).map(e=>({file:e.file,created_at:e.created_at,text:e.text,audio:e.audio,audio_seconds:e.audio_seconds,video_time:e.video_time}))}));
+    const feedback=data.items.filter((i:any)=>i.feedback_pending&&!['discarded','component','archived'].includes(i.status)).map((i:any)=>({id:i.id,title:i.title,status:i.status,source:i.source||null,video:i.primary?.path||null,feedback_dir:rel(feedbackDir(i)),notes:pendingFeedback(i).map(e=>({file:e.file,created_at:e.created_at,...(e.tipo==='copy'?{tipo:'copy',copy:e.copy}:{}),text:e.text,audio:e.audio,audio_seconds:e.audio_seconds,video_time:e.video_time})),...(pendingFeedback(i).some(e=>e.tipo==='copy')?{sidecar:i.sidecar||null,slug:i.slug||null}:{})}));
     if(!changes.length&&!feedback.length)return c.json({error:'Todavía no hay cambios.'},400);
     // Cada rechazo nombra las piezas, para corregirlas desde la lista de la propuesta.
     const names=(list:any[])=>list.map(x=>'«'+x.item.title+'»').join(', ');
@@ -383,7 +425,7 @@ export function registerPublicationPlanner(app:Hono) {
     if(stale.length)return c.json({error:`Cambió desde tu edición: ${names(stale)}. Revisala en la propuesta.`},409);
     const id=new Date().toISOString().replace(/[-:TZ.]/g,'').slice(0,14)+'-'+randomUUID().slice(0,6);
     // Una pieza con final y fecha en el calendario queda aprobada al confirmar; sólo la que no tiene final sigue en reserva.
-    const proposal={id,status:'awaiting_chat_confirmation',created_at:new Date().toISOString(),timezone:data.timezone,postiz_fetched_at:data.postiz_fetched_at,revision:draft.revision,changes:changes.map(({item,change})=>({id:item.id,title:item.title,source:item.source,sidecar:item.sidecar,slug:item.slug,primary:item.primary,fingerprint:item.fingerprint,original:item.scheduled,requested:change.when,requested_action:plannerAction(item,change),paused:item.status==='paused',pause:item.pause||null,note:change.note||'',networks:item.networks,requested_networks:change.networks??(item.networks?.length?item.networks:data.config?.default_networks||[]),collaborators:item.collaborators||[],requested_version:change.version||null,accounts:item.accounts||{},requested_accounts:change.accounts??(item.accounts||{}),requested_collaborators:change.collaborators??(String(item.id).startsWith('queue:')?(item.collaborators||[]):data.config?.default_collaborators||[]),channels:item.channels,instagram_trial:item.trial===true,production_status:item.status,missing_final:!item.primary,approved_by_calendar:!item.approved&&!!change.when&&!!item.primary,requires_final_approval:!item.approved&&!(change.when&&item.primary)})),feedback};
+    const proposal={id,status:'awaiting_chat_confirmation',created_at:new Date().toISOString(),timezone:data.timezone,postiz_fetched_at:data.postiz_fetched_at,revision:draft.revision,changes:changes.map(({item,change})=>({id:item.id,title:item.title,source:item.source,sidecar:item.sidecar,slug:item.slug,primary:item.primary,fingerprint:item.fingerprint,original:item.scheduled,requested:change.when,requested_action:plannerAction(item,change),paused:item.status==='paused',pause:item.pause||null,note:change.note||'',networks:item.networks,requested_networks:change.networks??(item.networks?.length?item.networks:data.config?.default_networks||[]),collaborators:item.collaborators||[],requested_version:change.version||null,accounts:item.accounts||{},requested_accounts:change.accounts??(item.accounts||{}),requested_collaborators:change.collaborators??(Array.isArray(item.collaborators)?item.collaborators:String(item.id).startsWith('queue:')?[]:data.config?.default_collaborators||[]),channels:item.channels,instagram_trial:item.trial===true,production_status:item.status,missing_final:!item.primary,approved_by_calendar:!item.approved&&!!change.when&&!!item.primary,requires_final_approval:!item.approved&&!(change.when&&item.primary)})),feedback};
     write('proposal-'+id+'.json',proposal);
     for(const f of feedback)markFeedbackSent(resolve(ROOT(),f.feedback_dir),f.notes.map((n:any)=>n.file),'propuesta '+id);
     return c.json({id,path:rel(resolve(STATE(),'proposal-'+id+'.json')),prompt:proposalPrompt(id,changes.length,feedback)});

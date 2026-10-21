@@ -40,7 +40,7 @@ Dentro de una fuente, **cada subcarpeta es una pieza**, y cada video o imagen su
 
 **Portada.** Si la carpeta tiene `portada.jpg`, `cover.png` o similar, se usa como miniatura en el planner.
 
-**Texto.** El primero que exista de `publish_kit.md`, `caption.md`, `caption.txt`, `copy.md`, `copy.txt`. Un archivo plano es el texto entero. Un `publish_kit.md` puede tener secciones:
+**Texto.** El primero que exista de `publish_kit.md`, `caption.md`, `caption.txt`, `copy.md`, `copy.txt`. Un archivo plano es el texto entero. Un `publish_kit.md` puede tener secciones (el texto va en `## Caption`, `## Copy` o `## Texto`; si no tiene ninguna, se toma del siguiente archivo de la lista, y `## Copy de las láminas` no cuenta como texto de la publicación):
 
 ```markdown
 ## Título
