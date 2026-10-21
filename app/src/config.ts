@@ -15,7 +15,8 @@ let cached: { mtime: number, value: Paths } | null = null;
 export const MOTOR_DIR = resolve(process.env.PLANNER_MOTOR || resolve(REPO_DIR, 'motor-historias'));
 // stories: la carpeta con las semanas de historias (cada una con su semana.json); photos: tu carpeta de fotos para
 // usar de fondo o de sticker en el editor (opcional).
-export type Paths = { configured: boolean, root: string, publish: string, state: string, timezone: string, networks: string[], stories: string, photos: string | null };
+// guiones: la carpeta con los planes de cada semana (<AAAA-MM-DD>/plan.json); looks: una imagen o video por look del avatar.
+export type Paths = { configured: boolean, root: string, publish: string, state: string, timezone: string, networks: string[], stories: string, photos: string | null, guiones: string, looks: string };
 
 // La config se relee cuando cambia: la instalación la va completando con el planner ya abierto.
 export function paths(): Paths {
@@ -30,9 +31,9 @@ export function paths(): Paths {
   const pubRaw = expand(String(cfg?.publish_root ?? 'publicar'));
   const publish = isAbsolute(pubRaw) ? resolve(pubRaw) : resolve(root, pubRaw);
   const at = (raw: string) => { const x = expand(raw); return isAbsolute(x) ? resolve(x) : resolve(root, x); };
-  const st = cfg?.historias || {};
+  const st = cfg?.historias || {}, gu = cfg?.guiones || {};
   const value = { configured: mtime >= 0, root, publish, state: resolve(publish, '.planner'), timezone: cfg?.timezone || 'America/Argentina/Buenos_Aires', networks: Object.keys(cfg?.channels || {}),
-    stories: at(String(st.carpeta ?? 'historias')), photos: st.fotos ? at(String(st.fotos)) : null };
+    stories: at(String(st.carpeta ?? 'historias')), photos: st.fotos ? at(String(st.fotos)) : null, guiones: at(String(gu.carpeta ?? 'guiones')), looks: at(String(gu.looks ?? 'looks')) };
   cached = { mtime, value };
   return value;
 }

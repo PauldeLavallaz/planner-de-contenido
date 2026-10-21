@@ -174,7 +174,7 @@ renderBacklogVisibility();
 
 function render() {
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === view)));
-  $('weekView').hidden = view !== 'week'; $('piecesView').hidden = view !== 'pieces'; $('historyView').hidden = view !== 'history'; $('storiesView').hidden = view !== 'stories';
+  $('weekView').hidden = view !== 'week'; $('piecesView').hidden = view !== 'pieces'; $('historyView').hidden = view !== 'history'; $('storiesView').hidden = view !== 'stories'; $('guionesView').hidden = view !== 'guiones';
   document.body.classList.toggle('stories-mode', view === 'stories');
   const n = Object.keys(draft.changes).length + feedbackItems().filter(i => !draft.changes[i.id]).length;
   $('changeCount').textContent = n; $('review').disabled = !n || saveError || busy;
@@ -182,6 +182,7 @@ function render() {
   if (view === 'week') { renderBacklog(); renderWeek(); }
   else if (view === 'pieces') renderPieces();
   else if (view === 'stories') renderStories(); // historias.js
+  else if (view === 'guiones') { if (typeof renderGuiones === 'function') renderGuiones(); } // guiones.js
   else renderHistory();
 }
 
@@ -961,8 +962,8 @@ document.addEventListener('keydown', e => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.tile')) { e.preventDefault(); openItem(e.target.dataset.id); return; }
   if ($('drawer').open && ed?.slides?.length > 1 && !typing && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); showSlide(ed.slide + (e.key === 'ArrowRight' ? 1 : -1)); return; }
   if (typing || document.querySelector('dialog[open]') || e.metaKey || e.ctrlKey || e.altKey) return;
-  if ((view === 'week' || view === 'stories') && e.key === 'ArrowLeft') { week = dateAdd(week, -7); render(); }
-  else if ((view === 'week' || view === 'stories') && e.key === 'ArrowRight') { week = dateAdd(week, 7); render(); }
+  if (['week', 'stories', 'guiones'].includes(view) && e.key === 'ArrowLeft') { week = dateAdd(week, -7); render(); }
+  else if (['week', 'stories', 'guiones'].includes(view) && e.key === 'ArrowRight') { week = dateAdd(week, 7); render(); }
   else if (e.key === 'h') { week = monday(todayStr()); render(); }
   else if (e.key === '/') { e.preventDefault(); $('search').focus(); }
 });

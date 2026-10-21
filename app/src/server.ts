@@ -5,6 +5,8 @@ import { resolve } from 'node:path';
 import { APP_DIR, PUBLIC_DIR } from './config.ts';
 import { registerPublicationPlanner } from './publication-planner.ts';
 import { registerStories } from './historias.ts';
+import { registerGuiones } from './guiones.ts';
+import { registerProduccion } from './produccion.ts';
 
 const app = new Hono();
 const port = Number(process.env.PLANNER_PORT || 4180);
@@ -18,8 +20,10 @@ app.onError((error, c) => {
 app.get('/api/health', c => c.json({ ok: true, service: 'publication-planner', pid: process.pid, startedAt, uptime: process.uptime() }));
 registerPublicationPlanner(app);
 registerStories(app);
+registerGuiones(app);
+registerProduccion(app);
 // Serve only the planner's public files. No dashboard, watchers or generation jobs are loaded.
-for (const [file, type] of [['planner.html', 'text/html'], ['planner.js', 'text/javascript'], ['planner.css', 'text/css'], ['historias.js', 'text/javascript'], ['historias.css', 'text/css']]) {
+for (const [file, type] of [['planner.html', 'text/html'], ['planner.js', 'text/javascript'], ['planner.css', 'text/css'], ['historias.js', 'text/javascript'], ['historias.css', 'text/css'], ['guiones.js', 'text/javascript'], ['guiones.css', 'text/css']]) {
   const contents = readFileSync(resolve(PUBLIC_DIR, file));
   const handler = () => new Response(contents, { headers: { 'Content-Type': type + '; charset=utf-8', 'Cache-Control': 'no-store' } });
   app.get('/' + file, handler);

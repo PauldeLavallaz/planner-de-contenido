@@ -92,6 +92,16 @@ Preguntá si quiere planificar historias de Instagram en el planner. Si sí:
 
 Detalle en [docs/historias.md](docs/historias.md).
 
+## 4c. Guiones (opcional)
+
+Preguntá si quiere revisar guiones, audios y cortes en el planner antes de publicar. Si sí:
+
+- Los planes van en `guiones/` adentro de su contenido (`guiones.carpeta` en la config para cambiarla), una carpeta por semana con su `plan.json`. No hace falta crearla: la primera semana la arma Claude Code con la skill `guiones`.
+- Si usa un avatar con varios looks, que ponga una foto o un video corto de cada uno en `looks/` (`guiones.looks` para cambiarla) y, si quiere, sus nombres en `looks/looks.json`.
+- ffmpeg hace falta para la duración de los audios, los cuadros de los videos de cada estilo y las fotos de los looks.
+
+Detalle en [docs/guiones.md](docs/guiones.md).
+
 ## 5. Arrancar el planner
 
 ```bash

@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="/planner.css">
 <link rel="stylesheet" href="/historias.css">
+<link rel="stylesheet" href="/guiones.css">
 </head>
 <body>
 <header class="topbar">
@@ -16,6 +17,7 @@
   <nav class="tabs" role="tablist" aria-label="Vista">
     <button role="tab" data-view="week" aria-selected="true">Semana</button>
     <button role="tab" data-view="stories" aria-selected="false">Historias</button>
+    <button role="tab" data-view="guiones" aria-selected="false">Guiones</button>
     <button role="tab" data-view="pieces" aria-selected="false">Tablero</button>
     <button role="tab" data-view="history" aria-selected="false">Publicadas</button>
   </nav>
@@ -80,6 +82,22 @@
     </div>
   </div>
   <div id="sGrid" class="s-grid"></div>
+</main>
+
+<!-- Guiones, audios, rough cuts, finales y carruseles de la semana para revisar, aprobar y pasar feedback. Va por la
+     semana en que se planificó; la fecha se asigna en Semana. Lógica en guiones.js y formato en docs/guiones.md. -->
+<main id="guionesView" class="gv" hidden>
+  <div class="calendar-head">
+    <button id="gvWeekTitle" class="week-title gv-week-btn" title="Elegir semanas: una, varias o todas" aria-haspopup="true"></button>
+    <div class="week-nav">
+      <button id="gvPrev" class="icon" title="Semana anterior (←)" aria-label="Semana anterior"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+      <button id="gvToday" class="ghost">Hoy</button>
+      <button id="gvNext" class="icon" title="Semana siguiente (→)" aria-label="Semana siguiente"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button>
+    </div>
+    <button id="gvEstado" class="gv-tipo gv-filtro" aria-haspopup="true" title="Filtrar por estado">Todos los estados</button>
+    <div class="gv-head-actions"><button id="gvCopy" class="primary" disabled hidden><span>Copiar feedback para Claude Code</span><span id="gvCopyCount" class="count">0</span></button></div>
+  </div>
+  <div id="gvGrid"></div>
 </main>
 
 <main id="piecesView" class="list-view board-view" hidden>
@@ -216,5 +234,6 @@
 <div id="toast" class="toast" role="status"><span id="toastText"></span><button id="toastAction" hidden></button></div>
 <script src="/planner.js"></script>
 <script src="/historias.js"></script>
+<script src="/guiones.js"></script>
 </body>
 </html>
