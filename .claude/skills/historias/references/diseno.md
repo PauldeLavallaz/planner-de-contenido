@@ -118,11 +118,11 @@ Sale de vueltas de corrección sobre semanas reales. Si una marca tiene su propi
 | Resultado | Foto con un gesto de festejo | La cifra en caja del color, que cuenta; la frase en caja negra | Mención si es de un cliente |
 | Pedido | Foto de un lugar suyo con overlay negro, o la persona señalando | Palanca en texto blanco o caja negra; «Respondé “PALABRA”» con la palabra enorme en el color | Flecha de lápiz o 👇 hacia la barra de respuesta |
 
-### 🔴 Recurso: gancho o encuesta, regla o riesgo, recurso y palabra
+### 🔴 Recurso: gancho o pregunta, regla o riesgo, recurso y palabra
 
 | Historia | Fondo | Texto | Extra |
 |---|---|---|---|
-| Gancho o encuesta | Foto con la persona señalando la pregunta | Pregunta en caja blanca o negra, centrada arriba | Encuesta centrada abajo, sobre el cuerpo |
+| Gancho o pregunta | Foto con la persona señalando la pregunta | Pregunta en caja blanca o negra, centrada arriba | «Respondé…» con las opciones como ejemplos, centrado abajo, sobre el cuerpo |
 | Regla o riesgo | Blanco o negro | La regla en resaltado del color; la lista con emojis o una grilla de emojis | Círculos de lápiz sobre lo elegido |
 | Recurso y palabra | Foto de un lugar suyo con overlay negro | Qué es el recurso en caja arriba; «Respondé “PALABRA”» abajo | La portada o el recurso en un celular, centrado; flecha de lápiz centrada hacia la barra de respuesta |
 
@@ -132,8 +132,8 @@ Sale de vueltas de corrección sobre semanas reales. Si una marca tiene su propi
 |---|---|---|---|
 | Caso | Foto de su espacio, atenuada pareja | Quién es, con el nombre en el color; su frase en caja blanca | El video o la captura del cliente; mención |
 | Recorrido o detrás de escena | Blanco o negro | Pasos con 1️⃣ 2️⃣ 3️⃣ o emojis, en resaltado, unidos por flechas de lápiz | Nada |
-| Cierre abierto | Foto nítida | Pregunta en caja negra con la palabra en el color | Encuesta o slider en la zona libre |
-| Caja de preguntas | Foto de vida | Invitación corta en caja | Caja de preguntas sobre el cielo o una zona libre |
+| Cierre abierto | Foto nítida | Pregunta en caja negra con la palabra en el color | «Respondé…» y 👇 hacia la barra de respuesta |
+| Preguntas abiertas | Foto de vida | Invitación corta en caja: «Respondé con tu pregunta» | Flecha de lápiz o 👇 hacia la barra de respuesta |
 
 ### ⚪ Libre
 
@@ -149,7 +149,7 @@ Antes de mostrar, cada historia y la semana entera:
 - Renglones parejos, sin palabras sueltas, y el texto se lee (el chequeo del render lo mide).
 - Hay un elemento dominante y el resto es poco.
 - El gesto apunta al texto o sostiene el recurso.
-- Queda libre el lugar de cada sticker de Instagram.
+- Sin stickers interactivos: el pedido va escrito («Respondé…»), así toda la secuencia sale por Postiz.
 - En la semana: foto y fondo blanco o negro intercalados, un estilo por día que no se repite en días
   seguidos, la persona en lugares distintos, ninguna foto repetida, ninguna mascota.
 
@@ -167,5 +167,5 @@ Antes de mostrar, cada historia y la semana entera:
 - Íconos de un set en lugar de emojis.
 - Tapar la cara o cortar a la persona por el borde.
 - Renglones en escalera o una palabra sola en el último renglón.
-- Dibujar el sticker de Instagram: sólo se le deja el lugar (`.sticker` en el HTML).
+- Dibujar un sticker de Instagram, o diseñar una historia que lo necesite: el cierre va escrito.
 - Poner el mismo recurso en todas las historias de la semana.
