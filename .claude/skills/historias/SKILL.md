@@ -27,17 +27,21 @@ Antes de proponer una semana leé el método en `references/`:
 4. Renderizá con `python3 motor-historias/render.py <semana>/fuente/*.html --salida <semana>/historias --chequeo` y corregí lo que marque el chequeo. Una historia con video o voz sale también en MP4, con la voz mezclada. Si falta Playwright: `pip install playwright pillow numpy` y `python3 -m playwright install chromium`, con su OK.
 5. Mirá cada PNG antes de darlo por bueno. Avisale que ya lo ve en la pestaña Historias del planner.
 
-Una historia con sticker interactivo (encuesta, link, mención, caja de preguntas, slider) se marca en `sticker` y su lugar se deja libre en el HTML con `.sticker`: esas historias se suben a mano.
+**Sin stickers interactivos.** Todas las historias salen por Postiz y Instagram no deja poner por la API encuestas, cajas de preguntas, sliders, menciones, cuentas regresivas ni links: el planner ya no ofrece subirlas a mano. Donde una fórmula pide uno de esos stickers, el cierre va escrito en la imagen: «Respondé "PALABRA" y te lo paso» con su recurso, o una pregunta con «Respondé…» y las opciones como ejemplos. En `semana.json`, `cierre` es `palabra`, `respuesta` o `ninguno`, y la historia no lleva `sticker`. Si el usuario pide un sticker igual, avisale que por Postiz sale sin él: para usarlo, ese día va como «No se publica» y la sube él desde la app.
 
 ## Una propuesta del planner
 
 El mensaje empieza con «Confirmo la propuesta de historias <id>». Pegarlo **es** la confirmación del usuario para exactamente esa propuesta.
 
 1. `python3 engine/historias.py aplicar <id>` muestra qué va a hacer con cada historia, sin tocar nada.
-2. `python3 engine/historias.py aplicar <id> --ejecutar` agenda, mueve, reemplaza o quita cada una por `engine/cola.py`. Las de una secuencia salen cada 2 minutos desde su hora, en orden.
-3. Contá el resultado tal cual: qué quedó agendado, cuándo y en qué cuenta, cualquier error, y **la lista de las que van a mano** con su hora y su sticker.
+2. `python3 engine/historias.py aplicar <id> --ejecutar` agenda, mueve, reemplaza o quita cada una por `engine/cola.py`. Las de una secuencia tienen su hora cada 2 minutos desde la del día, en orden: la primera queda programada y las siguientes como borrador en Postiz, que el planner publica **en cadena**, cada una cuando sale la anterior ([docs/historias.md](../../../docs/historias.md#en-cadena)). Para eso el planner tiene que estar corriendo a esa hora; si el usuario lo apaga, decíselo.
+3. Contá el resultado tal cual: qué quedó agendado, cuándo y en qué cuenta, y cualquier error. Si una propuesta vieja trae alguna «a mano», listala con su hora.
 
-Si una historia falla, el resto sigue y la propuesta queda `parcial` con el motivo en `resultados`. Resolvé la causa y corré a mano los pasos de esa historia con `engine/cola.py` (skill [publicar](../publicar/SKILL.md)). Una fecha pasada no se agenda.
+Si una historia falla, el resto sigue y la propuesta queda `parcial` con el motivo en `resultados`. Resolvé la causa y corré a mano los pasos de esa historia con `engine/cola.py` (skill [publicar](../publicar/SKILL.md)). Una fecha pasada no se agenda, ni una de hoy cuya hora ya pasó.
+
+Si el planner avisa que la cadena se frenó (una historia falló dos veces), revisá esa historia en Postiz con el usuario. Con su OK, `python3 engine/cola.py ahora <slug> --redes instagram` la vuelve a mandar; cuando Postiz la confirma publicada, la cadena sigue sola con las que faltan.
+
+**Un plan nuevo que reemplaza a otro ya agendado:** las historias viejas se sacan con `python3 engine/cola.py pausar <slug> --motivo …` (sale de Postiz y nadie la vuelve a agendar), no con `quitar`, que la devuelve a la bandeja.
 
 ## Feedback de historias
 
@@ -45,6 +49,6 @@ Llega como un mensaje del planner con las notas del día. Seguí las reglas que 
 
 - **Detalles de una historia** (texto, color, tamaño, posición): corregí su HTML de `fuente/` y volvé a renderizar esa historia.
 - **Feedback general de la secuencia** (cambiar el tema, rehacer varias): primero mostrá la secuencia propuesta en texto y esperá su OK.
-- Si `semana.json` marca la historia con `editado`, la tocó en el editor del planner: partí de su HTML actual, no de una versión anterior.
+- Si `semana.json` marca la historia con `editado`, la tocó en el editor del planner: partí de su HTML actual, no de una versión anterior. Lo que el usuario eligió en el editor (un color, un fondo, un tamaño) manda sobre los defaults de esta skill: no lo «corrijas» al tocar esa historia.
 - Si cambia el texto, actualizá `texto` en `semana.json`.
 - Si la historia ya está en Postiz, no la agendes ni la quites: el planner la marca «Imagen nueva» y se reemplaza con la próxima propuesta de Programar.

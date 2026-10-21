@@ -19,12 +19,13 @@ Cada historia trae:
   - Las opciones de encuesta van entre barras, sin corchetes: SIII / DALE, CONTÁ / LARGAAA.
   - Un campo 📘 que el blueprint no trae se deduce sólo si sale directo del problema, el deseo o el
     método. Si hace falta un dato, una postura o un consejo de la marca que no está escrito, pasa a ✏️.
-- **Visual** y **sticker**: qué va de fondo o encima, y qué sticker se agrega a mano en Instagram. Donde el visual es
+- **Visual** y **sticker**: qué va de fondo o encima, y qué sticker pediría la fórmula. Como todas las historias salen
+  por Postiz, ese sticker no se pone: el pedido va escrito en la imagen («Respondé "PALABRA"…», o la pregunta con
+  «Respondé…» y las opciones como ejemplos; ver «Sin stickers interactivos» en [SKILL.md](../SKILL.md)). Donde el visual es
   el recurso o el proceso por dentro (una captura, el recurso abierto, un detrás de escena), puede ser una historia de
   video con voz en off ([video-con-voz.md](video-con-voz.md)): la propuesta suma «Voz en off: …» con su texto.
   En la propuesta de texto de la semana van sólo la fórmula y el texto de cada historia; visual y sticker se usan al
-  diseñar. Las opciones de una encuesta sí van, al final del texto, y el sticker queda anotado en `sticker` de
-  `semana.json`.
+  diseñar. Las opciones de una encuesta sí van, al final del texto, como ejemplos del «Respondé…».
 
 Los ejemplos («Así se hizo») muestran el tono y la lógica. Nombres, cifras y ofertas son de otro
 negocio: no se copian. Adaptá las palabras a cómo habla la marca y respetá la función de cada historia.

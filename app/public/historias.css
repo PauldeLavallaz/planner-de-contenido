@@ -7,7 +7,7 @@
 .stories-view { padding: 18px 28px 48px; }
 .stories-view .calendar-head { flex-wrap: wrap; }
 #sJumpDate { position: absolute; left: 0; top: 30px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.s-summary { margin-left: auto; display: flex; align-items: baseline; gap: 18px; color: var(--muted); font-size: 12.5px; }
+.s-summary { margin-left: auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; color: var(--muted); font-size: 12.5px; }
 .s-summary b { font: 600 22px/1 var(--sans); color: var(--ink); letter-spacing: -.3px; margin-right: 5px; }
 .s-summary .up { color: var(--ok); } .s-summary .down { color: var(--alert); }
 .s-grid { display: flex; flex-direction: column; gap: 10px; }
@@ -311,3 +311,9 @@
 #sqFeedback { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border-radius: 12px; padding: 14px; box-shadow: 0 0 0 1px var(--line); min-height: 220px; }
 #sqFeedback .fb-list { max-height: 320px; }
 @media (max-width: 860px) { .sb-main { flex-direction: column; } .sb-fb { width: auto; } .sb-body img, .sb-body video { height: min(58vh, 620px); } }
+.s-libre { margin-left: auto; font-size: 11px; line-height: 18px; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; cursor: pointer; white-space: nowrap; }
+.s-libre:hover { color: var(--ink); background: var(--sunk); }
+.s-aviso { flex-basis: 100%; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 4px 8px; font-size: 12.5px; }
+/* Con «era …» y Dejar libre en el mismo renglón, el botón baja al siguiente en lugar de apretar la fecha. */
+.s-dayname { flex-wrap: wrap; row-gap: 4px; }
+.s-was { white-space: nowrap; }

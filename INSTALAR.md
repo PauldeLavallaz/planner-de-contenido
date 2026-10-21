@@ -89,6 +89,7 @@ Preguntá si quiere planificar historias de Instagram en el planner. Si sí:
 - La carpeta de historias es `historias/` adentro de su contenido (`historias.carpeta` en la config para cambiarla). No hace falta crearla: la primera semana la arma Claude Code.
 - Si tiene una carpeta con sus fotos para usar de fondo o de sticker, cargala en `historias.fotos` (ruta absoluta o relativa a su contenido). El planner sólo la lee.
 - Para renderizar historias: `pip install playwright pillow numpy` y `python3 -m playwright install chromium`, con su OK.
+- Las historias de un día salen en cadena: la primera queda programada en Postiz y el planner publica cada siguiente cuando sale la anterior. Para eso el planner tiene que estar corriendo a esa hora: si va a programar historias, conviene el servicio (`npm run service:install`). Si prefiere programarlas todas a su hora, sin cadena, `"historias": { "cadena": false }` en la config.
 
 Detalle en [docs/historias.md](docs/historias.md).
 

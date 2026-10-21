@@ -2,8 +2,8 @@
 
 La pestaña **Historias** del planner muestra la semana en horizontal: un día por fila, sus historias una al lado de la otra y, fijo a la derecha, el recurso u oferta de ese día. Desde ahí:
 
-- elegís por día si sale **por Postiz**, **a mano** o **no se publica**, a qué hora y desde qué cuenta de Instagram;
-- reordenás historias arrastrándolas, las pasás a otro día, movés la secuencia entera con ⋮⋮ o tocando el día (también a otra semana);
+- elegís por día si sale **por Postiz** o **no se publica**, a qué hora (15:00 si no elegís otra) y desde qué cuenta de Instagram;
+- reordenás historias arrastrándolas, las pasás a otro día, movés la secuencia entera con ⋮⋮ o tocando el día (también a otra semana), y con **Dejar libre** corrés un día para abajo la secuencia de ese día y las que le siguen;
 - cargás las **respuestas** y las vistas de cada día: las respuestas son la métrica principal;
 - abrís una historia para verla grande, **editarla** (editor tipo Canva) o dejarle **feedback** escrito o grabado;
 - tocás **Programar** y el planner arma el mensaje que pegás en Claude Code para agendarlas en Postiz.
@@ -46,10 +46,10 @@ Una semana puede empezar cualquier día: el planner muestra, en cada semana de c
       "formula": "V1",
       "tema": "Tres errores que frenan tus ventas",
       "recurso": "guia",
-      "cierre": "encuesta",
+      "cierre": "palabra",
       "historias": [
         { "imagen": "historias/2026-10-19_1_venta.png", "texto": "Tres errores que frenan tus ventas." },
-        { "imagen": "historias/2026-10-19_2_venta.png", "texto": "¿Querés la guía?", "sticker": "encuesta: Sí / Más adelante" }
+        { "imagen": "historias/2026-10-19_2_venta.png", "texto": "Respondé \"GUIA\" y te la paso." }
       ]
     },
     { "fecha": "2026-10-20", "tipo": "libre", "historias": [] }
@@ -67,9 +67,9 @@ Una semana puede empezar cualquier día: el planner muestra, en cada semana de c
 | `dias[].tipo` | `venta`, `recurso`, `conciencia` o `libre` (pinta el color de la fila). |
 | `dias[].formula`, `tema` | Etiquetas que se ven en la fila. |
 | `dias[].recurso` | `id` del recurso u oferta de ese día. |
-| `dias[].cierre` | Si no hay recurso: `encuesta`, `slider`, `caja` o `ninguno`. |
+| `dias[].cierre` | Cómo cierra el día: `palabra` (Respondé PALABRA), `respuesta` (una pregunta con «Respondé…») o `ninguno`. |
 | `historias[].imagen` | El PNG, relativo a la carpeta de la semana. Su HTML es `fuente/<mismo nombre>.html`. |
-| `historias[].sticker` | El sticker de Instagram que lleva (encuesta, link, mención, caja de preguntas, slider). Esas historias **van a mano**: Instagram no deja publicarlas por la API. Si dice «(opcional)», sale igual por Postiz. |
+| `historias[].sticker` | Opcional y viejo: Instagram no deja poner stickers interactivos (encuesta, link, mención, caja de preguntas, slider) por la API, así que las historias se diseñan sin ellos y el cierre va escrito. Si una historia todavía lo tiene anotado, sale igual por Postiz, sin el sticker. |
 | `recursos[]` | `nombre`, `palabra` (palabra clave para comentar) o `entrega`, `dm` (mensaje para copiar), `url`, `preview` o `archivo` (para verlo), `estado: "listo"`. |
 
 El planner escribe en `semana.json` sólo cuando editás una historia: marca `editado`, corrige `texto` (guarda el anterior en `texto_original`), el `fondo` y el `sticker`.
@@ -79,7 +79,7 @@ El planner escribe en `semana.json` sólo cuando editás una historia: marca `ed
 Cada historia es un HTML de 1080×1920 hecho con el motor de `motor-historias/`:
 
 1. Copiá `motor-historias/motor/` a `<semana>/fuente/motor/`.
-2. Copiá `motor-historias/plantilla.html` a `<semana>/fuente/AAAA-MM-DD_N_tipo.html` y escribí la historia: foto de fondo o fondo liso, texto en caja o resaltado, emojis, flechas y el lugar del sticker. Los estilos están comentados en la plantilla.
+2. Copiá `motor-historias/plantilla.html` a `<semana>/fuente/AAAA-MM-DD_N_tipo.html` y escribí la historia: foto de fondo o fondo liso, texto en caja o resaltado, emojis y flechas, con el pedido escrito («Respondé…»): sin stickers interactivos, que no salen por Postiz. Los estilos están comentados en la plantilla.
 3. Renderizá:
 
    ```bash
@@ -128,16 +128,29 @@ Claude Code puede armar la semana entera: pedile «armá la semana de historias�
 
 ## Feedback
 
-En la vista grande, **Feedback** abre al costado las notas de esa historia: detalles (un texto, un color, un tamaño) que Claude Code corrige directo. El **Feedback** de la fila del día es para la secuencia entera: cambiar el tema o rehacer varias historias; ahí Claude Code primero te muestra la secuencia nueva y espera tu OK. Las notas, escritas o grabadas, quedan en `<semana>/feedback/`. **Copiar para Claude Code** arma el mensaje con todas las notas pendientes del día.
+En la vista grande, **Feedback** abre al costado las notas de esa historia: detalles (un texto, un color, un tamaño) que Claude Code corrige directo. El **💬 Feedback** de la fila del día, al lado del recurso, es para la secuencia entera: cambiar el tema o rehacer varias historias; ahí Claude Code primero te muestra la secuencia nueva y espera tu OK. Ese panel muestra las historias del día (tocar una la abre) y todas las notas, las generales y las de cada historia, en orden de creación como un chat: la última que grabaste queda al final. Las notas, escritas o grabadas, quedan en `<semana>/feedback/`. **Copiar para Claude Code**, en los dos lugares, arma el mensaje con todas las notas pendientes del día, separadas en generales y detalles.
 
 ## Programar
 
-1. Elegí **Postiz** en los días que querés agendar y la hora de la primera historia; las siguientes salen cada 2 minutos, en orden.
-2. **Programar** muestra qué va a Postiz y qué va a mano; **Preparar confirmación** guarda la propuesta en `<publicar>/.planner/proposal-historias-<id>.json` y te da el mensaje.
-3. Pegalo en Claude Code. Corre `python3 engine/historias.py aplicar <id> --ejecutar`: agenda, mueve, reemplaza o quita cada historia por `engine/cola.py`, y te lista las que van a mano con su hora.
+1. Elegí **Postiz** en los días que querés agendar y la hora de la primera historia (15:00 si no la cambiás); las siguientes tienen su hora cada 2 minutos, en orden. Todas salen por Postiz: ninguna va a mano. («A mano» sólo aparece en un día que lo tenía en un borrador viejo.)
+2. **Programar** muestra qué va a Postiz; **Preparar confirmación** guarda la propuesta en `<publicar>/.planner/proposal-historias-<id>.json` y te da el mensaje.
+3. Pegalo en Claude Code. Corre `python3 engine/historias.py aplicar <id> --ejecutar`: agenda, mueve, reemplaza o quita cada historia por `engine/cola.py`.
 
 **Programar** también cuenta el feedback sin corregir de la semana (notas pendientes, o copiadas que nadie tomó) y lo lista debajo de la agenda. El mensaje trae una parte de **Contenido** para que Claude Code lo corrija primero. Una historia con feedback, o todo el día si la nota es de la secuencia, no se agenda en esa pasada: queda «espera_feedback» y se programa cuando apruebes la versión corregida. Si sólo hay feedback, la propuesta sale igual, sin cambios de agenda.
 
 El orden, el día, la hora y la cuenta de cada secuencia son un borrador del planner (`<publicar>/.planner/historias-draft.json`); no tocan la carpeta de la semana. Una secuencia corrida a otra semana sigue guardada en el borrador de la suya, pero se ve, se edita y se programa en la semana a la que fue.
 
 Las respuestas y vistas que cargás quedan en `<publicar>/.planner/historias-metricas.json`.
+
+### En cadena
+
+Programar varias historias con dos minutos de distancia no garantiza el orden: Postiz las publica con demoras de segundos a minutos, y una puede salir después de la siguiente o quedar en error. Por eso sólo la primera historia de cada día (y cuenta) queda programada en Postiz; las siguientes quedan ahí como **borrador** a su hora, y el planner, mientras está abierto, corre cada minuto `python3 engine/historias.py cadena`: cuando Postiz confirma publicada la anterior y llegó su hora, publica la siguiente. En la semana, esas historias dicen «En cadena · 15:02».
+
+- Si una sale con error, la reintenta una vez; si vuelve a fallar, frena las que siguen para no desordenar la secuencia.
+- Si Postiz tarda más de 10 minutos con una, o la compu estaba dormida y una sale tarde, también avisa. Los avisos de las últimas 24 horas se ven arriba de la pestaña Historias y quedan en `<publicar>/.planner/historias-cadena.json`.
+- **Hace falta que el planner esté corriendo** a la hora de las historias (el servicio de [INSTALAR.md](../INSTALAR.md) lo deja andando solo). Si estaba cerrado, las que faltan salen en orden apenas se abre. Para correrla a mano: `python3 engine/historias.py cadena` (con `--dry-run` muestra qué haría).
+- Con `"historias": { "cadena": false }` en `planner.config.json`, todas se programan a su hora, como antes.
+
+### Dejar un día libre o correr una secuencia
+
+**Dejar libre**, en cada día con historias de hoy en adelante, corre su secuencia y las que le siguen pegadas un día, salteando el domingo, hasta el primer día vacío (también en las semanas siguientes). Antes de guardar muestra la lista de movidas para confirmar, y el aviso trae **Deshacer**. Tocando el día de la fila elegís otra fecha, hasta 4 semanas antes o 12 después; a otra semana, el día tiene que estar libre. Nada de eso toca Postiz hasta que programes y confirmes.

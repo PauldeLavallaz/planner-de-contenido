@@ -35,7 +35,7 @@ En Windows, `python` en lugar de `python3`.
 | `engine/conectar.py` | Lee las cuentas de Postiz y las escribe en la config. |
 | `engine/carpetas.py` | Analiza, crea, prueba y sincroniza la estructura de carpetas. |
 | `engine/piezas.py` | Cómo se reconoce una pieza dentro de una carpeta. |
-| `engine/historias.py` | Aplica en Postiz las propuestas de la pestaña Historias (por `engine/cola.py`). |
+| `engine/historias.py` | Aplica en Postiz las propuestas de la pestaña Historias (por `engine/cola.py`) y publica en cadena las historias de cada día (`cadena`, que el planner corre cada minuto). |
 | `motor-historias/` | El motor de historias: plantilla, estilos, `render.py` (HTML → PNG con chequeo) y `caras.swift`. |
 | `<contenido>/guiones/` | Una carpeta por semana con su `plan.json` y una carpeta por pieza (guion, audio, cortes, láminas, feedback); `<contenido>/looks/`, una foto por look del avatar (ver [docs/guiones.md](docs/guiones.md)). |
 | `<contenido>/historias/` | Una carpeta por semana de historias, con su `semana.json` (ver [docs/historias.md](docs/historias.md)). |

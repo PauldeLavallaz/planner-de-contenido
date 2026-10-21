@@ -24,7 +24,7 @@ Si una cuenta vende todos los días, deja de vender. Recursos y conciencia llena
 para que el día de venta haya gente dispuesta a responder. Conciencia vende sin pedir: quien escribe
 después de ver cómo trabajás llega con más intención y menos resistencia.
 
-Conciencia se arma igual que recurso, sin el pedido del final. Puede llevar encuesta o emoji: invitan
+Conciencia se arma igual que recurso, sin el pedido del final. Puede cerrar con una pregunta («Respondé…») o un emoji: invitan
 a interactuar y la secuencia sigue sin pedir nada.
 
 ## La semana
@@ -65,7 +65,7 @@ La propuesta es de Claude; la marca la ajusta semana a semana con sus números. 
 seguidores, vistas de la primera historia de cada día, vistas de la última y respuestas o DMs por día.
 
 **Las respuestas mandan.** Son la métrica principal de las historias: cada respuesta es una conversación abierta, y
-de ahí salen las ventas. Cada día se registra cuántas respuestas trajo (las de la palabra clave, la encuesta o la caja
+de ahí salen las ventas. Cada día se registra cuántas respuestas trajo (las de la palabra clave o las de una pregunta
 cuentan igual) y, si se puede, las vistas de la primera y de la última. Se cargan por día en la pestaña Historias del
 planner. Las vistas explican las respuestas; no las reemplazan. El balance de cada semana compara respuestas por día,
 tipo, fórmula, tema y recurso, la tasa sobre las vistas de la primera y la caída hasta la última, y es el punto de
@@ -115,8 +115,8 @@ Ganchos, reacciones y pedidos probados, con plantillas para completar: [ganchos.
   Emojis con moderación.
 - La venta va de gancho a vehículo, resultado y pedido con su palanca (ver las fórmulas). El gancho es
   algo que pasó, una novedad o una afirmación; no se arma una venta con una pregunta por historia.
-- Encuestas con dos a cinco opciones escritas como las diría el público; una puede ser en chiste
-  («SIII / DALEEE / LARGAAA»).
+- Una pregunta con dos a cinco opciones de ejemplo escritas como las diría el público; una puede ser en chiste
+  («Respondé SIII, DALEEE o LARGAAA»).
 - Casos de menor a mayor resultado y de situaciones distintas (rubro, punto de partida, perfil), uno
   por historia, con captura. Arrobá a la persona si dio permiso.
 - En salud, finanzas, derecho o cualquier rubro regulado: sin garantías de resultado, con el permiso
@@ -141,12 +141,11 @@ Ganchos, reacciones y pedidos probados, con plantillas para completar: [ganchos.
 - Borrá el hilo del día anterior antes de subir la tanda nueva, para que no se mezclen.
 - Subí la secuencia entera y en orden: seguida, o espaciada si las vistas están por debajo de la
   mitad del piso.
-- Cuando la primera historia tiene encuesta, una opción probada es dejarla correr unas 2 horas y
-  subir el resto después.
-- Las historias con stickers interactivos se suben a mano. Si la marca programa con alguna
-  herramienta, sólo las que no llevan stickers pueden ir programadas. En el planner, **Programar**
-  agenda en Postiz las que no llevan sticker, cada 2 minutos en el orden de la secuencia, y lista las
-  que van a mano con su hora, en su lugar de la secuencia ([docs/historias.md](../../../../docs/historias.md)).
+- Los stickers interactivos (encuesta, caja de preguntas, slider, mención, link) sólo se ponen a mano
+  en la app, y por Postiz no salen. Por eso las historias se diseñan sin ellos: el cierre es «Respondé
+  PALABRA» o una pregunta con «Respondé…», y toda la secuencia sale programada. En el planner,
+  **Programar** agenda la primera en Postiz a su hora y las siguientes en cadena, cada una cuando sale la
+  anterior, con 2 minutos de distancia como mínimo ([docs/historias.md](../../../../docs/historias.md#en-cadena)).
 
 ## Qué no hacer
 

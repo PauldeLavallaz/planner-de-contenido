@@ -170,16 +170,19 @@ test('standalone HTTP, media cancellation and durable draft across process exit'
       assert.equal((await request('/api/planner/stories/upload', 'POST', { imagen: img1, name: 'x.exe', mime: 'application/octet-stream', data: png })).status, 400);
       // Sin carpeta de fotos configurada, el catálogo viene vacío.
       assert.equal((await get('catalog')).body.carpeta, null);
-      // Borrador y propuesta: la que tiene encuesta va a mano; el mensaje apunta al aplicador del motor.
+      // Borrador y propuesta: ninguna va a mano, ni la que tiene una encuesta anotada; el mensaje apunta al aplicador del motor.
       const draft = await request('/api/planner/stories/draft', 'POST', { week: W, cuenta: 'ig', revision: 0, secuencias: { [W]: { fecha: W, historias: [img1, img2], publicar: 'postiz', hora: '10:00' } } });
       assert.equal(draft.status, 200);
       assert.equal((await draft.json()).revision, 1);
       assert.equal((await request('/api/planner/stories/draft', 'POST', { week: W, cuenta: 'ig', revision: 0, secuencias: {} })).status, 409);
       assert.equal((await request('/api/planner/stories/draft', 'POST', { week: W, cuenta: 'ig', revision: 1, secuencias: { [W]: { fecha: W, historias: [img1, img1], publicar: 'no', hora: null } } })).status, 400);
       const prop = await (await request('/api/planner/stories/proposal', 'POST', { week: W, cuenta: 'ig', revision: 1 })).json();
-      assert.match(prop.prompt, /python3 engine\/historias\.py aplicar .* --ejecutar/);
+      assert.match(prop.prompt, /python3 engine\/historias\.py aplicar .* --ejecutar: 2 historias a Postiz, desde la cuenta de Instagram /);
+      // Sin «@»: en Claude Code la arroba abre el selector de archivos.
+      assert.doesNotMatch(prop.prompt, /@|a mano/);
       const stored = JSON.parse(readFileSync(resolve(state, `proposal-historias-${prop.id}.json`)));
-      assert.deepEqual(stored.acciones.map(a => a.accion), ['agendar', 'a_mano']);
+      assert.deepEqual(stored.acciones.map(a => a.accion), ['agendar', 'agendar']);
+      assert.deepEqual(stored.acciones.map(a => a.a_mano), [false, false]);
       assert.equal(stored.acciones[0].cuenta_id, 'ig');
       // Respuestas por día.
       const m = await (await request('/api/planner/stories/metrics', 'POST', { date: W, cuenta: 'ig', respuestas: 12, vistas_primera: 300 })).json();
@@ -247,17 +250,23 @@ test('standalone HTTP, media cancellation and durable draft across process exit'
       rev = (await (await request('/api/planner/stories/seq', 'POST', { semana: W, orig: W, revision: rev, secuencia: { fecha: W, historias: [img1, img2], publicar: 'postiz', hora: '10:00' } })).json()).revision;
       const prop = await (await request('/api/planner/stories/proposal', 'POST', { week: W, revision: rev })).json();
       assert.ok(prop.feedback >= 1);
-      assert.equal(prop.esperan, 1);
+      // La nota general del día (de la prueba anterior) frena la secuencia entera: las dos esperan.
+      assert.equal(prop.esperan, 2);
       assert.match(prop.prompt, /Contenido · feedback sin aplicar/);
       assert.match(prop.prompt, /Achicá el título/);
       const stored = JSON.parse(readFileSync(resolve(state, `proposal-historias-${prop.id}.json`)));
       assert.equal(stored.acciones.find(x => x.imagen === img1).accion, 'espera_feedback');
-      assert.equal(stored.acciones.find(x => x.imagen === img2).accion, 'a_mano');
+      assert.equal(stored.acciones.find(x => x.imagen === img2).accion, 'espera_feedback');
       assert.ok(stored.feedback[0].notas.some(n => n.text === 'Achicá el título'));
       // Una propuesta con sólo feedback también se arma.
       rev = (await (await request('/api/planner/stories/seq', 'POST', { semana: W, orig: W, revision: rev, secuencia: { fecha: W, historias: [img1, img2], publicar: 'no', hora: null } })).json()).revision;
       const solo = await (await request('/api/planner/stories/proposal', 'POST', { week: W, revision: rev })).json();
       assert.match(solo.prompt, /sólo feedback de contenido/);
+      // Los avisos de las historias en cadena de las últimas 24 h llegan con la semana; los viejos no.
+      writeFileSync(resolve(state, 'historias-cadena.json'), JSON.stringify({ avisos: [
+        { id: 'viejo', at: new Date(Date.now() - 48 * 3600_000).toISOString(), titulo: 'Viejo', texto: 'ya pasó' },
+        { id: 'nuevo', at: new Date().toISOString(), titulo: 'Historia atrasada · hoy · 2', texto: 'sale recién ahora' }] }));
+      assert.deepEqual((await get(W)).avisos_cadena.map(a => a.id), ['nuevo']);
       // Recursos listos del motor.
       assert.match((await (await fetch(base + '/api/planner/stories/recursos')).json()).html, /data-recurso/);
       // Subidas crudas: sólo del mismo origen y con un tipo de audio o video.
