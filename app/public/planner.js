@@ -78,7 +78,10 @@ const store = { get(k, d) { try { const v = localStorage.getItem('planner.' + k)
 let data = { items: [], config: {} }, draft = { revision: 0, changes: {} };
 let view = store.get('view', 'week'), group = store.get('group', 'ready');
 let backlogCollapsed = store.get('backlogCollapsed', false) === true;
-let week = monday(todayStr());
+// La semana que se está mirando queda en la dirección (#semana=<lunes>, vacía en la actual): un refresh vuelve a ella
+// en vez de saltar a la semana de hoy.
+const weekFromUrl = () => { const m = /semana=(\d{4}-\d{2}-\d{2})/.exec(location.hash); return m ? monday(m[1]) : null; };
+let week = weekFromUrl() || monday(todayStr());
 let saving = Promise.resolve(), saveError = false, busy = false;
 let acked = {}; // los cambios tal como los confirmó el servidor en el último guardado
 const showOlder = {}, pages = {};
@@ -101,7 +104,7 @@ const normNet = n => String(n || '').replace(/-(standalone|business|page)$/, '')
 const sortNets = a => NET_ORDER.filter(n => a.includes(n));
 const origNets = i => i.networks?.length ? sortNets([...new Set(i.networks.map(normNet))]) : sortNets(cfg().default_networks || NET_ORDER);
 const nets = i => ch(i)?.networks ?? origNets(i);
-const origCollab = i => i.id.startsWith('queue:') ? (i.collaborators || []) : [...(cfg().default_collaborators || [])];
+const origCollab = i => Array.isArray(i.collaborators) ? [...i.collaborators] : i.id.startsWith('queue:') ? [] : [...(cfg().default_collaborators || [])];
 const collab = i => ch(i)?.collaborators ?? origCollab(i);
 const collabOptions = () => cfg().collaborator_options || [];
 // Cuentas reales de Postiz por red (la principal primero): cada pieza puede salir desde otra cuenta de la misma red.
@@ -147,7 +150,11 @@ function inScope(i) {
   return !q || (i.title + ' ' + i.slug + ' ' + i.brand).toLowerCase().includes(q);
 }
 // La ocupación de horarios no depende del filtro de marca. Lo que está en desarrollo no ocupa el calendario.
-const timeline = (exceptIds = []) => data.items.filter(i => !exceptIds.includes(i.id) && editable(i) && when(i) && i.status !== 'development');
+// Dos piezas compiten por un horario sólo si salen por una misma cuenta: con dos Instagram conectados, una pieza en
+// cada uno puede salir a la misma hora.
+const acctKeys = i => nets(i).map(n => n + ':' + (acctOf(n, accounts(i))?.id || n));
+const sharesAccount = (a, b) => { const k = new Set(acctKeys(a)); return acctKeys(b).some(x => k.has(x)); };
+const timeline =(exceptIds = []) => data.items.filter(i => !exceptIds.includes(i.id) && editable(i) && when(i) && i.status !== 'development');
 function backlogGroupOf(i) {
   if (!editable(i) || when(i)) return null;
   if (ch(i)?.pause || (i.status === 'paused' && !ch(i)?.resume)) return null;
@@ -173,6 +180,8 @@ $('showBacklog').onclick = () => toggleBacklog(false);
 renderBacklogVisibility();
 
 function render() {
+  const wantHash = week === monday(todayStr()) ? '' : `#semana=${week}`;
+  if (location.hash !== wantHash) history.replaceState(null, '', location.pathname + location.search + wantHash);
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === view)));
   $('weekView').hidden = view !== 'week'; $('piecesView').hidden = view !== 'pieces'; $('historyView').hidden = view !== 'history'; $('storiesView').hidden = view !== 'stories'; $('guionesView').hidden = view !== 'guiones';
   document.body.classList.toggle('stories-mode', view === 'stories');
@@ -285,22 +294,47 @@ function renderWeek() {
   $('footnote').innerHTML = outside.length ? `${outside.length} ${outside.length === 1 ? 'pieza más' : 'piezas más'} en otras semanas · <button class="link" data-week="${target}">Ir al ${esc(dayLong(target))}</button>` : '';
 }
 
-// Tablero por estados en filas: cada franja es un estado; arrastrar a otra franja cambia el estado (Lista = aprobada).
-// Sin textos de uso en las franjas: sólo nombre y contador.
-function laneSize() { const w = ($('piecesList').clientWidth || window.innerWidth - 56) - 24; return Math.max(2, Math.floor((w + 12) / (150 + 12))); }
+// Tablero tipo Trello: una columna por estado, lado a lado y cada una con su scroll; arrastrar una tarjeta a otra
+// columna cambia el estado (Listo = aprobada). Sin textos de uso en las columnas: sólo nombre y contador.
+// En desarrollo se ve hasta dónde llegó cada pieza, por lo que ya tiene su carpeta.
+function devSteps(i) {
+  const docs = i.documents || [], comps = i.components || [];
+  if (isCarousel(i)) return [['Texto', docs.length > 0], ['Láminas', comps.some(a => a.kind === 'image') || (i.media || []).some(a => a.kind === 'image')]];
+  return [['Guion', docs.some(d => /^(guion|script)\./i.test(d.name))], ['Audio', comps.some(a => a.kind === 'audio' && !/music|musica|música|mix/i.test(a.path))], ['Corte', comps.some(a => a.kind === 'video')]];
+}
+const stepsHtml = i => `<div class="bsteps">${devSteps(i).map(([l, on]) => `<span class="${on ? 'on' : ''}">${l}</span>`).join('')}</div>`;
+function boardCard(i) {
+  const [st, label] = statusOf(i), u = thumbUrl(i), w = when(i), dev = i.status === 'development';
+  const decided = i.id.startsWith('queue:') || i.id.startsWith('remote:') || ch(i)?.networks || w;
+  const brand = BRANDS.length > 1 && i.brand !== defaultBrand() ? BRAND_LABEL[i.brand] || i.brand : '';
+  const meta = [brand, isCarousel(i) ? 'Carrusel' : '', w ? `${dayShort(w.slice(0, 10))} ${Number(w.slice(8, 10))} · ${w.slice(11, 16)}` : relDays(i.created)].filter(Boolean).map(esc).join(' · ');
+  const extras = [i.newer_final && !version(i) ? '<span class="mini warn" title="La carpeta de la pieza tiene un final más nuevo que el de la cola">Versión nueva</span>' : '', i.trial && nets(i).includes('instagram') ? '<span class="mini" title="Reel de prueba en Instagram">Prueba</span>' : '', i.feedback_pending ? `<span class="mini">${i.feedback_pending} ${i.feedback_pending === 1 ? 'nota' : 'notas'}</span>` : ''].join('');
+  const acts = [];
+  if (i.status === 'review') acts.push(`<button class="approve" data-approve="${esc(i.id)}" title="Aprobar: pasa a Listos" aria-label="Aprobar pieza">Aprobar</button>`);
+  if (canDiscard(i)) acts.push(`<button data-discard="${esc(i.id)}" title="Descartar: deja de aparecer" aria-label="Descartar pieza">${ICON.trash}</button>`);
+  if (i.status === 'discarded') acts.push(`<button data-restore="${esc(i.id)}" title="Recuperar" aria-label="Recuperar pieza">${ICON.restore}</button>`);
+  const stLabel = ['proposed', 'alert'].includes(st) ? `<span class="st" title="${esc(label)}"><i></i><span>${esc(label)}</span></span>` : '';
+  return `<article class="tile bcard st-${st}" data-id="${esc(i.id)}" ${editable(i) || i.status === 'discarded' ? 'data-drag="1"' : ''} tabindex="0" role="button" aria-label="${esc(i.title)}" title="${esc(i.title)}">
+    <div class="bthumb"><span>${esc(dev ? devSteps(i).filter(s => s[1]).pop()?.[0] || 'Vacía' : formatLabel(i))}</span>${u ? `<img src="${esc(u)}" alt="" loading="lazy" draggable="false" onerror="this.remove()">` : ''}</div>
+    <div class="bbody"><p class="btitle">${esc(i.title)}</p><div class="bmeta"><span>${meta}</span>${decided ? netIcons(nets(i)) : ''}</div>${dev ? stepsHtml(i) : ''}${extras ? `<div class="bmeta">${extras}</div>` : ''}${stLabel || acts.length ? `<div class="bfoot">${stLabel}<span class="acts">${acts.join('')}</span></div>` : ''}</div></article>`;
+}
 function renderPieces() {
-  const age = $('age').value, per = laneSize();
-  const lanes = [...STAGES.map(([k, l]) => ({ k, l, drop: 'stage:' + k })), { k: 'scheduled', l: 'En Postiz' }, { k: 'paused', l: 'Pausadas', drop: 'pause' }, { k: 'discarded', l: 'Descartadas', drop: 'stage:discarded' }, ...($('showRefs').checked ? [{ k: 'ref', l: 'Archivadas' }] : [])];
+  const age = $('age').value, box = $('piecesList');
+  const cols = [...STAGES.map(([k, l]) => ({ k, l, drop: 'stage:' + k })), { k: 'scheduled', l: 'En Postiz' }, { k: 'paused', l: 'Pausadas', drop: 'pause' }, { k: 'discarded', l: 'Descartadas', drop: 'stage:discarded' }, ...($('showRefs').checked ? [{ k: 'ref', l: 'Archivadas' }] : [])];
   const scope = data.items.filter(inScope);
-  $('piecesList').innerHTML = lanes.map(c => {
+  // Cada columna conserva su scroll al redibujar: aprobar o descartar no la manda arriba.
+  const kept = Object.fromEntries([...box.querySelectorAll('[data-col]')].map(c => [c.dataset.col, c.querySelector('.col-body').scrollTop])), left = box.scrollLeft;
+  box.innerHTML = cols.map(c => {
     const list = scope.filter(i => (c.k === 'ref' ? isRef(i) : i.status === c.k) && (c.k === 'scheduled' || c.k === 'paused' || freshEnough(i, age)))
       .sort((a, b) => c.k === 'scheduled' ? (when(a) || '').localeCompare(when(b) || '') : c.k === 'discarded' ? (b.discard?.discarded_at || '').localeCompare(a.discard?.discarded_at || '') : c.k === 'paused' ? (b.pause?.desde || '').localeCompare(a.pause?.desde || '') : (b.created || '').localeCompare(a.created || ''));
-    const key = 'l:' + c.k + ':' + age + ':' + per;
-    const tiles = pageSlice(key, list, per).map(i => tile(i, 'pieces')).join('');
-    return `<section class="lane lane-${c.k}" ${c.drop ? `data-drop="${c.drop}"` : ''}><header class="lane-head"><i class="lane-dot"></i><h3>${c.l}</h3><span class="n">${list.length}</span>${pager(key, list.length, per)}</header>${list.length ? `<div class="lane-row" style="--per:${per}">${tiles}</div>` : '<div class="lane-empty">Vacía</div>'}</section>`;
+    return `<section class="col lane-${c.k}" data-col="${c.k}" ${c.drop ? `data-drop="${c.drop}"` : ''}><header class="col-head"><i class="lane-dot"></i><h3>${c.l}</h3><span class="n">${list.length}</span></header><div class="col-body">${list.map(boardCard).join('') || '<div class="lane-empty">Vacía</div>'}</div></section>`;
   }).join('');
+  box.querySelectorAll('[data-col]').forEach(c => { c.querySelector('.col-body').scrollTop = kept[c.dataset.col] || 0; });
+  box.scrollLeft = left; boardFit();
 }
-window.addEventListener('resize', () => { if (view === 'pieces') { clearTimeout(renderPieces.t); renderPieces.t = setTimeout(renderPieces, 150); } });
+// Las columnas llegan hasta el pie de la ventana: se desplaza cada una, no la página.
+function boardFit() { const box = $('piecesList'); if (box.offsetParent) box.style.setProperty('--board-top', Math.round(box.getBoundingClientRect().top + scrollY) + 'px'); }
+window.addEventListener('resize', () => { if (view === 'pieces') boardFit(); });
 
 function renderHistory() {
   const list = data.items.filter(i => inScope(i) && i.status === 'published').sort((a, b) => (b.history_date || '').localeCompare(a.history_date || ''));
@@ -312,6 +346,9 @@ function renderHistory() {
 
 // ---------- guardar el borrador ----------
 function toast(text, action, label = 'Deshacer') {
+  // El detalle es un dialog modal y tapa los avisos globales, incluso con z-index alto: el aviso se repite en su pie.
+  const drawerMessage = $('drawer').open && $('dSaveMessage');
+  if (drawerMessage) { drawerMessage.textContent = text; drawerMessage.hidden = false; }
   $('toastText').textContent = text;
   const b = $('toastAction'); b.hidden = !action; b.textContent = label; b.onclick = () => { $('toast').classList.remove('show'); action(); };
   $('toast').classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => $('toast').classList.remove('show'), action ? 7000 : 4000);
@@ -356,7 +393,8 @@ async function rebase() {
 function pruneChanges() {
   let n = 0;
   for (const [id, c] of Object.entries(draft.changes)) {
-    const i = byId(id); if (!i) continue;
+    // Cuando una pieza de tus carpetas entra a la cola cambia de id: el cambio viejo queda huérfano y el servidor lo rechaza.
+    const i = byId(id); if (!i) { if (id.startsWith('piece:') && data.items.some(j => j.id.startsWith('queue:') && j.source === id.slice(6))) { delete draft.changes[id]; n++; } continue; }
     const moot = (c.pause && i.status !== 'scheduled') || (c.resume && i.status !== 'paused');
     const same = !c.pause && !c.resume && (c.when ?? null) === (i.scheduled ?? null) && eqSet(c.networks ?? origNets(i), origNets(i)) && eqSet(c.collaborators ?? origCollab(i), origCollab(i)) && !c.note;
     if (same || moot || !editable(i)) { delete draft.changes[id]; n++; }
@@ -384,7 +422,7 @@ function commit(i, patch, message) {
   if (saveError) { toast('El borrador no se pudo guardar.', () => location.reload(), 'Recargar'); return false; }
   if (!editable(i)) { toast('Esta pieza es de consulta.'); return false; }
   const next = { when: when(i), note: ch(i)?.note || '', networks: nets(i), collaborators: collab(i), accounts: accounts(i), version: version(i), pause: ch(i)?.pause, resume: ch(i)?.resume, ...patch };
-  if (next.when && next.when <= nowLocal()) { toast('Elegí un horario futuro.'); return false; }
+  // Guardar conserva el borrador aunque la hora ya haya pasado; la fecha futura se exige al preparar la propuesta.
   if (!next.networks.length) { toast('Elegí al menos una red.'); return false; }
   snapshot(); applyChange(i, next); queueSave(); render();
   if (message) toast(message, undo);
@@ -392,8 +430,9 @@ function commit(i, patch, message) {
 }
 
 // ---------- horarios ----------
-function takenTimes(day, exceptId) { return timeline([exceptId]).filter(i => when(i).slice(0, 10) === day).map(i => when(i).slice(11, 16)); }
-function isTaken(day, time, exceptId) { return takenTimes(day, exceptId).some(t => Math.abs(toMin(t) - toMin(time)) < windowMin()); }
+// `me` es la pieza que se ubica (o su versión en edición en el detalle): sólo la ocupan las que comparten una cuenta.
+function takenTimes(day, exceptId, me = exceptId && byId(exceptId)) { return timeline([exceptId]).filter(i => when(i).slice(0, 10) === day && (!me || sharesAccount(me, i))).map(i => when(i).slice(11, 16)); }
+function isTaken(day, time, exceptId, me) { return takenTimes(day, exceptId, me).some(t => Math.abs(toMin(t) - toMin(time)) < windowMin()); }
 function freeTime(day, i) {
   const soon = addMinutes(nowLocal(), 45);
   const free = suggestedTimes().find(s => day + 'T' + s > soon && !isTaken(day, s, i.id));
@@ -429,12 +468,13 @@ function openItem(id) {
     $('dAssets').innerHTML = visual.length > 1 ? visual.map((a, n) => `<button data-asset="${n}" title="${esc(a.path)}">${a.kind === 'video' ? '▶ ' : ''}${esc(a.name)}</button>`).join('') : '';
     // Elegir otro video lo deja como versión a publicar y habilita Guardar.
     $('dAssets').querySelectorAll('button').forEach(b => b.onclick = () => pickVersion(visual[Number(b.dataset.asset)]));
-    showAsset(assets.find(a => a.path === ed.version) || i.primary || assets.find(a => a.kind === 'video') || assets[0]);
+    const first = assets.find(a => a.path === ed.version) || i.primary || assets.find(a => a.kind === 'video') || assets.find(a => a.kind !== 'audio');
+    if (first) showAsset(first); else showDraft(i, assets.find(a => a.kind === 'audio'));
   }
-  if (fb?.id !== id) { if (fb?.rec) fb.rec.rec.stop(); fb = { id, entries: [], prompt: null, dir: '', loading: true, text: '' }; loadFeedback(id); }
+  if (fb?.id !== id) { if (fb?.rec) fb.rec.rec.stop(); fb = { id, entries: [], prompt: null, dir: '', loading: true, text: '', copy: null }; loadFeedback(id); }
   renderDrawer();
   if (!$('drawer').open) $('drawer').showModal();
-  $('drawer').querySelector('.drawer-scroll').scrollTop = 0;
+  $('drawer').querySelector('.drawer-scroll').scrollTop = 0; $('drawer').scrollTop = 0; // en el teléfono se desplaza el panel entero
 }
 function pickVersion(a) {
   const i = ed && byId(ed.id);
@@ -448,6 +488,15 @@ function showAsset(a) {
   $('dMedia').innerHTML = !a ? '<div class="empty">Todavía no hay un archivo para ver.</div>' : a.kind === 'video' ? `<video src="${esc(mediaUrl(a))}" ${ed && byId(ed.id) && thumbUrl(byId(ed.id)) && a.path === byId(ed.id).primary?.path ? `poster="${esc(thumbUrl(byId(ed.id)))}"` : ''} controls playsinline preload="metadata"></video>` : a.kind === 'audio' ? `<audio src="${esc(mediaUrl(a))}" controls preload="metadata"></audio>` : `<img src="${esc(mediaUrl(a))}" alt="${esc(a.name)}">`;
   const pub = ed && byId(ed.id) ? (ed.version || byId(ed.id).primary?.path) : null;
   $('dAssets').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.title === a?.path); b.classList.toggle('pub', !!pub && b.title === pub); });
+}
+// Sin video ni imagen todavía (en desarrollo), se ve lo que hay: hasta dónde llegó, el audio y el guion.
+function showDraft(i, audio) {
+  const doc = (i.documents || []).find(d => /^(guion|script)\./i.test(d.name)) || (i.documents || [])[0];
+  if (!doc && !audio) return showAsset(null);
+  $('dMedia').innerHTML = `<div class="d-draft">${i.status === 'development' ? stepsHtml(i) : ''}${audio ? `<audio src="${esc(mediaUrl(audio))}" controls preload="metadata"></audio>` : ''}${doc ? `<div class="d-guion"><span>${esc(doc.name)}</span><pre>Cargando…</pre></div>` : ''}</div>`;
+  if (!doc) return;
+  const put = t => { const pre = ed?.id === i.id && $('dMedia').querySelector('.d-guion pre'); if (pre) pre.textContent = t; };
+  fetch(mediaUrl(doc)).then(r => r.ok ? r.text() : Promise.reject()).then(t => put(t.trim() || 'El archivo está vacío.'), () => put('No se pudo leer el archivo.'));
 }
 // Un carrusel se mira lámina por lámina: flechas, contador, miniaturas, ← → y clic en la imagen.
 const COMPOSITE = /grilla|grid|contact|preview|sheet|mosaic/i;
@@ -467,25 +516,24 @@ function showSlide(n) {
   $('dAssets').querySelector('.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 function edWhen() { return ed.date && ed.time ? ed.date + 'T' + ed.time : null; }
+// La pieza tal como queda en el detalle, para medir con qué cuentas comparte horario.
+const edProbe = i => ({ id: i.id, networks: ed.nets, accounts: ed.accounts });
 function edDirty(i) { return edWhen() !== (when(i) ?? null) || !eqSet(ed.nets, nets(i)) || !eqSet(ed.collab, collab(i)) || !eqAcc(ed.accounts, accounts(i)) || (ed.version || null) !== (version(i) || null) || ed.note !== (ch(i)?.note || ''); }
 
+// Orden del detalle: Feedback (siempre primero, en cualquier estado; sólo el aviso de «cambió desde tu edición» va
+// antes), Pausada, Cuándo, Dónde, Estado en Postiz, Pausar, Estado, Copy, Descartar y Archivos.
 function renderDrawer() {
   const i = byId(ed.id); if (!i) return;
   const meta = [...(BRANDS.length > 1 ? [BRAND_LABEL[i.brand] || i.brand] : []), formatLabel(i), STATUS[i.status]];
   $('dMeta').innerHTML = meta.map(esc).join(' · ') + (ch(i) ? ' <span class="tag accent">Con cambios</span>' : '') + (i.trial ? ' <span class="tag">IG · Reel de prueba</span>' : '');
   const blocks = [];
-  // Pausada va primero: es el estado de la pieza y su acción principal.
+  // Si la pieza cambió después de editarla, frena la propuesta: el aviso y su salida van arriba de todo.
+  const changed = ch(i) && staleChange(i, ch(i));
+  if (changed) blocks.push(`<section class="block"><div class="pubrow"><span class="tag warn">${changed}</span><button class="ghost" data-restamp="${esc(i.id)}">Usar la versión actual</button></div></section>`);
+  // Feedback arriba de todo, en cualquier estado, con la versión adentro: todo en uno. Lo arma renderFeedback.
+  blocks.push('<section class="block fb" id="fbBlock"></section>');
+  // Pausada sigue: es el estado de la pieza y su acción principal.
   if (i.status === 'paused') { const prev = i.pause?.slot_anterior; blocks.push(`<section class="block"><h4>Pausada</h4><p class="hint" style="margin:0 0 10px">${i.pause?.desde ? 'Desde el ' + esc(dayLong(i.pause.desde.slice(0, 10))) : ''}${prev?.fecha ? ` · estaba para el ${esc(dayLong(prev.fecha))} · ${esc(prev.hora || '')}` : ''}</p><div class="pubrow">${ch(i)?.resume ? '<button class="secondary" id="keepPausedBtn">Dejarla pausada</button>' : '<button class="secondary" id="resumeBtn">Volver a Listos</button>'}</div></section>`); }
-  if (editable(i) && isVideoPiece(i)) {
-    const chosen = ed.version, newer = i.newer_final && chosen !== i.newer_final.path ? i.newer_final : null;
-    const name = p => p.split('/').pop();
-    blocks.push(`<section class="block"><h4>Versión</h4>
-      ${newer ? `<div class="version-alert"><span>Hay una versión más nueva en la carpeta de la pieza: <b>${esc(name(newer.path))}</b>${newer.modified ? ', del ' + esc(new Date(Number(newer.modified) / 1e6).toLocaleString(LOCALE, { timeZone: TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(/\./g, '')) : ''}. La que está ${i.status === 'scheduled' ? 'en Postiz' : 'en la cola'} es anterior.</span><button class="secondary" id="useNewer">Traer la última versión</button></div>` : ''}
-      <p class="hint" style="margin:0">${chosen ? `Se va a publicar <b>${esc(name(chosen))}</b> en vez de ${esc(name(i.primary.path))}. Guardá para sumarlo a la propuesta.` : `Se publica <b>${esc(i.id.startsWith('queue:') ? name(i.primary.path) + ' (copia en la cola)' : name(i.primary.path))}</b>. Tocá otro video de abajo del reproductor para cambiarla.`}</p>
-      <div class="pubrow" style="margin-top:8px">${chosen ? '<button class="ghost" id="versionBack">Volver a la anterior</button>' : ''}<button class="ghost" id="versionRefresh">${ICON.restore} Buscar versión nueva</button></div></section>`);
-  }
-  const fbFirst = ['review', 'development'].includes(i.status);
-  if (fbFirst) blocks.push('<section class="block fb" id="fbBlock"></section>');
   if (editable(i)) {
     const w = edWhen(), orig = i.scheduled;
     const moved = orig && w !== orig;
@@ -493,21 +541,9 @@ function renderDrawer() {
       <div class="when-summary">${w ? esc(whenLabel(w)) : '<span class="muted">Sin fecha</span>'}${moved ? `<small><s>${esc(whenLabel(orig))}</s></small>` : ''}</div>
       ${miniCal(i)}
       <div class="time-row"><div class="timefield"><button data-step="-15" aria-label="15 minutos antes">−</button><input id="edTime" value="${esc(ed.time)}" placeholder="--:--" inputmode="numeric" aria-label="Hora (24 h)" maxlength="5"><button data-step="15" aria-label="15 minutos después">+</button></div>
-      <div class="chips">${suggestedTimes().map(s => `<button class="chip ${ed.time === s ? 'on' : ''} ${ed.date && isTaken(ed.date, s, i.id) ? 'taken' : ''}" data-slot="${s}" title="${ed.date && isTaken(ed.date, s, i.id) ? 'Hay otra pieza cerca de este horario' : ''}">${s}</button>`).join('')}</div></div>
+      <div class="chips">${suggestedTimes().map(s => { const taken = ed.date && isTaken(ed.date, s, i.id, edProbe(i)); return `<button class="chip ${ed.time === s ? 'on' : ''} ${taken ? 'taken' : ''}" data-slot="${s}" title="${taken ? 'Hay otra pieza cerca de este horario en la misma cuenta' : ''}">${s}</button>`; }).join('')}</div></div>
       ${noFinal(i) ? '<p class="hint">Todavía no tiene archivo final: queda como reserva y se agenda cuando lo tenga.</p>' : w && !i.approved && i.status !== 'scheduled' ? '<p class="hint">Con fecha en el calendario queda aprobada al confirmar.</p>' : ''}</section>`);
-    const igOn = ed.nets.includes('instagram'), igAcc = acctOf('instagram', ed.accounts);
-    // La cuenta que publica no puede ser su propia collab.
-    const opts = collabOptions().filter(o => !igAcc || o.handle !== igAcc.profile);
-    const multi = NET_ORDER.filter(n => ed.nets.includes(n) && acctOpts(n).length > 1);
-    blocks.push(`<section class="block"><h4>Dónde</h4><div class="netpick">${NET_ORDER.map(n => { const a = acctOf(n, ed.accounts); return `<button class="${ed.nets.includes(n) ? 'on' : ''}" data-net="${n}" aria-pressed="${ed.nets.includes(n)}"><span class="net">${netIcon(n)}</span><span>${netName(n)}<small>${esc(a ? (a.profile ? '@' + a.profile.replace(/^@/, '') : a.label.replace(netName(n), '').trim()) : '')}</small></span><span class="check">${ICON.check}</span></button>`; }).join('')}</div>
-      ${ed.nets.length ? '' : '<p class="hint warn">Elegí al menos una red.</p>'}
-      ${igOn && canIgMode(i) ? igModeBlock(i) : ''}
-      ${multi.map(n => `<div class="sub-label">${netIcon(n).replace('<svg', '<svg style="width:12px;height:12px;fill:currentColor;stroke:none"')} Cuenta de ${netName(n)}</div><div class="segmented acct-pick">${acctOpts(n).map(a => `<button class="${acctOf(n, ed.accounts).id === a.id ? 'on' : ''}" data-acct="${n}" data-acct-id="${esc(a.id)}">${esc(a.brand || a.label.replace(netName(n), '').trim() || a.label)}<small>${a.profile ? '@' + esc(a.profile.replace(/^@/, '')) : ''}</small></button>`).join('')}</div>`).join('')}
-      ${opts.length ? `<div class="sub-label">${NET_ICON.instagram.replace('<svg', '<svg style="width:12px;height:12px;fill:currentColor;stroke:none"')} Collab en Instagram</div>
-      <div class="chips">${opts.map(o => `<button class="chip text ${ed.collab.includes(collabValue(o)) ? 'on' : ''}" data-collab="${esc(collabValue(o))}" ${!igOn || i.trial ? 'disabled' : ''}>${esc(o.label)}</button>`).join('')}<button class="chip text ${!ed.collab.length ? 'on' : ''}" data-collab="" ${!igOn || i.trial ? 'disabled' : ''}>Sin collab</button></div>
-      ${i.trial ? '<p class="hint">Es un reel de prueba: Instagram no admite collab en Trial.</p>' : !igOn ? '<p class="hint">Activá Instagram para sumar una collab.</p>' : ''}` : ''}
-      </section>`);
-    blocks.push(`<section class="block"><h4>Nota para el agendado</h4><textarea id="edNote" class="note" rows="2" placeholder="Algo que tenga que saber al programarla…">${esc(ed.note)}</textarea></section>`);
+    blocks.push(destBlock(i));
   }
   if (i.channels?.length) blocks.push(`<section class="block"><h4>Estado en Postiz</h4>${i.channels.map(c => `<div class="channel"><span class="net">${netIcon(normNet(c.network))}</span><span>${esc(c.account || netName(normNet(c.network)))}${c.trial ? ' · prueba' : ''}<small>${c.when ? esc(whenLabel(c.when.slice(0, 16))) : ''}${c.verified ? '' : ' · sin verificar'}</small></span><span class="state ${esc(c.state)}">${esc({ QUEUE: 'En cola', PUBLISHED: 'Publicado', ERROR: 'Error', DRAFT: 'Borrador' }[c.state] || c.state)}</span></div>`).join('')}${i.pending_channels?.length ? '<p class="hint warn">Quedan envíos en cola. Revisalos antes de cancelar o reprogramar.</p>' : ''}</section>`);
   if (i.status === 'scheduled') blocks.push(`<section class="block"><h4>Pausar</h4><div class="pubrow">${ch(i)?.pause ? '<button class="secondary" id="unpauseBtn">Cancelar la pausa</button>' : `<button class="secondary" id="pauseBtn">${ICON.pause} Pausar publicación</button>`}</div><p class="hint">${ch(i)?.pause ? 'Sale de Postiz cuando confirmes la propuesta en el chat.' : 'Sale de Postiz sin perderla y queda en Pausadas hasta que la vuelvas a agendar.'}</p></section>`);
@@ -518,24 +554,48 @@ function renderDrawer() {
     const pubWhen = i.status === 'published' ? (i.history_date ? esc(dayLong(i.history_date)) + (i.history_basis === 'scheduled_reference' ? ' (fecha de agenda)' : '') : 'Sin fecha registrada') + (i.publication ? ' · marcada por vos' : ' · confirmada por Postiz') : '';
     blocks.push(`<section class="block"><h4>Estado</h4><div class="segmented stage-pick">${[...STAGES, ['published', 'Publicado']].map(([k, l]) => `<button class="${i.status === k ? 'on' : ''}" data-stage="${k}" ${(k !== 'published' && locked) || postizPub ? 'disabled' : ''}>${l}</button>`).join('')}</div><p class="hint">${i.status === 'published' ? pubWhen + (i.publication ? '. Elegí otro estado para traerla de vuelta.' : '') : locked ? (i.status === 'scheduled' ? 'Está en Postiz: pausala o quitale la fecha para cambiarle el estado.' : 'Está pausada: volvela a Listos o agendala.') : i.status === 'ready' ? 'Aprobada: se puede agendar.' : 'Pasala a Listos cuando apruebes el final.'}</p></section>`);
   }
+  // El copy va debajo del estado, plegado a dos renglones: se lee poco y se abre para editarlo. Lo arma renderCopy.
+  if (hasCopy(i)) blocks.push('<section class="block copy-block" id="copyBlock"></section>');
   if (canDiscard(i)) blocks.push(`<section class="block"><h4>Descartar</h4><div class="pubrow"><button class="secondary danger" id="discardBtn">${ICON.trash} Descartar pieza</button></div><p class="hint">Deja de aparecer en el panel. No borra ningún archivo; la recuperás desde Tablero → Descartadas.</p></section>`);
   if (i.status === 'discarded') blocks.push(`<section class="block"><h4>Descartada</h4><p class="hint" style="margin:0 0 10px">${i.discard?.discarded_at ? 'El ' + esc(dayLong(i.discard.discarded_at.slice(0, 10))) : ''}${i.discard?.reason ? ' · ' + esc(i.discard.reason) : ''}</p><button class="secondary" id="restoreBtn">${ICON.restore} Recuperar</button></section>`);
-  const caption = i.captions?.instagram || i.captions?.tiktok || i.captions?.youtube_description || Object.values(i.captions || {}).find(v => typeof v === 'string') || '';
-  if (!fbFirst) blocks.push('<section class="block fb" id="fbBlock"></section>');
-  if (caption) blocks.push(`<details class="fold"><summary>Texto</summary><pre id="captionText">${esc(caption)}</pre><button class="ghost" id="copyCaption" style="margin-top:6px">${ICON.copy} Copiar</button></details>`);
   blocks.push(`<details class="fold"><summary>Archivos</summary><div class="doclinks">${(i.documents || []).map(d => `<a class="link" href="${esc(mediaUrl(d.path))}" target="_blank" rel="noopener">${esc(d.name)}</a>`).join('')}</div><div class="path">${esc(i.source || 'Creada en Postiz, sin archivo local')}</div>${i.sidecar ? `<div class="path">${esc(i.sidecar)}</div>` : ''}</details>`);
   $('dBody').innerHTML = blocks.join('');
   renderFeedback();
-  $('dFooter').innerHTML = editable(i) ? `${edWhen() ? '<button class="ghost" id="edClear">Quitar fecha</button>' : ''}${ch(i) ? '<button class="ghost danger" id="edRevert">Descartar cambios</button>' : ''}<button class="primary" id="edSave" ${edDirty(i) ? '' : 'disabled'}>Guardar</button>` : '';
+  // Guardar queda siempre a mano: una hora escrita sin salir del campo también cuenta. Si la hora ya pasó, se guarda
+  // igual en el borrador y el pie lo avisa; la propuesta no sale hasta corregirla.
+  const pastTime = (edDirty(i) || ch(i)) && edWhen() && edWhen() <= nowLocal();
+  $('dFooter').innerHTML = editable(i) ? `<p id="dSaveMessage" class="hint warn" role="status" ${pastTime ? '' : 'hidden'}>${pastTime ? 'Ese horario ya pasó. Podés guardar el borrador y corregirlo antes de programar.' : ''}</p>${edWhen() ? '<button class="ghost" id="edClear">Quitar fecha</button>' : ''}${ch(i) ? '<button class="ghost danger" id="edRevert">Descartar cambios</button>' : ''}<button class="primary" id="edSave">Guardar</button>` : '';
   wireDrawer(i);
 }
 
-// Se guarda al tocarlo, en la ficha que lee la cola al agendar (no en la propuesta). En Postiz no cambia nada.
-function igModeBlock(i) {
-  const live = liveIgTrial(i), pending = live !== null && live !== !!i.trial;
-  const hint = live === null ? (i.trial ? 'Reel de prueba: lo ven primero quienes no te siguen, sin collab.' : 'Directo al feed, con la collab.') + ' Se aplica al agendar.'
-    : pending ? `En Postiz sigue en ${live ? 'Trial' : 'feed'}: se aplica cuando la reagendes, con tu OK en el chat.` : 'Así está en Postiz. Si lo cambiás, se aplica cuando la reagendes.';
-  return `<div class="sub-label">${NET_ICON.instagram.replace('<svg', '<svg style="width:12px;height:12px;fill:currentColor;stroke:none"')} Instagram: feed o Trial</div><div class="segmented ig-mode" role="group" aria-label="Instagram: feed o Trial"><button class="${i.trial ? '' : 'on'}" data-igmode="feed" aria-pressed="${!i.trial}">Feed</button><button class="${i.trial ? 'on' : ''}" data-igmode="trial" aria-pressed="${!!i.trial}">Trial</button></div><p class="hint ${pending ? 'warn' : ''}">${esc(hint)}</p>`;
+// «Dónde», una lista agrupada tipo ajustes: una fila por red con su ícono en el color de la red (gris si está
+// apagada), la cuenta (desplegable si hay más de una) y un interruptor. Instagram encendido suma Formato (feed o
+// Trial) y Collab. Controles de 32 a 40 px de alto, nada más chico.
+const NET_TINT = { instagram: 'ig', tiktok: 'tt', youtube: 'yt', linkedin: 'li', facebook: 'fb', x: 'tt', threads: 'tt', bluesky: 'bs', pinterest: 'pi' };
+const handleOf = (n, a) => a ? (a.profile ? '@' + String(a.profile).replace(/^@/, '') : String(a.label || '').replace(new RegExp('^' + netName(n) + '\\s*', 'i'), '').trim() || a.brand || netName(n)) : '';
+function destBlock(i) {
+  const igAcc = acctOf('instagram', ed.accounts);
+  // La cuenta que publica no puede ser su propia collab.
+  const opts = collabOptions().filter(o => !igAcc || o.handle !== igAcc.profile);
+  const rows = NET_ORDER.map(n => {
+    const on = ed.nets.includes(n), a = acctOf(n, ed.accounts), list = acctOpts(n);
+    const acct = list.length > 1 && on
+      ? `<label class="dest-acct-pick"><select data-acct="${n}" aria-label="Cuenta de ${esc(netName(n))}">${list.map(x => `<option value="${esc(x.id)}" ${x.id === a?.id ? 'selected' : ''}>${esc(handleOf(n, x))}${x.brand && BRANDS.length > 1 ? ' · ' + esc(x.brand) : ''}</option>`).join('')}</select><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 6.5 3.5 3.5 3.5-3.5"/></svg></label>`
+      : `<span class="dest-acct">${esc(on ? handleOf(n, a) : 'No se publica')}</span>`;
+    return `<div class="dest-row ${on ? 'on' : ''}">
+      <div class="dest-main"><span class="dest-ic ${NET_TINT[n] || 'other'}">${netIcon(n)}</span><div class="dest-txt"><span class="dest-name">${esc(netName(n))}</span>${acct}</div>
+      <button class="switch" role="switch" data-net="${n}" aria-checked="${on}" aria-label="${on ? 'No publicar' : 'Publicar'} en ${esc(netName(n))}"><i></i></button></div>
+      ${n === 'instagram' && on ? igExtras(i, opts) : ''}</div>`;
+  }).join('');
+  return `<section class="block"><h4>Dónde</h4><div class="dest">${rows || '<p class="hint" style="margin:12px 14px">Todavía no hay redes conectadas.</p>'}</div>${ed.nets.length ? '' : '<p class="hint warn">Prendé al menos una red.</p>'}</section>`;
+}
+// Instagram: feed (default) o Trial se guarda al tocarlo, en la ficha que lee la cola al agendar (no en la propuesta);
+// en Postiz no cambia nada. En Trial no hay collab.
+function igExtras(i, opts) {
+  const can = canIgMode(i), live = liveIgTrial(i), pending = can && live !== null && live !== !!i.trial;
+  const mode = can ? `<div class="dest-opt"><span class="dest-k">Formato</span><div class="segmented dest-seg" role="group" aria-label="Instagram: feed o Trial"><button class="${i.trial ? '' : 'on'}" data-igmode="feed" aria-pressed="${!i.trial}">Feed</button><button class="${i.trial ? 'on' : ''}" data-igmode="trial" aria-pressed="${!!i.trial}">Trial</button></div></div>` : '';
+  const collabs = opts.length ? `<div class="dest-opt"><span class="dest-k">Collab</span>${i.trial ? '<span class="dest-note">En Trial no va collab</span>' : `<div class="dest-pills">${opts.map(o => { const on = ed.collab.includes(collabValue(o)); return `<button class="pill ${on ? 'on' : ''}" data-collab="${esc(collabValue(o))}" aria-pressed="${on}">${on ? ICON.check : ''}${esc(o.label)}</button>`; }).join('')}</div>`}</div>` : '';
+  return mode || collabs ? `<div class="dest-sub">${mode}${collabs}${pending ? `<p class="dest-warn">En Postiz sigue en ${live ? 'Trial' : 'feed'}: se aplica cuando la reagendes, con tu OK en el chat.</p>` : ''}</div>` : '';
 }
 function setIgMode(i, trial) {
   if (!!i.trial === trial) return;
@@ -560,18 +620,21 @@ function miniCal(i) {
 
 function wireDrawer(i) {
   const body = $('dBody'), refresh = () => { const top = $('drawer').querySelector('.drawer-scroll').scrollTop; renderDrawer(); $('drawer').querySelector('.drawer-scroll').scrollTop = top; };
-  body.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { ed.date = b.dataset.day; if (!ed.time || isTaken(ed.date, ed.time, i.id)) ed.time = freeTime(ed.date, i) || ed.time; refresh(); });
+  body.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { ed.date = b.dataset.day; if (!ed.time || isTaken(ed.date, ed.time, i.id, edProbe(i))) ed.time = freeTime(ed.date, i) || ed.time; refresh(); });
   body.querySelectorAll('[data-cal]').forEach(b => b.onclick = () => { ed.calStart = dateAdd(ed.calStart, Number(b.dataset.cal)); refresh(); });
   body.querySelectorAll('[data-slot]').forEach(b => b.onclick = () => { ed.time = b.dataset.slot; if (!ed.date) ed.date = todayStr() + 'T' + ed.time > addMinutes(nowLocal(), 30) ? todayStr() : dateAdd(todayStr(), 1); refresh(); });
   body.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { const base = parseTime($('edTime').value) || ed.time || slotsCfg()[1] || '18:30'; ed.time = fromMin(Math.round(toMin(base) / 5) * 5 + Number(b.dataset.step)); if (!ed.date) ed.date = dateAdd(todayStr(), 1); refresh(); });
   const t = $('edTime');
   if (t) {
     t.onkeydown = e => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); body.querySelector(`[data-step="${e.key === 'ArrowUp' ? 15 : -15}"]`).click(); $('edTime').focus(); } if (e.key === 'Enter') { t.blur(); } };
-    t.onchange = () => { const v = parseTime(t.value); if (v) { ed.time = v; if (!ed.date) ed.date = dateAdd(todayStr(), 1); } else if (t.value.trim()) toast('Escribí la hora en 24 h, por ejemplo 18:30.'); refresh(); };
+    // Escribir la hora no redibuja el panel: al perder el foco, redibujar reemplazaba Guardar entre el mousedown y el
+    // click, y el clic en Guardar se perdía.
+    t.oninput = () => { const v = parseTime(t.value); if (v) { ed.time = v; if (!ed.date) ed.date = dateAdd(todayStr(), 1); } };
+    t.onchange = () => { if (!parseTime(t.value)) toast('Escribí la hora en 24 h, por ejemplo 18:30.'); };
   }
   body.querySelectorAll('[data-net]').forEach(b => b.onclick = () => { const n = b.dataset.net; ed.nets = ed.nets.includes(n) ? ed.nets.filter(x => x !== n) : sortNets([...ed.nets, n]); refresh(); });
-  body.querySelectorAll('[data-acct]').forEach(b => b.onclick = () => {
-    const n = b.dataset.acct, a = acctOpts(n).find(x => x.id === b.dataset.acctId); if (!a) return;
+  body.querySelectorAll('select[data-acct]').forEach(b => b.onchange = () => {
+    const n = b.dataset.acct, a = acctOpts(n).find(x => x.id === b.value); if (!a) return;
     ed.accounts = normAcc({ ...ed.accounts, [n]: a.id });
     // Instagram: al cambiar de cuenta, la collab pasa a la que tenga configurada esa cuenta (colab_default).
     if (n === 'instagram' && !i.trial && Array.isArray(a.collab)) ed.collab = [...a.collab];
@@ -579,15 +642,19 @@ function wireDrawer(i) {
   });
   body.querySelectorAll('[data-igmode]').forEach(b => b.onclick = () => setIgMode(i, b.dataset.igmode === 'trial'));
   body.querySelectorAll('[data-collab]').forEach(b => b.onclick = () => { const v = b.dataset.collab; ed.collab = !v ? [] : ed.collab.includes(v) ? ed.collab.filter(x => x !== v) : [...ed.collab, v]; refresh(); });
-  const note = $('edNote'); if (note) note.oninput = () => { ed.note = note.value; $('edSave').disabled = !edDirty(i); };
-  if ($('edSave')) $('edSave').onclick = () => {
+  if ($('edSave')) $('edSave').onclick = async () => {
     const typed = $('edTime') && parseTime($('edTime').value); if (typed) ed.time = typed;
+    // El copy editado se guarda como feedback junto con lo demás; si fue lo único que cambió, Guardar sólo guarda eso.
+    const copied = copyDirty(); if (copied && !await saveCopy(i.id)) return;
+    if (!edDirty(i)) { $('drawer').close(); if (!copied) toast('No había cambios para guardar.'); return; }
     const patch = { version: ed.version, when: edWhen(), networks: ed.nets, collaborators: ed.nets.includes('instagram') ? ed.collab.filter(v => v !== acctOf('instagram', ed.accounts)?.profile) : [], accounts: normAcc(ed.accounts), note: ed.note };
-    if (commit(i, patch, 'Cambio guardado en tu propuesta.')) $('drawer').close();
+    if (!commit(i, patch)) return;
+    // Se cierra recién cuando el servidor confirmó el borrador; si falla, el botón queda para reintentar.
+    const button = $('edSave'); button.disabled = true; button.textContent = 'Guardando…';
+    await saving;
+    if (saveError) { button.disabled = false; button.textContent = 'Reintentar'; return; }
+    $('drawer').close(); toast('Cambio guardado en tu propuesta.', undo);
   };
-  if ($('useNewer')) $('useNewer').onclick = () => pickVersion(i.newer_final);
-  if ($('versionBack')) $('versionBack').onclick = () => pickVersion(i.primary);
-  if ($('versionRefresh')) $('versionRefresh').onclick = async () => { await refreshPostiz(); const now = byId(i.id); if (now && ed?.id === i.id) { toast(now.newer_final ? 'Hay una versión nueva en la carpeta de la pieza.' : 'Ya tenés la última versión.'); openItem(i.id); } };
   if ($('edClear')) $('edClear').onclick = () => { ed.date = ''; ed.time = ''; refresh(); };
   if ($('edRevert')) $('edRevert').onclick = () => { snapshot(); delete draft.changes[i.id]; queueSave(); render(); $('drawer').close(); toast('Volvió a como estaba.', undo); };
   body.querySelectorAll('[data-stage]').forEach(b => b.onclick = async () => {
@@ -602,7 +669,6 @@ function wireDrawer(i) {
   if ($('unpauseBtn')) $('unpauseBtn').onclick = () => { if (commit(i, { pause: false, when: i.scheduled }, 'Pausa cancelada.')) openItem(i.id); };
   if ($('keepPausedBtn')) $('keepPausedBtn').onclick = () => { if (commit(i, { resume: false }, 'Sigue pausada.')) openItem(i.id); };
   if ($('restoreBtn')) $('restoreBtn').onclick = () => setDiscard(i.id, 'restore');
-  if ($('copyCaption')) $('copyCaption').onclick = () => copyText($('captionText').textContent, 'Texto copiado.');
 }
 // ---------- feedback por video ----------
 // Feedback escrito o grabado por pieza, que persiste y se copia para Claude Code con la ubicación del archivo.
@@ -617,20 +683,40 @@ async function loadFeedback(id) {
   catch (e) { if (fb?.id === id) fb.error = e.message; }
   if (fb?.id === id) { fb.loading = false; renderFeedback(); }
 }
+// El copy que se le sube: el texto general de la pieza (el mismo para todas las redes) o, si lo editaste y Claude Code
+// todavía no lo aplicó, el de tu nota de copy. Editarlo no toca la ficha ni Postiz: queda como feedback, y se actualiza
+// cuando pegás ese feedback en Claude Code. Las historias no llevan copy.
+const pieceCaption = i => { const c = i.captions || {}; return c.general || c.instagram || c.tiktok || c.youtube_description || Object.entries(c).find(([k, v]) => typeof v === 'string' && v && !/_title$/.test(k))?.[1] || ''; };
+const hasCopy = i => i.format !== 'story' && (!!pieceCaption(i) || !!i.sidecar || !!i.source);
+const copyNote = () => [...(fb?.entries || [])].reverse().find(e => e.tipo === 'copy' && e.estado !== 'aplicado');
+const copyBase = i => copyNote()?.copy ?? pieceCaption(i);
+const copyDirty = () => { const i = fb && byId(fb.id); return !!i && hasCopy(i) && fb.copy != null && fb.copy.trim() !== copyBase(i).trim(); };
 function renderFeedback() {
   const box = $('fbBlock'); if (!box || !fb || fb.id !== ed?.id) return;
+  const i = byId(fb.id); if (!i) return;
+  const notes = fb.entries.filter(e => e.tipo !== 'copy');
   const pending = fb.entries.filter(fbOpen).length;
   const entry = e => `<div class="fb-entry ${e.estado === 'aplicado' ? 'done' : ''}"><div class="fb-head"><span>${esc(new Date(e.created_at).toLocaleString(LOCALE, { timeZone: TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace('.', ''))}</span>${e.video_time != null ? `<button class="chip text" data-seek="${e.video_time}" title="Ir a ese momento del video">en ${clock(e.video_time)}</button>` : ''}<span class="tag ${FB_STATE[e.estado]?.[1] ?? 'accent'}" ${e.estado === 'en_curso' && e.tomado_por ? `title="${esc(e.tomado_por)}"` : e.enviado_via ? `title="${esc('Enviada: ' + e.enviado_via)}"` : ''}>${FB_STATE[e.estado]?.[0] ?? 'Pendiente'}</span><button class="icon fb-del" data-fbdel="${esc(e.file)}" aria-label="Borrar nota">${ICON.trash}</button></div>${e.text ? `<p class="fb-text">${esc(e.text)}</p>` : ''}${e.audio ? `<audio src="${esc(mediaUrl(e.audio))}" controls preload="metadata"></audio>` : ''}${e.transcript ? `<p class="hint">«${esc(e.transcript)}»</p>` : ''}${e.cambio ? `<p class="hint">${esc(e.cambio)}</p>` : ''}</div>`;
   const rec = fb.rec, clip = fb.clip;
-  box.innerHTML = `<h4>Feedback del video <span class="aside">${fb.loading ? 'Cargando…' : pending ? pending + (pending === 1 ? ' pendiente' : ' pendientes') : ''}</span></h4>
+  // Versión a publicar, dentro del mismo bloque: la elegida debajo del reproductor o la de la pieza, y la más nueva
+  // de la carpeta si la hay.
+  const name = p => p.split('/').pop();
+  let version = '';
+  if (editable(i) && isVideoPiece(i)) {
+    const chosen = ed.version, newer = i.newer_final && chosen !== i.newer_final.path ? i.newer_final : null, cur = chosen || i.primary?.path;
+    const newerWhen = newer?.modified ? ', del ' + new Date(Number(newer.modified) / 1e6).toLocaleString(LOCALE, { timeZone: TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(/\./g, '') : '';
+    version = `<div class="fb-row"><span class="fb-k">Versión</span><span class="fb-v" title="${esc(cur || '')}">${esc(cur ? name(cur) : '—')}</span>${chosen ? '<span class="tag accent">elegida</span><button class="ghost" id="versionBack">Volver a la anterior</button>' : ''}<button class="ghost" id="versionRefresh" title="Vuelve a leer Postiz y tus carpetas">${ICON.restore} Buscar versión nueva</button></div>${newer ? `<div class="version-alert"><span>Hay una más nueva en la carpeta de la pieza: <b>${esc(name(newer.path))}</b>${esc(newerWhen)}.</span><button class="secondary" id="useNewer">Traer la última versión</button></div>` : ''}`;
+  }
+  box.innerHTML = `<h4>Feedback <span class="aside">${fb.loading ? 'Cargando…' : pending ? pending + (pending === 1 ? ' pendiente' : ' pendientes') : ''}</span></h4>
     ${fb.error ? `<p class="hint warn">${esc(fb.error)}</p>` : ''}
-    ${fb.entries.length ? `<div class="fb-list">${fb.entries.map(entry).join('')}</div>` : ''}
+    ${notes.length ? `<div class="fb-list">${notes.map(entry).join('')}</div>` : ''}
     <div class="fb-line">
-      <input id="fbText" class="fb-input" value="${esc(fb.text)}" placeholder="${rec ? 'Grabando…' : 'Escribí y dale Enter'}" ${fb.saving || rec ? 'disabled' : ''} aria-label="Feedback del video">
+      <input id="fbText" class="fb-input" value="${esc(fb.text)}" placeholder="${rec ? 'Grabando…' : 'Escribí y dale Enter'}" ${fb.saving || rec ? 'disabled' : ''} aria-label="Feedback de la pieza">
       ${rec ? `<button class="secondary rec on" id="fbRec" title="Detener y guardar">${ICON.stop}<span id="fbRecTime">${clock((performance.now() - rec.start) / 1000)}</span></button>` : `<button class="secondary rec" id="fbRec" title="Grabar audio" aria-label="Grabar audio" ${fb.saving ? 'disabled' : ''}>${ICON.mic}</button>`}
-      <button class="primary" id="fbCopy" ${fb.prompt ? '' : 'disabled'} title="Copia la ubicación del reel y tus notas pendientes">${ICON.copy} Copiar para Claude Code</button>
+      <button class="primary" id="fbCopy" ${fb.prompt ? '' : 'disabled'} title="Copia la ubicación de la pieza, tus notas pendientes y el copy editado">${ICON.copy} Copiar para Claude Code</button>
     </div>
-    ${clip ? `<div class="fb-retry"><audio src="${esc(clip.url)}" controls></audio><button class="secondary" id="fbRetry">Reintentar guardar</button><button class="ghost" id="fbDrop">Descartar</button></div><p class="hint warn">El audio no se guardó todavía.</p>` : ''}`;
+    ${clip ? `<div class="fb-retry"><audio src="${esc(clip.url)}" controls></audio><button class="secondary" id="fbRetry">Reintentar guardar</button><button class="ghost" id="fbDrop">Descartar</button></div><p class="hint warn">El audio no se guardó todavía.</p>` : ''}
+    ${version ? `<div class="fb-more">${version}</div>` : ''}`;
   $('fbText').oninput = e => { fb.text = e.target.value; };
   // Enter guarda la nota.
   $('fbText').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); if (fb.text.trim()) saveFeedback(fb.id, null); } };
@@ -638,6 +724,7 @@ function renderFeedback() {
   // Copiar marca las notas como enviadas: ya no viajan en «Revisar cambios» y nadie las vuelve a mandar.
   $('fbCopy').onclick = async () => {
     if (!fb.prompt) return; const id = fb.id;
+    if (copyDirty() && !confirm('Editaste el copy y no lo guardaste: no va en lo que copiás. ¿Copiar igual?')) return;
     if (!await copyText(fb.prompt, 'Copiado: pegalo en Claude Code.')) return;
     try { const r = await api('feedback/sent', post({ id })); fbCount(id, r.entries); if (fb?.id === id) { Object.assign(fb, { entries: r.entries, prompt: r.prompt }); renderFeedback(); } } catch {}
   };
@@ -645,6 +732,47 @@ function renderFeedback() {
   if ($('fbDrop')) $('fbDrop').onclick = () => { if (confirm('¿Descartar este audio sin guardarlo?')) { URL.revokeObjectURL(fb.clip.url); fb.clip = null; renderFeedback(); } };
   box.querySelectorAll('[data-seek]').forEach(b => b.onclick = () => { const v = fbVideo(); if (v) { v.currentTime = Number(b.dataset.seek); v.play().catch(() => {}); } });
   box.querySelectorAll('[data-fbdel]').forEach(b => b.onclick = () => removeFeedback(fb.id, b.dataset.fbdel));
+  if ($('useNewer')) $('useNewer').onclick = () => pickVersion(i.newer_final);
+  if ($('versionBack')) $('versionBack').onclick = () => pickVersion(i.primary);
+  if ($('versionRefresh')) $('versionRefresh').onclick = async () => { await refreshPostiz(); const now = byId(i.id); if (now && ed?.id === i.id) { toast(now.newer_final ? 'Hay una versión nueva en la carpeta de la pieza.' : 'Ya tenés la última versión.'); openItem(i.id); } };
+  renderCopy();
+}
+// Copy debajo de Estado, plegado a dos renglones; «Ver todo y editar» lo abre entero. En una pieza publicada es de
+// sólo lectura.
+function renderCopy() {
+  const box = $('copyBlock'); if (!box || !fb || fb.id !== ed?.id) return;
+  const i = byId(fb.id); if (!i) return;
+  const cn = copyNote(), base = copyBase(i), val = fb.copy ?? base, ro = !editable(i), dirty = copyDirty();
+  const open = fb.copyOpen || dirty || !base;
+  box.innerHTML = `<h4>Copy ${cn ? `<span class="tag ${FB_STATE[cn.estado]?.[1] ?? 'accent'}">Editado · ${(FB_STATE[cn.estado]?.[0] ?? 'Pendiente').toLowerCase()}</span>` : ''}<span class="aside">${val ? `<button class="icon copy-ic" id="fbCopyCaption" title="Copiar el texto" aria-label="Copiar el copy">${ICON.copy}</button>` : ''}</span></h4>
+    ${open ? `<textarea id="fbCopyText" class="fb-copytext" ${ro ? 'readonly' : ''} aria-label="Copy de la publicación" placeholder="${ro ? '' : 'Todavía no tiene copy: escribilo acá…'}" ${fb.savingCopy ? 'disabled' : ''}>${esc(val)}</textarea>
+      <div class="fb-copy-actions"><span class="copy-save" ${dirty ? '' : 'hidden'}><button class="secondary" id="fbCopySave">Guardar copy</button><button class="ghost" id="fbCopyUndo">Deshacer</button></span>${cn && !ro ? '<button class="ghost" id="fbCopyDrop" title="Saca tu edición; queda el copy de la pieza">Descartar edición</button>' : ''}${base ? '<button class="ghost copy-less" id="fbCopyLess">Ver menos</button>' : ''}<span class="hint copy-save-hint" ${dirty ? '' : 'hidden'}>Queda como feedback: se actualiza cuando lo pegás en Claude Code.</span></div>`
+    : `<button class="copy-preview" id="fbCopyMore" title="Ver todo el copy"><span>${esc(val.replace(/\n\s*\n/g, '\n'))}</span></button><button class="link copy-more" id="fbCopyMore2">Ver todo${ro ? '' : ' y editar'}</button>`}`;
+  const ct = $('fbCopyText');
+  if (ct) ct.oninput = () => { fb.copy = ct.value; const d = copyDirty(); box.querySelector('.copy-save').hidden = !d; box.querySelector('.copy-save-hint').hidden = !d; };
+  const more = () => { fb.copyOpen = true; renderCopy(); $('fbCopyText')?.focus(); };
+  if ($('fbCopyMore')) $('fbCopyMore').onclick = more;
+  if ($('fbCopyMore2')) $('fbCopyMore2').onclick = more;
+  if ($('fbCopyLess')) $('fbCopyLess').onclick = () => { if (copyDirty() && !confirm('Editaste el copy y no lo guardaste. ¿Descartar el cambio?')) return; fb.copy = null; fb.copyOpen = false; renderCopy(); };
+  if ($('fbCopySave')) $('fbCopySave').onclick = () => saveCopy(fb.id);
+  if ($('fbCopyUndo')) $('fbCopyUndo').onclick = () => { fb.copy = null; renderCopy(); };
+  if ($('fbCopyDrop')) $('fbCopyDrop').onclick = async () => { await removeFeedback(fb.id, cn.file); if (fb?.id === i.id) { fb.copy = null; renderFeedback(); } };
+  if ($('fbCopyCaption')) $('fbCopyCaption').onclick = () => copyText(val, 'Copy copiado.');
+}
+async function saveCopy(id) {
+  if (!copyDirty()) return true;
+  const text = fb.copy.trim(); if (!text) { toast('El copy no puede quedar vacío.'); return false; }
+  fb.savingCopy = true; renderFeedback();
+  try {
+    const r = await api('feedback', post({ id, copy: text }));
+    fbCount(id, r.entries);
+    if (fb?.id === id) { Object.assign(fb, { entries: r.entries, prompt: r.prompt, dir: r.dir, copy: null, savingCopy: false }); renderFeedback(); }
+    toast('Copy guardado: se actualiza cuando pegues el feedback en Claude Code.');
+    return true;
+  } catch (e) {
+    if (fb?.id === id) { fb.savingCopy = false; renderFeedback(); }
+    toast('No se guardó el copy: ' + e.message); return false;
+  }
 }
 async function startRec() {
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return toast('Este navegador no permite grabar audio.');
@@ -784,7 +912,8 @@ function autoPlan() {
   let cands = data.items.filter(i => inScope(i) && backlogGroupOf(i) === 'ready');
   if (rebalance) cands = cands.concat(data.items.filter(i => inScope(i) && editable(i) && !noFinal(i) && when(i) && when(i) >= from + 'T00:00' && when(i) > soon));
   const candIds = cands.map(i => i.id);
-  const fixed = timeline(candIds).map(i => ({ item: i, when: when(i) }));
+  // Sólo esquiva las piezas que salen por alguna de las cuentas de las que reparte.
+  const fixed = timeline(candIds).filter(f => cands.some(c => sharesAccount(c, f))).map(i => ({ item: i, when: when(i) }));
   const recent = data.items.filter(i => i.status === 'published' && i.history_date && i.history_date >= dateAdd(from, -4)).map(i => ({ item: i, when: i.history_date + 'T' + ((i.publication_reference || '').slice(11, 16) || '12:00') }));
   const sim = topicModel([...cands, ...fixed.map(f => f.item), ...recent.map(r => r.item)]);
   const free = [];
@@ -859,30 +988,40 @@ function applyAuto() {
 const staleChange = (i, c) => !c.fingerprint ? '' : JSON.stringify(i.primary) !== JSON.stringify(c.primary) ? 'Cambió el archivo final' : i.fingerprint !== c.fingerprint ? 'Se actualizó su ficha' : '';
 function renderProposal() {
   $('proposalResult').hidden = true;
-  let stale = 0;
+  // Cada tarjeta: título, fecha y sólo los avisos. Lo que traba el envío va primero, con el motivo en el pie.
+  const now = nowLocal(), stale = [], past = [], gone = [];
   const rows = Object.entries(draft.changes).map(([id, c]) => {
-    const i = byId(id); if (!i) return `<div class="prow"><div class="thumb ph">?</div><div><div class="prow-title">${esc(id)}</div><div class="prow-notes"><span class="tag warn">Ya no está en el tablero</span></div></div><button class="icon" data-revert="${esc(id)}" title="Quitar de la propuesta">${ICON.trash}</button></div>`;
-    const notes = [], changed = staleChange(i, c);
-    if (changed) { stale++; notes.push(`<span class="tag warn">${changed}</span><button class="link small" data-restamp="${esc(id)}">Usar la versión actual</button>`); }
-    if (c.when && noFinal(i)) notes.push('<span class="tag nofinal">Sin final: queda como reserva</span>');
-    else if (c.when && !i.approved && i.status !== 'scheduled') notes.push('<span class="tag">Se aprueba al confirmar</span>');
-    if (c.when && c.when <= nowLocal()) notes.push('<span class="tag warn">La hora ya pasó</span>');
-    if (c.when && timeline([id]).some(j => minutesBetween(when(j), c.when) < 30)) notes.push('<span class="tag warn">Coincide con otra pieza</span>');
-    if (c.networks) notes.push(`<span class="tag">Redes: ${c.networks.map(netName).join(', ')}</span>`);
-    if (c.collaborators) notes.push(`<span class="tag">Collab: ${c.collaborators.length ? c.collaborators.map(collabLabel).join(', ') : 'ninguna'}</span>`);
-    if (c.version) notes.push(`<span class="tag accent">Versión: ${esc(c.version.split('/').pop())}</span>`);
-    if (c.accounts) for (const [n, id] of Object.entries(c.accounts)) { const a = acctOpts(n).find(x => x.id === id); if (a) notes.push(`<span class="tag accent">${netName(n)} desde ${esc(a.profile ? '@' + a.profile : a.brand || a.label)}</span>`); }
-    if (i.trial && nets(i).includes('instagram')) notes.push('<span class="tag">IG en reel de prueba</span>');
-    if (c.note) notes.push(`<span class="tag">Nota: ${esc(c.note.slice(0, 60))}</span>`);
-    if (c.pause) notes.unshift('<span class="tag accent">Se pausa: sale de Postiz</span>');
-    if (c.resume) notes.unshift('<span class="tag">Sale de la pausa</span>');
+    const i = byId(id);
+    if (!i) { gone.push(id); return { sort: '0', html: `<div class="prow blocked"><div class="thumb ph">?</div><div style="min-width:0"><div class="prow-title">${esc(id.replace(/^\w+:/, ''))}</div><div class="prow-notes"><span class="tag warn">Ya no está en el tablero: quitala</span></div></div><button class="icon" data-revert="${esc(id)}" title="Quitar de la propuesta">${ICON.trash}</button></div>` }; }
+    const warns = [], extra = [], changed = staleChange(i, c), late = c.when && c.when <= now;
+    if (changed) { stale.push(i); warns.push(`<span class="tag warn">${changed}</span><button class="link small" data-restamp="${esc(id)}">Usar la versión actual</button>`); }
+    if (late) { past.push(i); warns.push('<span class="tag warn">La hora ya pasó: elegí otra</span>'); }
+    if (c.when && noFinal(i)) warns.push('<span class="tag nofinal">Sin final: queda como reserva</span>');
+    if (c.when && timeline([id]).some(j => sharesAccount(i, j) && minutesBetween(when(j), c.when) < 30)) warns.push('<span class="tag warn">Coincide con otra pieza</span>');
+    if (c.pause) extra.push('sale de Postiz');
+    if (c.resume) extra.push('sale de la pausa');
+    if (c.collaborators) extra.push(c.collaborators.length ? 'con ' + c.collaborators.map(collabLabel).join(', ') : 'sin collab');
+    if (c.networks) extra.push(c.networks.map(netName).join(', '));
+    if (c.accounts) for (const [n, aid] of Object.entries(c.accounts)) { const a = acctOpts(n).find(x => x.id === aid); if (a) extra.push(`${netName(n)} desde ${a.profile ? '@' + a.profile : a.brand || a.label}`); }
+    if (c.version) extra.push('versión ' + c.version.split('/').pop());
+    if (i.trial && nets(i).includes('instagram')) extra.push('IG de prueba');
+    if (c.note) extra.push('con nota');
     const target = c.pause ? 'Pausada' : c.resume && !c.when ? 'Listo, sin fecha' : whenLabel(c.when);
     const change = c.when === (i.scheduled ?? null) && !c.pause && !c.resume ? esc(whenLabel(c.when)) : `${i.scheduled ? `<s>${esc(whenLabel(i.scheduled))}</s> → ` : ''}<b>${esc(target)}</b>`;
-    return { sort: c.when || '9999', html: `<div class="prow"><button class="prow-open" data-open="${esc(id)}" aria-label="Abrir ${esc(i.title)}">${thumb(i)}</button><div style="min-width:0"><button class="prow-title" data-open="${esc(id)}">${esc(i.title)}</button><div class="prow-change">${change}</div>${notes.length ? `<div class="prow-notes">${notes.join('')}</div>` : ''}</div><button class="icon" data-revert="${esc(id)}" title="Quitar de la propuesta">${ICON.trash}</button></div>` };
-  }).map(r => typeof r === 'string' ? { sort: '', html: r } : r).sort((a, b) => a.sort.localeCompare(b.sort));
+    const blocked = !!(changed || late);
+    return { sort: (blocked ? '0' : '1') + (c.when || '9999'), html: `<div class="prow${blocked ? ' blocked' : ''}"><button class="prow-open" data-open="${esc(id)}" aria-label="Abrir ${esc(i.title)}">${thumb(i)}</button><div style="min-width:0"><button class="prow-title" data-open="${esc(id)}">${esc(i.title)}</button><div class="prow-change">${change}${extra.length ? `<span class="prow-extra"> · ${esc(extra.join(' · '))}</span>` : ''}</div>${warns.length ? `<div class="prow-notes">${warns.join('')}</div>` : ''}</div><button class="icon" data-revert="${esc(id)}" title="Quitar de la propuesta">${ICON.trash}</button></div>` };
+  }).sort((a, b) => a.sort.localeCompare(b.sort));
   const fbRows = feedbackItems().map(i => `<div class="prow"><button class="prow-open" data-open="${esc(i.id)}" aria-label="Abrir ${esc(i.title)}">${thumb(i)}</button><div style="min-width:0"><button class="prow-title" data-open="${esc(i.id)}">${esc(i.title)}</button><div class="prow-notes"><span class="tag accent">${i.feedback_pending === 1 ? '1 nota de contenido' : i.feedback_pending + ' notas de contenido'}</span></div></div></div>`);
   $('proposalList').innerHTML = (rows.length ? `<div class="sub-label" style="margin-top:0">Agenda</div>` + rows.map(r => r.html).join('') : '') + (fbRows.length ? `<div class="sub-label"${rows.length ? '' : ' style="margin-top:0"'}>Contenido · feedback sin aplicar</div>` + fbRows.join('') : '') || '<div class="empty">No quedan cambios.</div>';
-  $('prepare').disabled = (!rows.length && !fbRows.length) || !!stale || Object.values(draft.changes).some(c => c.when && c.when <= nowLocal());
+  // Si el botón queda apagado, el pie dice por qué y cómo destrabarlo.
+  const who = list => list.length === 1 ? `«${esc(list[0].title)}»` : `${list.length} piezas`;
+  const why = saveError ? 'No se guardó el borrador: recargá.'
+    : !rows.length && !fbRows.length ? 'No hay cambios para mandar.'
+    : [gone.length && `${gone.length === 1 ? '1 cambio es de una pieza que ya no está' : gone.length + ' cambios son de piezas que ya no están'} en el tablero. <button class="link small" data-revert-gone>Quitar${gone.length === 1 ? 'lo' : 'los'}</button>`,
+       past.length && `${who(past)} ${past.length === 1 ? 'tiene la hora vencida: elegí otra o quitala' : 'tienen la hora vencida: elegí otra o quitalas'}.`,
+       stale.length && `${who(stale)} ${stale.length === 1 ? 'cambió' : 'cambiaron'} desde tu edición.${stale.length > 1 ? ' <button class="link small" data-restamp-all>Usar la versión actual en todas</button>' : ''}`].filter(Boolean).join(' ');
+  $('prepareWhy').innerHTML = why; $('prepareWhy').hidden = !why;
+  $('prepare').disabled = !!why;
   $('discardAll').disabled = !rows.length;
 }
 
@@ -918,6 +1057,10 @@ function edgeScroll() {
   const d = drag; if (!d?.active) return;
   const edge = 80, v = d.ly < edge ? d.ly - edge : d.ly > innerHeight - edge ? d.ly - (innerHeight - edge) : 0;
   if (v) { window.scrollBy(0, Math.round(Math.max(-edge, Math.min(edge, v)) / 4)); overAt(d.lx, d.ly); }
+  // En el tablero, cerca de los costados se corren las columnas.
+  const box = view === 'pieces' && $('piecesList'), r = box && box.getBoundingClientRect();
+  const h = !box ? 0 : d.lx < r.left + edge ? d.lx - r.left - edge : d.lx > r.right - edge ? d.lx - (r.right - edge) : 0;
+  if (h) { box.scrollLeft += Math.round(Math.max(-edge, Math.min(edge, h)) / 4); overAt(d.lx, d.ly); }
   d.raf = requestAnimationFrame(edgeScroll);
 }
 function endDrag() { if (!drag) return; cancelAnimationFrame(drag.raf); drag.ghost?.remove(); drag.el.classList.remove('lifted'); document.body.classList.remove('dragging'); document.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over')); drag = null; }
@@ -942,7 +1085,8 @@ document.addEventListener('click', e => {
   if (t.closest('.close')) { const dlg = t.closest('dialog'); if (dlg.id === 'drawer') closeDrawer(); else dlg.close(); return; }
   const tab = t.closest('.tabs [data-view]'); if (tab) { view = tab.dataset.view; store.set('view', view); render(); return; }
   const wk = t.closest('[data-week]'); if (wk) { week = monday(wk.dataset.week); render(); scrollTo({ top: 0 }); return; }
-  const rs = t.closest('[data-restamp]'); if (rs) { const i = byId(rs.dataset.restamp), c = draft.changes[rs.dataset.restamp]; if (i && c) { snapshot(); draft.changes[i.id] = { ...c, fingerprint: i.fingerprint, primary: i.primary }; queueSave(); render(); renderProposal(); } return; }
+  if (t.closest('[data-restamp-all]')) { snapshot(); for (const [id, c] of Object.entries(draft.changes)) { const i = byId(id); if (i && staleChange(i, c)) draft.changes[id] = { ...c, fingerprint: i.fingerprint, primary: i.primary }; } queueSave(); render(); renderProposal(); return; }
+  const rs = t.closest('[data-restamp]'); if (rs) { const i = byId(rs.dataset.restamp), c = draft.changes[rs.dataset.restamp]; if (i && c) { snapshot(); draft.changes[i.id] = { ...c, fingerprint: i.fingerprint, primary: i.primary }; queueSave(); render(); if ($('proposal').open) renderProposal(); if ($('drawer').open && ed?.id === i.id) renderDrawer(); } return; }
   const g = t.closest('[data-group]'); if (g) { group = g.dataset.group; store.set('group', group); render(); return; }
   const older = t.closest('[data-older]'); if (older) { showOlder[older.dataset.older] = !showOlder[older.dataset.older]; render(); return; }
   const pg = t.closest('[data-page]'); if (pg) { pages[pg.dataset.page] = Number(pg.dataset.to); render(); return; }
@@ -951,6 +1095,7 @@ document.addEventListener('click', e => {
   const dis = t.closest('[data-discard]'); if (dis) { setDiscard(dis.dataset.discard, 'discard'); return; }
   const res = t.closest('[data-restore]'); if (res) { setDiscard(res.dataset.restore, 'restore'); return; }
   const tm = t.closest('[data-time]'); if (tm) { const i = byId(tm.dataset.time); if (i && when(i)) openTimePop(i, tm); return; }
+  if (t.closest('[data-revert-gone]')) { snapshot(); for (const id of Object.keys(draft.changes)) if (!byId(id)) delete draft.changes[id]; queueSave(); render(); renderProposal(); return; }
   const rev = t.closest('[data-revert]'); if (rev) { snapshot(); delete draft.changes[rev.dataset.revert]; queueSave(); render(); renderProposal(); return; }
   const as = t.closest('#autoSlots [data-aslot]'); if (as) { as.classList.toggle('on'); renderAuto(); return; }
   const op = t.closest('[data-open]'); if (op) { openItem(op.dataset.open); return; }
@@ -974,7 +1119,7 @@ $('weekTitle').onclick = () => { try { $('jumpDate').showPicker(); } catch { $('
 $('jumpDate').onchange = () => { if ($('jumpDate').value) { week = monday($('jumpDate').value); render(); } };
 ['search', 'brand', 'format', 'age', 'showRefs'].forEach(id => $(id).addEventListener(id === 'search' ? 'input' : 'change', () => { if (id === 'brand' || id === 'format') store.set(id, $(id).value); render(); }));
 // Cerrar el detalle con cambios sin guardar pide confirmación (Esc, clic afuera o la X).
-const drawerDirty = () => { const i = ed && byId(ed.id); return !!i && ((editable(i) && edDirty(i)) || (fb?.id === i.id && !!fb.text.trim())); };
+const drawerDirty = () => { const i = ed && byId(ed.id); return !!i && ((editable(i) && edDirty(i)) || (fb?.id === i.id && (!!fb.text.trim() || copyDirty()))); };
 function closeDrawer() { if (drawerDirty() && !confirm('Tenés cambios sin guardar en esta pieza. ¿Cerrar igual?')) return; $('drawer').close(); }
 $('drawer').addEventListener('cancel', e => { if (drawerDirty()) { e.preventDefault(); closeDrawer(); } });
 $('drawer').addEventListener('close', () => { if (fb?.rec) fb.rec.rec.stop(); $('dMedia').querySelectorAll('video,audio').forEach(v => v.pause()); $('dMedia').innerHTML = ''; ed = null; if ($('proposal').open && $('proposalResult').hidden) renderProposal(); });
@@ -1061,7 +1206,8 @@ function applyConfig() {
   BRANDS = cfg().brands || [];
   const nets = (cfg().networks || []).map(n => n.id);
   NET_ORDER = [...PREFERRED_ORDER.filter(n => nets.includes(n)), ...nets.filter(n => !PREFERRED_ORDER.includes(n))];
-  week = monday(todayStr());
+  // Con la zona horaria de la config, «hoy» puede caer en otra semana; la de la dirección se respeta.
+  week = weekFromUrl() || monday(todayStr());
 }
 // Todavía no hay config: la app explica qué falta en vez de mostrar un tablero vacío.
 function showSetup(e) {

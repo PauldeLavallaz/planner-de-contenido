@@ -272,9 +272,13 @@ def aplicar_portada(dst, final, t, slug):
     img.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', f'{t:.3f}', '-i', str(final), '-frames:v', '1', '-q:v', '2', str(img)], check=True)
     tmp = dst.with_name(dst.stem + '.portada' + dst.suffix)
+    # Audio AAC 48 kHz estéreo y color bt709 declarado: TikTok dejó en ERROR, sin mensaje, un reel con audio 44,1 kHz
+    # mono y color sin etiquetar; el mismo video así normalizado entró.
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(final), '-i', str(img), '-filter_complex',
-                    "[1:v][0:v]scale2ref[c][v];[v][c]overlay=0:0:enable='eq(n,0)'[o]", '-map', '[o]', '-map', '0:a?',
-                    '-c:v', 'libx264', '-preset', 'medium', '-crf', '17', '-pix_fmt', 'yuv420p', '-c:a', 'copy',
+                    "[1:v][0:v]scale2ref[c][v];[v][c]overlay=0:0:enable='eq(n,0)',"
+                    "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709[o]", '-map', '[o]', '-map', '0:a?',
+                    '-c:v', 'libx264', '-preset', 'medium', '-crf', '17', '-pix_fmt', 'yuv420p',
+                    '-c:a', 'aac', '-b:a', '256k', '-ar', '48000', '-ac', '2',
                     '-movflags', '+faststart', str(tmp)], check=True)
     tmp.replace(dst)
     return {'t': round(t, 3), 'imagen': str(img), 'primer_cuadro': True}

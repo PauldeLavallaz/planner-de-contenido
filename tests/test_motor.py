@@ -307,6 +307,30 @@ class Motor(unittest.TestCase):
         self.assertIn('◆', out)
         self.assertIn('piezas', self.run_py('carpetas.py', 'probar').stdout)
 
+    def test_zz_texto_de_la_publicacion(self):
+        # El copy que muestra el detalle: un kit sin sección de texto toma el de caption.txt, «## Copy de las láminas»
+        # no es el texto de la publicación y «## Copy» puede apuntar a otro archivo.
+        d = self.content / '2-por-revisar/reel-con-kit'
+        d.mkdir(parents=True)
+        try:
+            (d / 'final.mp4').write_bytes(os.urandom(1024))
+            (d / 'publish_kit.md').write_text('## Título\nReel con kit\n\n## Copy de las láminas\nLámina 1\n')
+            (d / 'caption.txt').write_text('El texto que se publica')
+            it = self.item(self.inventory(), 'piece:2-por-revisar/reel-con-kit')
+            self.assertEqual(it['title'], 'Reel con kit')
+            self.assertEqual(it['captions']['general'], 'El texto que se publica')
+            (d / 'caption.txt').unlink()
+            (d / 'publish_kit.md').write_text('## Copy\ncopy.txt\n')
+            (d / 'copy.txt').write_text('Desde copy.txt')
+            self.assertEqual(self.item(self.inventory(), 'piece:2-por-revisar/reel-con-kit')['captions']['general'], 'Desde copy.txt')
+            # Una nota de feedback dentro de la pieza no cambia su huella: no hace vieja una edición de agenda.
+            before = self.item(self.inventory(), 'piece:2-por-revisar/reel-con-kit')['fingerprint']
+            (d / 'feedback').mkdir()
+            (d / 'feedback/20261021-120000-abcd-planner.json').write_text('{}')
+            self.assertEqual(self.item(self.inventory(), 'piece:2-por-revisar/reel-con-kit')['fingerprint'], before)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
 
 if __name__ == '__main__':
     unittest.main()

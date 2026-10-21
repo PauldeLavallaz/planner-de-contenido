@@ -92,17 +92,30 @@ def read_meta(folder):
     return {}, None
 
 
+CAPTION_SECTION = re.compile(r'(caption|texto|descripci|copy\b(?!\s+de\s+(las\s+)?l[áa]minas))')
+
+
 def read_publish_kit(folder):
-    """Texto de publicación de la pieza: publish_kit.md por secciones, o un caption.txt plano."""
+    """Texto de publicación de la pieza: publish_kit.md por secciones, o un caption.txt plano.
+    Un kit sin sección de texto («## Caption», «## Copy»…) toma el texto del siguiente archivo de caption_files;
+    «## Copy de las láminas» es el texto de un carrusel, no el de la publicación."""
     if not folder or not folder.is_dir():
         return {}
+    out = None
     for name in CFG['content'].get('caption_files') or []:
         f = folder / name
         if not f.is_file():
             continue
         text = f.read_text(encoding='utf-8', errors='replace')
         if not re.search(r'^##\s+', text, re.M):
-            return {'caption': text.strip()}
+            if out is None:
+                return {'caption': text.strip()}
+            if text.strip():
+                out['caption'] = text.strip()
+                return out
+            continue
+        if out is not None:
+            continue
         sections, cur = {}, None
         for line in text.splitlines():
             m = re.match(r'^##\s+(.*)', line)
@@ -117,8 +130,13 @@ def read_publish_kit(folder):
             block = re.search(r'```[a-z]*\n(.*?)\n```', txt, re.S)
             if block:
                 txt = block.group(1).strip()
-            if (k.startswith('caption') or k.startswith('texto') or k.startswith('copy') or k.startswith('descripci')) and 'caption' not in out:
-                out['caption'] = txt
+            if CAPTION_SECTION.match(k) and 'caption' not in out:
+                # Una sección que sólo apunta a otro archivo («## Copy» → copy.txt) toma el texto de ese archivo.
+                ref = re.match(r'^([\w.-]+\.(?:txt|md))\b', txt)
+                if ref and len(txt) < 80 and (folder / ref.group(1)).is_file():
+                    txt = (folder / ref.group(1)).read_text(encoding='utf-8', errors='replace').strip()
+                if txt:
+                    out['caption'] = txt
             elif k in {'title', 'titulo', 'título'} and 'title' not in out:
                 out['title'] = txt.splitlines()[0].strip() if txt else ''
             elif k.startswith('linkedin') and 'linkedin' not in out:
@@ -130,8 +148,9 @@ def read_publish_kit(folder):
             elif k.startswith('portada') or k.startswith('cover'):
                 if m := re.search(r'\d+(?:[.,]\d+)?', txt):
                     out.setdefault('portada', float(m.group(0).replace(',', '.')))
-        return out
-    return {}
+        if 'caption' in out:
+            return out
+    return out or {}
 
 
 def find_final(folder):
@@ -215,7 +234,9 @@ def describe(path, src):
     if isinstance(brand, dict):
         brand = brand.get('name') or brand.get('slug')
     title = meta.get('titulo') or meta.get('title') or meta.get('nombre') or meta.get('name') or kit.get('title') or humanize(path.stem if not is_dir else path.name)
-    finger = [p for p in (meta_file, final, path) if p]
+    # La huella cambia con la ficha, el final o las láminas; no con la carpeta, que cambia cuando el planner guarda
+    # una nota en feedback/ (una nota no hace vieja una edición de agenda).
+    finger = [p for p in (meta_file, final, *slides, None if is_dir else path) if p]
     fingerprint = str(max((Path(p).stat().st_mtime_ns for p in finger if Path(p).exists()), default=0))
     caption = kit.get('caption') or meta.get('caption') or meta.get('texto') or ''
     captions = {'general': caption} if caption else {}
