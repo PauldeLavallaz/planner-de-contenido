@@ -3,10 +3,11 @@
 La pestaña **Historias** del planner muestra la semana en horizontal: un día por fila, sus historias una al lado de la otra y, fijo a la derecha, el recurso u oferta de ese día. Desde ahí:
 
 - elegís por día si sale **por Postiz** o **no se publica**, a qué hora (15:00 si no elegís otra) y desde qué cuenta de Instagram;
-- reordenás historias arrastrándolas, las pasás a otro día, movés la secuencia entera con ⋮⋮ o tocando el día (también a otra semana), y con **Dejar libre** corrés un día para abajo la secuencia de ese día y las que le siguen;
+- reordenás historias arrastrándolas, las pasás a otro día, movés la secuencia entera con ⋮⋮ o tocando el día (también a otra semana; si el día ya tiene otra secuencia, intercambian), con **Dejar libre** corrés un día para abajo la secuencia de ese día y las que le siguen, y con **Descartar** sacás una secuencia del calendario;
+- en los días que ya pasaron ves qué salió y qué no;
 - cargás las **respuestas** y las vistas de cada día: las respuestas son la métrica principal;
-- abrís una historia para verla grande, **editarla** (editor tipo Canva) o dejarle **feedback** escrito o grabado;
-- tocás **Programar** y el planner arma el mensaje que pegás en Claude Code para agendarlas en Postiz.
+- abrís una historia para verla grande, **editarla** (editor tipo Canva, donde también grabás la voz en off leyendo el guion) o dejarle **feedback** escrito o grabado;
+- tocás **Programar** y el planner arma un solo mensaje con todo lo pendiente, que pegás en Claude Code para agendarlo en Postiz.
 
 Nada sale a Postiz sin que pegues esa confirmación en el chat.
 
@@ -24,14 +25,14 @@ Cada semana es una carpeta adentro de `historias/` en tu carpeta de contenido (s
       assets/subidas/           imágenes que subís desde el editor
       assets/videos/<id>/       los cuadros de un video de fondo (y su video.json)
       assets/audio/             las voces en off de la semana, en WAV
-    voces/                      audios para elegir como voz en off desde el editor (opcional)
+    voces/                      audios para elegir como voz en off y el guion de cada voz (<historia>.txt) para el teleprompter
     originales/                 los videos y audios tal como los subiste al editor
     historias/                  las imágenes renderizadas (PNG), el MP4 de las que tienen video o voz, y su chequeo
     feedback/                   las notas que dejás desde el planner
     tmp/ediciones/              el respaldo de cada edición hecha en el planner
 ```
 
-Una semana puede empezar cualquier día: el planner muestra, en cada semana de calendario, los días que caen en ella. Si dos carpetas de la misma cuenta tocan la misma semana, manda la más reciente.
+Una semana puede empezar cualquier día: el planner muestra, en cada semana de calendario, los días que caen en ella. Si dos carpetas de la misma cuenta tienen el mismo día, manda la más reciente (una iteración nueva de ese día reemplaza a la anterior). Es por día, no por semana: una carpeta nueva con algunos días no tapa los otros días de una anterior, y la semana muestra los de las dos, cada uno con su carpeta.
 
 ## semana.json
 
@@ -119,7 +120,7 @@ Claude Code puede armar la semana entera: pedile «armá la semana de historias�
   - **Agregar:** el **titular grande** y la **etiqueta** del gancho, texto en caja, resaltado o suelto, emojis, flechas, el lugar para un sticker y **Recursos** listos (chat de WhatsApp, archivo del recurso), de `motor-historias/recursos.html`;
   - **Imágenes:** subidas, arrastradas o pegadas con Cmd+V, o de tu carpeta de fotos;
   - **Fondo:** foto, color liso o **video**. El video se sube del teléfono o la compu (MP4, MOV o WebM); el planner lo pasa a color normal (también los del iPhone en HDR) y elegís el tramo, hasta 60 s;
-  - **Audio:** la **voz en off**. Subís un audio o elegís uno de `<semana>/voces/`, ajustás en qué segundo empieza y la probás con el video. La historia dura lo que la voz;
+  - **Audio:** la **voz en off**. La **grabás** ahí mismo leyendo el guion, subís un audio o elegís una toma o una voz de `<semana>/voces/`; ajustás en qué segundo empieza y la probás con el video. La historia dura lo que la voz. Al grabar, el micrófono cuenta 3, 2, 1 y arranca junto con el video de fondo; el guion pasa grande como un **teleprompter**, con una guía de ritmo que lo termina con el video (Espacio termina la toma, Esc la descarta). La toma queda como voz desde el segundo 0, sin el silencio del final y con un nivel parejo; si salió muda, avisa que revises el micrófono (se elige abajo si hay más de uno). El guion se escribe en el mismo panel y se guarda en `<semana>/voces/<historia>.txt`; la versión anterior queda en `tmp/ediciones/`;
   - **Capas** y el **Chequeo**, que va en vivo: un número rojo sobre el botón cuenta lo que está corrido del eje, fuera de la zona segura o es demasiado largo (más de 20 palabras en el gancho o de 47 en cualquier historia), cada aviso con su arreglo. En la barra, **⚠ Centrar** corrige lo elegido. Al guardar, el render mide además el contraste, los renglones disparejos y las caras tapadas.
 
 **Guardar y renderizar** escribe el HTML, vuelve a sacar el PNG con el motor y muestra el chequeo. Con video de fondo o voz en off saca también el MP4, con la voz mezclada: esa historia se publica como video. La versión anterior queda en `tmp/ediciones/`. Para el video y la voz hace falta ffmpeg. Si la historia ya estaba en Postiz, el planner la marca «Imagen nueva» y se reemplaza con la próxima propuesta de **Programar**.
@@ -133,10 +134,11 @@ En la vista grande, **Feedback** abre al costado las notas de esa historia: deta
 ## Programar
 
 1. Elegí **Postiz** en los días que querés agendar y la hora de la primera historia (15:00 si no la cambiás); las siguientes tienen su hora cada 2 minutos, en orden. Todas salen por Postiz: ninguna va a mano. («A mano» sólo aparece en un día que lo tenía en un borrador viejo.)
-2. **Programar** muestra qué va a Postiz; **Preparar confirmación** guarda la propuesta en `<publicar>/.planner/proposal-historias-<id>.json` y te da el mensaje.
-3. Pegalo en Claude Code. Corre `python3 engine/historias.py aplicar <id> --ejecutar`: agenda, mueve, reemplaza o quita cada historia por `engine/cola.py`.
+2. **Programar** toma **todo lo pendiente** de una vez, no sólo la semana que estás mirando: las secuencias de hoy en adelante de todas las semanas y de todas las cuentas, las descartadas que siguen en la cola y las notas sin corregir de cualquier semana. El número del botón cuenta los días que van a Postiz o salen de Postiz y las notas. El panel lo muestra por semana y por día; un día ya agendado tal cual dice «ya en Postiz así» y no suma. Lo que ya pasó no lleva acción.
+3. **Preparar confirmación** guarda una sola propuesta en `<publicar>/.planner/proposal-historias-<id>.json` (con `semanas`, `cuentas` y `desde`, el día desde el que cuenta) y te da un solo mensaje, con la agenda por semana y el feedback de cada día.
+4. Pegalo en Claude Code. Corre `python3 engine/historias.py aplicar <id> --ejecutar`: agenda, mueve, reemplaza, quita o pausa cada historia por `engine/cola.py`.
 
-**Programar** también cuenta el feedback sin corregir de la semana (notas pendientes, o copiadas que nadie tomó) y lo lista debajo de la agenda. El mensaje trae una parte de **Contenido** para que Claude Code lo corrija primero. Una historia con feedback, o todo el día si la nota es de la secuencia, no se agenda en esa pasada: queda «espera_feedback» y se programa cuando apruebes la versión corregida. Si sólo hay feedback, la propuesta sale igual, sin cambios de agenda.
+Copiar el mensaje no agenda nada. El feedback sin corregir (notas pendientes, o copiadas que nadie tomó) va listado debajo de la agenda y el mensaje trae una parte de **Contenido** para que Claude Code lo corrija primero. Una historia con feedback, o todo el día si la nota es de la secuencia, no se agenda en esa pasada: queda «espera_feedback» y se programa cuando apruebes la versión corregida. Si sólo hay feedback, la propuesta sale igual, sin cambios de agenda. Las notas de una secuencia descartada esperan a que la recuperes.
 
 El orden, el día, la hora y la cuenta de cada secuencia son un borrador del planner (`<publicar>/.planner/historias-draft.json`); no tocan la carpeta de la semana. Una secuencia corrida a otra semana sigue guardada en el borrador de la suya, pero se ve, se edita y se programa en la semana a la que fue.
 
@@ -146,11 +148,21 @@ Las respuestas y vistas que cargás quedan en `<publicar>/.planner/historias-met
 
 Programar varias historias con dos minutos de distancia no garantiza el orden: Postiz las publica con demoras de segundos a minutos, y una puede salir después de la siguiente o quedar en error. Por eso sólo la primera historia de cada día (y cuenta) queda programada en Postiz; las siguientes quedan ahí como **borrador** a su hora, y el planner, mientras está abierto, corre cada minuto `python3 engine/historias.py cadena`: cuando Postiz confirma publicada la anterior y llegó su hora, publica la siguiente. En la semana, esas historias dicen «En cadena · 15:02».
 
-- Si una sale con error, la reintenta una vez; si vuelve a fallar, frena las que siguen para no desordenar la secuencia.
+- Si una sale con error, la reintenta hasta dos veces, cada una 4 minutos después del intento que falló (reintentar enseguida no le da tiempo a Instagram). Si sigue fallando, frena las que siguen para no desordenar la secuencia y avisa con la ruta del archivo, por si la querés subir a mano.
 - Si Postiz tarda más de 10 minutos con una, o la compu estaba dormida y una sale tarde, también avisa. Los avisos de las últimas 24 horas se ven arriba de la pestaña Historias y quedan en `<publicar>/.planner/historias-cadena.json`.
 - **Hace falta que el planner esté corriendo** a la hora de las historias (el servicio de [INSTALAR.md](../INSTALAR.md) lo deja andando solo). Si estaba cerrado, las que faltan salen en orden apenas se abre. Para correrla a mano: `python3 engine/historias.py cadena` (con `--dry-run` muestra qué haría).
 - Con `"historias": { "cadena": false }` en `planner.config.json`, todas se programan a su hora, como antes.
 
-### Dejar un día libre o correr una secuencia
+### Cambiar de día, dejar un día libre o descartar
 
-**Dejar libre**, en cada día con historias de hoy en adelante, corre su secuencia y las que le siguen pegadas un día, salteando el domingo, hasta el primer día vacío (también en las semanas siguientes). Antes de guardar muestra la lista de movidas para confirmar, y el aviso trae **Deshacer**. Tocando el día de la fila elegís otra fecha, hasta 4 semanas antes o 12 después; a otra semana, el día tiene que estar libre. Nada de eso toca Postiz hasta que programes y confirmes.
+**Cambiar de día:** con el ⋮⋮ de la fila (arrastrándolo a otro día) o tocando el día y eligiendo otra fecha, hasta 4 semanas antes o 12 después. Si el día elegido ya tiene otra secuencia de la cuenta, las dos **intercambian** el día, también entre semanas: pasar la del lunes al martes manda la del martes al lunes. A un día que ya pasó no se mueve nada, y una secuencia de un día pasado no manda la otra a ese día. El aviso trae **Deshacer**.
+
+**Dejar libre**, en cada día con historias de hoy en adelante, corre su secuencia y las que le siguen pegadas un día, salteando el domingo, hasta el primer día vacío (también en las semanas siguientes). Antes de guardar muestra la lista de movidas para confirmar, y el aviso trae **Deshacer**.
+
+**Descartar**, en cada día de hoy en adelante, saca la secuencia del calendario: el día queda libre y la secuencia pasa a **Descartadas**, abajo de la semana, con **Recuperar** (vuelve a su día, con su hora; si ese día ya tiene otra, mové primero esa). Es distinto de **No se publica**, que la deja en su día sin salir (y si estaba en Postiz, al programar vuelve a la bandeja de la cola). Al programar, lo que una descartada tenía en la cola sale de Postiz y queda en pausa (`cola.py pausar`), así nadie la vuelve a agendar; lo ya publicado no se toca.
+
+Nada de eso toca Postiz hasta que programes y confirmes.
+
+### Los días que ya pasaron
+
+La fila queda atenuada y sin los controles de Postiz, con un resumen: «✓ Salieron las 4», «Salieron 2 de 3» o «No salió ninguna». Cada historia dice **✓ Publicada** si la cola o Postiz la registran publicada (la ficha archivada en `publicado/`, el estado publicado o PUBLISHED, o el id de Instagram) o **No salió**. Hoy se marcan las que ya pasaron su hora. Las respuestas y vistas se siguen cargando igual.

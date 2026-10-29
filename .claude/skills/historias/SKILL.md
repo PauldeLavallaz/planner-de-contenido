@@ -31,15 +31,15 @@ Antes de proponer una semana leé el método en `references/`:
 
 ## Una propuesta del planner
 
-El mensaje empieza con «Confirmo la propuesta de historias <id>». Pegarlo **es** la confirmación del usuario para exactamente esa propuesta.
+El mensaje empieza con «Confirmo la propuesta de historias <id>». Pegarlo **es** la confirmación del usuario para exactamente esa propuesta. Una propuesta lleva todo lo pendiente: varias semanas y cuentas (`semanas`, `cuentas`), cada acción con su `fecha`, `run` y `cuenta`, y el feedback sin corregir de cualquier semana.
 
 1. `python3 engine/historias.py aplicar <id>` muestra qué va a hacer con cada historia, sin tocar nada.
-2. `python3 engine/historias.py aplicar <id> --ejecutar` agenda, mueve, reemplaza o quita cada una por `engine/cola.py`. Las de una secuencia tienen su hora cada 2 minutos desde la del día, en orden: la primera queda programada y las siguientes como borrador en Postiz, que el planner publica **en cadena**, cada una cuando sale la anterior ([docs/historias.md](../../../docs/historias.md#en-cadena)). Para eso el planner tiene que estar corriendo a esa hora; si el usuario lo apaga, decíselo.
+2. `python3 engine/historias.py aplicar <id> --ejecutar` agenda, mueve, reemplaza o quita cada una por `engine/cola.py`. Una con `descartar` (el usuario descartó su secuencia en el planner) sale de Postiz con `cola.py pausar <slug> --motivo "descartada en el planner"`, así nadie la vuelve a agendar; si ya está publicada o en pausa, no se toca. Las de una secuencia tienen su hora cada 2 minutos desde la del día, en orden: la primera queda programada y las siguientes como borrador en Postiz, que el planner publica **en cadena**, cada una cuando sale la anterior ([docs/historias.md](../../../docs/historias.md#en-cadena)). Para eso el planner tiene que estar corriendo a esa hora; si el usuario lo apaga, decíselo.
 3. Contá el resultado tal cual: qué quedó agendado, cuándo y en qué cuenta, y cualquier error. Si una propuesta vieja trae alguna «a mano», listala con su hora.
 
 Si una historia falla, el resto sigue y la propuesta queda `parcial` con el motivo en `resultados`. Resolvé la causa y corré a mano los pasos de esa historia con `engine/cola.py` (skill [publicar](../publicar/SKILL.md)). Una fecha pasada no se agenda, ni una de hoy cuya hora ya pasó.
 
-Si el planner avisa que la cadena se frenó (una historia falló dos veces), revisá esa historia en Postiz con el usuario. Con su OK, `python3 engine/cola.py ahora <slug> --redes instagram` la vuelve a mandar; cuando Postiz la confirma publicada, la cadena sigue sola con las que faltan.
+Si una historia de la cadena queda en error, el planner la reintenta dos veces, 4 minutos después de cada intento. Si avisa que la cadena se frenó (falló también en los reintentos; el aviso trae la ruta del archivo por si la sube a mano), revisá esa historia en Postiz con el usuario. Con su OK, `python3 engine/cola.py ahora <slug> --redes instagram` la vuelve a mandar; cuando Postiz la confirma publicada, la cadena sigue sola con las que faltan.
 
 **Un plan nuevo que reemplaza a otro ya agendado:** las historias viejas se sacan con `python3 engine/cola.py pausar <slug> --motivo …` (sale de Postiz y nadie la vuelve a agendar), no con `quitar`, que la devuelve a la bandeja.
 
