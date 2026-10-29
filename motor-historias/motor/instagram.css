@@ -60,6 +60,9 @@
 .clasica { font-family: var(--clasica); font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
 .maquina { font-family: var(--maquina); font-weight: 400; letter-spacing: 0; line-height: 1.25; }
 .emoji { font-family: var(--emoji); font-style: normal; }
+/* La Clásica en negrita, la letra de casi todas las historias que más respuestas traen: <p class="clasica negrita">…
+   en resaltado blanco por renglón (.resalte) para ganchos y pedidos. */
+.negrita { font-weight: 700; }
 
 /* ── Fondos de texto, como el botón «A» del editor ── */
 /* Caja: un rectángulo que abraza el bloque. Negra con letra blanca por defecto. */

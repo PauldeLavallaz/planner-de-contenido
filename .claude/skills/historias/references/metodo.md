@@ -14,18 +14,18 @@ oferta y sus recursos. Es lo que la marca cuenta al arrancar, o lo que ya tenga 
 | **Conciencia** | 🟡 | Muestra qué pasa cuando alguien te contrata: detrás de escena, resultados, cómo es por dentro | Queda abierto, sin pedido («la semana que viene les cuento…») | «Quiero eso», confianza, pertenencia |
 | **Libre** | ⚪ | Vida, estilo, la línea propia de la persona | Sin estructura ni pedido | Cercanía |
 
-**Con los nombres que usan muchas cuentas para clasificar sus historias:** CTA es venta; LM Claim, recurso con lo que
-se regala dicho (R1, R2, R3); LM Hypeado, recurso que se vende por curiosidad sin decir qué es (R4, para sacar volumen
-de respuestas); Nutrición, conciencia; Resultados, conciencia de resultados (C1); Personal, el día libre. En las
-secuencias analizadas la regla de cierre se cumple: las de venta y recurso cierran con una palabra clave y las de
-nutrición y resultados casi nunca piden nada.
+**Con los nombres que usan muchas cuentas de referencia** (en 230 secuencias analizadas): CTA
+es venta; LM Claim, recurso con lo que se regala dicho (R1, R2, R3); LM Hypeado, recurso que se vende por curiosidad
+sin decir qué es (R4, para sacar volumen de respuestas); Nutrición, conciencia; Resultados, conciencia de resultados
+(C1); Personal, el día libre. En las 230 secuencias la regla de cierre se cumple: las de venta y recurso cierran con
+una palabra clave y las de nutrición y resultados casi nunca piden nada.
 
 Si una cuenta vende todos los días, deja de vender. Recursos y conciencia llenan la bolsa de demanda
 para que el día de venta haya gente dispuesta a responder. Conciencia vende sin pedir: quien escribe
 después de ver cómo trabajás llega con más intención y menos resistencia.
 
-Conciencia se arma igual que recurso, sin el pedido del final. Puede cerrar con una pregunta («Respondé…») o un emoji: invitan
-a interactuar y la secuencia sigue sin pedir nada.
+Conciencia se arma igual que recurso, sin el pedido del final. Puede cerrar con una pregunta («Respondé…») o un emoji:
+invitan a interactuar y la secuencia sigue sin pedir nada.
 
 ## La semana
 
@@ -33,7 +33,7 @@ El tipo de semana lo define el calendario comercial de la marca, no el número d
 **ventana de venta** es un período con fin real: un cierre de mes con cambio de precio, cupos contados,
 un lanzamiento con fecha. Los días previos al fin de una ventana son semana de cierre. Todo lo demás es
 semana normal, aunque caiga a fin de mes. Si la marca no tiene ventanas, todas sus semanas son
-normales y sus ventas usan V3, V4 o V5, con un bono real como palanca.
+normales y sus ventas usan V3, V4, V5 o V6, con un bono o un cupo real como palanca.
 
 **Semana normal**: una venta, elegida entre lunes, martes o miércoles. Domingo libre. Sábado
 conciencia. El resto, recursos y conciencia.
@@ -50,10 +50,10 @@ secuencia típica es anuncio con sorpresa (V1), cuenta regresiva con últimos lu
 bonos numerados (V2) y, al día siguiente, bienvenida a los que entraron (V3). Entre ventas conviene un día
 de conciencia con resultados. El argumento más fuerte es el precio que sube: sólo si es cierto.
 
-**De 3 a 5 historias por día.** Mínimo 3 y máximo 5. Vale para cada día con secuencia (venta, recurso o
-conciencia); el día libre sigue siendo libre. Si la fórmula del día trae menos (C4, C5, C1 corto), se
-completa con una apertura y una historia del mismo tema que no agreguen pedidos ni datos que no estén en
-el blueprint (ver [formulas.md](formulas.md)).
+**De 3 a 5 historias por día.** Vale para cada día con secuencia (venta, recurso o conciencia); el día
+libre sigue siendo libre. Si la fórmula del día trae menos (C4, C5, C1 corto), se completa con una
+apertura y una historia del mismo tema que no agreguen pedidos ni datos que no estén en el blueprint (ver
+[formulas.md](formulas.md)).
 
 **Hilo semanal**: un tema o problema conecta los días. Cada día se entiende solo; no supongas que la
 persona vio el anterior. No repitas la misma fórmula dos días seguidos ni la misma palabra clave en la
@@ -92,11 +92,31 @@ piso de las cuentas grandes y ubicá las intermedias entre 10% y 5%.
 - **Mucha caída entre la primera y la última**: la secuencia es larga o el nudo no sostiene. Probá una
   historia menos.
 - **Un recurso trae muchas respuestas**: ese tema es buen candidato para la próxima venta.
-- **Pocas respuestas en general**: probar un recurso hypeado (R4) con un recurso que ya existe; trae volumen. Si
+- **Pocas respuestas en general**: probar un recurso hypeado (R4) con un recurso que ya existe, o una novedad con
+  recurso (R5) si salió algo que el público está mirando; traen volumen. Si
   después las conversaciones no avanzan, volver al recurso explícito, que trae menos pero de quien tiene el problema.
 - **Un tema o una fórmula trae más respuestas que el resto dos semanas seguidas**: repetir la estructura con otro
   tema; el que no trae respuestas en dos intentos se cambia de estructura antes de abandonar el tema.
 - Sin números no declares ganadores; decí qué medir.
+
+**Tasas de referencia.** Salen del **análisis de paneles**: 61 secuencias de cuentas de referencia y, de dos de ellas,
+los paneles con las estadísticas de cada historia. Una es una cuenta de IA de referencia (unas 4.000 vistas por
+historia, 35 secuencias de dos meses); la otra, una cuenta de trading de referencia. La tasa son las respuestas de la
+historia del pedido sobre sus vistas:
+
+| Tipo | Tasa | De dónde |
+|---|---|---|
+| Recurso con novedad o resultado propio, 2 a 3 historias | 4% a 7% | cuenta de IA: 273, 288, 179, 178 y 103 respuestas; cuenta de trading: 683, 537 y 276 |
+| Recurso con un resultado recién hecho y la clase de cómo se hizo | 3% a 4% | cuenta de IA: 210 + 124, 133, 125, 99, y 67 la clase en vivo gratis |
+| Recurso en broma, con polémica o con una pregunta al público | 1% a 2,5% | cuenta de IA: una broma sobre una peluquería, 22 y 27; «¿Todavía usas la IA para boludeces?», 10; «¿Querés hacer videos para marcas…?», 27 |
+| Venta | 1% a 2,6% | cuenta de IA, su mentoría: 8 a 27; la venta al paso, 155 (3,7%); cuenta de trading: 195 |
+| Encuesta o caja de preguntas sin palabra | 0 | cuenta de IA: 0 y 0 |
+| Conciencia sin pedido | casi 0 | cuenta de IA: 0 a 4 en 12 secuencias |
+
+La tasa se mira sobre las vistas de la historia del pedido, que es donde se junta la respuesta (el gancho trae entre 0 y 8).
+Un recurso por debajo del 2% se revisa por el recurso y por la historia del pedido antes que por el diseño; una venta se
+compara con las ventas anteriores, no con los recursos. El mismo caso rinde según el pedido: la campaña que la cuenta de
+IA le hizo a una marca conocida trajo 15 como venta de la mentoría y 178 como gancho de una clase gratis.
 
 ## Cómo se escribe
 
@@ -108,9 +128,9 @@ Ganchos, reacciones y pedidos probados, con plantillas para completar: [ganchos.
   curiosidad. Nunca con «hoy te voy a enseñar».
 - **El gancho es corto y no cuenta el final.** Un titular de 2 a 8 palabras que manda en la pantalla y, si
   hace falta, una bajada chica o una etiqueta arriba («Ya te lo advertí», «en tu 2026»). En las secuencias de
-  referencia, la mitad de las primeras historias tiene 12 palabras o menos y tres de cada cuatro, 20 o menos. El dato,
-  la cifra o el hallazgo va en la historia siguiente: si el gancho ya dice qué pasó, qué se encontró y cuánto costó,
-  no queda nada para abrir. Si deja algo abierto, cierra con 👉 o una flecha de lápiz hacia la siguiente.
+  referencia, la mitad de las primeras historias tiene 12 palabras o menos y tres de cada cuatro, 20 o menos. El
+  dato, la cifra o el hallazgo va en la historia siguiente: si el gancho ya dice qué pasó, qué se encontró y cuánto
+  costó, no queda nada para abrir. Si deja algo abierto, cierra con 👉 o una flecha de lápiz hacia la siguiente.
 - Voz de la persona, como habla. Mayúsculas para una palabra de énfasis, no para frases enteras.
   Emojis con moderación.
 - La venta va de gancho a vehículo, resultado y pedido con su palanca (ver las fórmulas). El gancho es
@@ -123,17 +143,30 @@ Ganchos, reacciones y pedidos probados, con plantillas para completar: [ganchos.
   de quien aparece y dentro de las reglas de esa profesión.
 - Palabra clave corta y ligada al recurso (IDEAS, GANCHOS, PLANTILLA). YO sirve para venta o para
   pedir una revisión personal. Va entre comillas y con lo que llega: «Respondé "VIDEO" y te lo paso».
-  En las secuencias analizadas, casi todas las que piden una palabra la ponen entre comillas, y las
-  palabras más usadas dicen qué llega (VIDEO, LOOM, CLASE, DOC, PLAN) o son un número.
-- Un número concreto en la secuencia (plata, días, clientes, seguidores): lo usan cerca de tres de cada
-  cuatro secuencias. Que sea real y de la marca (ver «Qué no hacer»).
+  En las 230 secuencias de referencia, 127 de las 137 que piden una palabra la ponen
+  entre comillas y las palabras más usadas dicen qué llega (VIDEO, LOOM, CLASE, DOC, PLAN) o son un número.
+- Un número concreto en la secuencia (plata, días, clientes, seguidores): lo usan 170 de esas 230. Que
+  sea real y de la marca (ver «Qué no hacer»).
 - El precio va por DM: «te paso qué incluye, precio y acompañamiento».
 - Bonos que reducen el tiempo o el esfuerzo para conseguir el resultado, idealmente cosas que la oferta
   ya incluye y nunca se mencionaron.
 - En recurso, mostrá el recurso por dentro: captura, scroll, un Loom, las páginas del PDF.
+- **La historia del pedido se entiende sola.** Ahí se junta la respuesta: quien la ve tiene que saber qué es el recurso,
+  para qué le sirve y qué palabra mandar, con el recurso a la vista, aunque no haya visto el gancho. En el análisis de
+  paneles el gancho trae entre 0 y 8 respuestas y la historia del pedido, cientos.
+- **En recurso, el pedido llega pronto.** Las mejores tasas del análisis de paneles (4% a 7%) son de 2 o 3 historias con
+  el pedido en la segunda o la tercera. Para llegar al mínimo de 3, lo que se suma va después del pedido: un
+  **refuerzo** con una prueba (el chat de alguien que lo recibió, lo que lograron quienes lo aplicaron) y la misma palabra («Respondé "CLASE"
+  así no te la perdés»), que suma entre un cuarto y el doble de lo que trajo el pedido.
+- **Un recurso que pidió mucha gente abre el siguiente.** Su número real (la captura del panel, «273 personas
+  recibieron…») es el gancho del próximo recurso del mismo tema, dentro de la semana (R6 en [formulas.md](formulas.md)).
+- **Cuando sale algo que el público está mirando**, un recurso que lo aprovecha es la mejor apuesta de respuestas de la
+  semana (R5): fue lo que más respuestas le trajo a la cuenta de IA de referencia.
+- Si el resultado se ve (un video, una pantalla funcionando), se muestra en movimiento: la historia del medio es ese
+  video, y la del pedido, la pantalla filmada con el recurso abierto.
 - Para mostrar algo construido, cómo funciona el sistema o un recurso por dentro (una skill, una clase, un video de
   YouTube), una o dos historias de **video con voz en off** en el nudo de la secuencia: el video real abajo, la voz que
-  cuenta lo que se ve y el texto arriba. Suelen funcionar muy bien. Guion, voz, armado y publicación en
+  cuenta lo que se ve y el texto arriba. Suelen rendir muy bien. Guion, voz, armado y publicación en
   [video-con-voz.md](video-con-voz.md).
 
 ## Publicar
@@ -143,9 +176,11 @@ Ganchos, reacciones y pedidos probados, con plantillas para completar: [ganchos.
   mitad del piso.
 - Los stickers interactivos (encuesta, caja de preguntas, slider, mención, link) sólo se ponen a mano
   en la app, y por Postiz no salen. Por eso las historias se diseñan sin ellos: el cierre es «Respondé
-  PALABRA» o una pregunta con «Respondé…», y toda la secuencia sale programada. En el planner,
-  **Programar** agenda la primera en Postiz a su hora y las siguientes en cadena, cada una cuando sale la
-  anterior, con 2 minutos de distancia como mínimo ([docs/historias.md](../../../../docs/historias.md#en-cadena)).
+  PALABRA» o una pregunta con «Respondé…», y toda la secuencia sale programada. Es además lo que más
+  responde: en el análisis de paneles, las encuestas y la caja de preguntas sin palabra trajeron 0. En el
+  planner, **Programar** agenda la primera en Postiz a su hora y las siguientes en cadena, cada una cuando
+  sale la anterior, con 2 minutos de distancia como mínimo
+  ([docs/historias.md](../../../../docs/historias.md#en-cadena)).
 
 ## Qué no hacer
 

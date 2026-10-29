@@ -1,12 +1,8 @@
 # Los cuatro estilos
 
 Amarillo, Rojo, Verde y Naranja. Los cuatro son el estilo nativo de Instagram de [diseno.md](diseno.md) con un color de
-la fila y sus combinaciones. Cada día de la semana usa uno; se alternan y no se repite el mismo en días seguidos.
-
-Son opciones, no una obligación. Una marca puede fijar uno solo para todos los días (por ejemplo, Amarillo con negro y
-blanco) y sacar la variedad de las fotos, el fondo y la composición; en ese caso conviene decidir también para qué
-queda cada color de acento (el rojo sólo en las flechas de lápiz, el verde sólo para resaltar un beneficio, nunca
-sobre fondo blanco). Si la marca tiene su propia guía de estilo, manda esa guía.
+la fila y sus combinaciones. Cada día de la semana usa uno; se alternan y no se repite el mismo en días seguidos. Son
+opciones, no una obligación: una marca puede fijar uno solo (ver «Una marca puede fijar su paleta», al final).
 
 ## El color dice algo
 
@@ -32,11 +28,11 @@ En el HTML, la clase del estilo va en `.historia` y fija el color y la letra que
 Lo que vale para los cuatro: **todo centrado** (regla dura, ver [diseno.md](diseno.md)); el
 **remate** de un gancho o un cierre sobre foto en caja del color con la **Clásica en negrita**, a un
 tamaño parecido al de la caja de arriba, abrazando el texto, y **un emoji al final** que acompañe el
-gesto o la idea («esto es para vos 🫵», «listo para usar 👍», «Inspírense 💡»): sin el emoji, el remate
-queda raro. La serif de las cajas para casi todo, la Clásica para pasos y etiquetas, emojis grandes en
-lugar de íconos, flechas de lápiz para unir dos cosas o señalar la barra de respuesta, fotos reales o
-fondo blanco o negro, overlay negro de opacidad baja cuando el texto va sin caja sobre la foto. Sin
-mascota ni personajes de marca, sin fondos de color sólido.
+gesto o la idea («esto es para vos 🫵», «listo para usar 👍», «Inspírense 💡»): sin el emoji, o con otra letra y
+otro tamaño, el remate queda raro. La serif de las cajas para casi todo, la Clásica para pasos y etiquetas, emojis
+grandes en lugar de íconos, flechas de lápiz para unir dos cosas o señalar la barra de respuesta, fotos reales o fondo
+blanco o negro, overlay negro de opacidad baja cuando el texto va sin caja sobre la foto. Sin mascota ni personajes de
+marca, sin fondos de color sólido.
 
 ## Amarillo
 
@@ -59,7 +55,7 @@ Color `--ig-amarillo`, letra negra sobre amarillo. Neutro.
 Color `--ig-rojo`, letra blanca sobre rojo. Para días que hablan de errores o de lo que cuesta caro.
 
 - **Sobre foto clara:** la pregunta en caja blanca con letra negra y la palabra clave en rojo, centrada
-  arriba (la persona la señala); la encuesta centrada abajo.
+  arriba (la persona la señala); abajo, centrado, «Respondé…» con las opciones como ejemplos.
 - **Fondo blanco:** un emoji grande arriba (⏳), la frase en caja negra con la palabra clave en rojo, la
   cifra enorme en resaltado rojo con letra blanca («4 dólares») y el cierre en caja negra.
 - **Pedido con recurso:** la foto de un lugar suyo con overlay negro; la explicación en caja negra
@@ -86,3 +82,21 @@ Color `--ig-naranja`, letra negra sobre naranja; «naranja y negro». Neutro.
   cajas y la foto.
 - **Fondo negro:** una frase en serif blanca y una lista de temas en resaltados blancos con la
   Clásica, cada uno con su emoji adelante, uno en naranja («Pueden preguntarme sobre: 🎙️ cómo grabo…»).
+
+## Una marca puede fijar su paleta
+
+Si la marca tiene su propia guía de estilo, manda esa guía, también sobre la alternancia. Un ejemplo de cómo una cuenta
+fija su paleta: negro, amarillo y blanco todos los días, siempre en **Amarillo** (cajas negras con letra blanca, cajas
+blancas con letra negra, fondo negro o blanco, y el amarillo para el énfasis, la cifra, el remate y la palabra del
+pedido). No hay alternancia de color entre días: la variedad sale de las fotos, el fondo y la composición. Los otros
+colores quedan con un solo uso:
+
+- **Rojo, sólo en las flechas** de lápiz (la que lleva a la historia siguiente, la que señala la barra de respuesta, la
+  que une dos pasos). Nunca en texto, cajas ni resaltados.
+- **Verde, sólo para resaltar un beneficio:** lo que gana quien mira o el resultado positivo («te ahorrás una tarde»,
+  «más de 1.000 videos»), en una palabra o una frase corta, nunca sobre fondo blanco. No es el color del día ni pinta el
+  pedido.
+- Naranja, guardado: no se usa salvo que la marca lo pida.
+
+Una restricción así se decide una vez y vale para todas las semanas de esa cuenta. Sin restricción, se usan los cuatro
+estilos como dice este archivo.

@@ -16,11 +16,12 @@ código (motor, plantilla, render y chequeo) está en [docs/historias.md](../../
    letra y los colores que vienen por default. Una historia que se aleja de lo que la gente está acostumbrada a ver
    choca. Tiene que parecer hecha en la app:
    - **Letra:** los estilos del editor de historias, nada más. Instagram no publica sus fuentes, así
-     que se usan las libres que más se les parecen (en `motor/instagram.css`, comparadas contra
+     que se usan las libres que más se les parecen (en `motor-historias/motor/instagram.css`, comparadas contra
      historias reales): la **serif** de las cajas negras (Newsreader), la **Clásica** (Instrument
      Sans) y la de **máquina** (Courier Prime). Nada de fuentes de marca, display, itálicas
      decorativas ni tipografía inventada.
-   - **Fondos de texto:** como el botón «A» del editor. Caja negra con letra blanca (la más usada),
+   - **Fondos de texto:** como el botón «A» del editor. Caja negra con letra blanca (la más usada en las historias del
+     método; en el análisis de paneles manda el resaltado blanco con la Clásica en negrita, ver el punto 4),
      caja blanca con letra negra, caja del color del día, caja translúcida, o el resaltado por
      renglón de la Clásica. Texto centrado.
    - **Colores:** los que trae la fila del editor: blanco, negro, azul, verde, amarillo, naranja,
@@ -34,12 +35,14 @@ código (motor, plantilla, render y chequeo) está en [docs/historias.md](../../
      tarjetas con esquina de color, composiciones de carrusel, tipografía de marca, mascotas o
      personajes de marca como sticker, fondos de color sólido.
    - **Estilos con nombre:** Amarillo, Rojo, Verde y Naranja, con su receta en [estilos.md](estilos.md).
-     Un estilo por día, alternados.
+     Un estilo por día, alternados, salvo que la marca fije uno solo.
    - **Imagen fija por defecto.** La historia es una imagen fija salvo que el movimiento sea
-     indispensable. El movimiento queda como recurso para cuando hace falta: un
-     video adentro ([video-con-voz.md](video-con-voz.md)), un recorrido largo que no entra en una imagen.
+     indispensable. El movimiento queda como recurso para cuando hace falta: un video adentro
+     ([video-con-voz.md](video-con-voz.md)), un recorrido largo que no entra en una imagen.
+   - **No es el estilo de los carruseles de la marca:** las historias no copian su diseño.
 2. **Se intercalan historias con foto y historias de fondo blanco o negro.** No todas las historias van
    con foto: intercalar fondos lisos, sólo con tipografía, el mensaje y emojis, ayuda a hablar más claro.
+   Emojis en lugar de íconos, sin mascotas ni personajes, y el fondo liso sólo blanco o negro.
    - **Con foto:** foto real de la persona o de su vida (ver «La foto»). Es lo que hace que la
      secuencia se vea orgánica y real.
    - **Lisa:** fondo blanco o negro, nada más. Nunca un color sólido: si la historia pide más presencia,
@@ -48,12 +51,13 @@ código (motor, plantilla, render y chequeo) está en [docs/historias.md](../../
    - **Alternancia:** dentro de un mismo día no van dos del mismo tipo seguidas, y en la semana
      ninguno de los dos baja de un tercio. Las que muestran a la persona, un resultado suyo o un
      lugar propio van con foto. Las de anuncio, lista, regla, dato o pregunta pueden ir lisas.
-3. **Cómo se combinan los elementos** (texto, emojis, flechas, capturas), tal como lo hacen las secuencias
-   que mejor funcionan:
+3. **Cómo se combinan los elementos** (texto, emojis, flechas, capturas), tal como lo hacen las 230 secuencias de
+   referencia de cuentas que venden con historias:
    - De 2 a 4 elementos por historia y uno que domina: la foto, la captura o la lista.
    - Una frase manda. En el gancho, el titular va grande (`.titular`, la Clásica en negrita a 88–110 px,
      suelto con sombra o en caja) y lo demás chico: la etiqueta de arriba (`.etiqueta`) o la bajada en
-     caja. Tres cajas de serif del mismo tamaño no tienen jerarquía y se leen como un párrafo.
+     caja. Tres cajas de serif del mismo tamaño no tienen jerarquía y se leen como un párrafo. En el editor
+     del planner, los dos están en **Agregar**.
    - El texto en caja o pastilla que abraza la frase. La serif en cajas para las frases; la Clásica en
      negrita, en etiqueta blanca o del color, para el gancho de curiosidad, los títulos de sección
      («El sistema funciona así:») y las etiquetas de los pasos.
@@ -66,6 +70,31 @@ código (motor, plantilla, render y chequeo) está en [docs/historias.md](../../
    - Los recursos que se repiten (chat de WhatsApp, archivo del recurso, recurso tapado, pasos con
      captura, para quién es) tienen su receta en [recursos.md](recursos.md); la historia con video y voz en
      off, en [video-con-voz.md](video-con-voz.md).
+4. **Lo que muestra el análisis de paneles** (61 secuencias y 265 historias de cuentas de referencia, con los paneles de
+   estadísticas de una cuenta de IA de referencia, con unas 4.000 vistas por historia, y de una cuenta de trading de
+   referencia; ver [metodo.md](metodo.md)). Sirve para los ganchos, las estructuras y el diseño.
+   - **La letra es la sans del editor, casi siempre en negrita, y nunca la serif.** La base es el resaltado blanco por
+     renglón con letra negra (`.resalte` + `.clasica` + `.negrita`), con la palabra que importa en color dentro del
+     renglón. Es lo que usaban las historias de la cuenta de IA que trajeron cientos de respuestas. La serif en caja negra
+     sale de las historias del método; cada marca elige su base, y si tiene su propia guía de estilo, manda esa guía.
+   - **La historia del pedido tiene una forma fija:** el recurso a la vista (la laptop o el celular filmados con el recurso
+     abierto, o su miniatura como tarjeta), arriba en uno o dos renglones qué es («Armé una clase explicando el paso a paso
+     de cómo hice el video»), abajo «Respondé "PALABRA" y es tuya» y, debajo, 👇👇👇 apuntando a la barra de respuesta (o
+     la flecha de lápiz). Se entiende sola: ahí se junta la respuesta.
+   - **El resultado, en movimiento.** Si el tema se ve, la historia del medio es el video del resultado con una sola
+     línea arriba («Y podés hacer cosas así 👀»). Es un video de contenido, no una animación: no choca con la imagen fija
+     por defecto.
+   - **Gancho:** selfie o foto de la persona con un gesto, una o dos cajas de 5 a 15 palabras y ➡️➡️➡️ o 👉👉👉 en fila
+     cuando lo que sigue está en la próxima.
+   - **Listas:** un título en resaltado blanco («Pasarías de:», «Si querés ser un freelancer de alto valor y:») y un ítem
+     por renglón, cada uno en su caja del color. Verde sólo si los ítems son beneficios, y nunca sobre fondo blanco
+     ([estilos.md](estilos.md)).
+   - **Pruebas pegadas como capturas:** el panel de estadísticas de una historia anterior, el chat de alguien, una pila de
+     comentarios reales sobre una selfie, la grilla de resultados. Recetas en [recursos.md](recursos.md).
+   - **Pausa en negro:** una historia lisa negra con una sola línea corta en color («Solo necesitás 2 cosas:») antes de
+     una lista o una regla.
+   - El texto ocupa un tercio de la pantalla y la foto o la pantalla se ven. Mediana de 15 a 17 palabras por historia y de
+     7 a 11 en el gancho.
 
 ## Lo que aprendimos diseñando
 
@@ -113,7 +142,7 @@ Sale de vueltas de corrección sobre semanas reales. Si una marca tiene su propi
 
 | Historia | Fondo | Texto | Extra |
 |---|---|---|---|
-| Gancho | Foto de la persona con un gesto hacia el texto | Caja negra arriba; el remate en caja del color, centrado abajo | Slider o emoji opcional |
+| Gancho | Foto de la persona con un gesto hacia el texto | Caja negra arriba; el remate en caja del color, centrado abajo | Emoji opcional |
 | Vehículo | Blanco | Pasos con emojis grandes en fila, unidos con flechas de lápiz; cierre en caja negra | Nada |
 | Resultado | Foto con un gesto de festejo | La cifra en caja del color, que cuenta; la frase en caja negra | Mención si es de un cliente |
 | Pedido | Foto de un lugar suyo con overlay negro, o la persona señalando | Palanca en texto blanco o caja negra; «Respondé “PALABRA”» con la palabra enorme en el color | Flecha de lápiz o 👇 hacia la barra de respuesta |
@@ -124,7 +153,9 @@ Sale de vueltas de corrección sobre semanas reales. Si una marca tiene su propi
 |---|---|---|---|
 | Gancho o pregunta | Foto con la persona señalando la pregunta | Pregunta en caja blanca o negra, centrada arriba | «Respondé…» con las opciones como ejemplos, centrado abajo, sobre el cuerpo |
 | Regla o riesgo | Blanco o negro | La regla en resaltado del color; la lista con emojis o una grilla de emojis | Círculos de lápiz sobre lo elegido |
-| Recurso y palabra | Foto de un lugar suyo con overlay negro | Qué es el recurso en caja arriba; «Respondé “PALABRA”» abajo | La portada o el recurso en un celular, centrado; flecha de lápiz centrada hacia la barra de respuesta |
+| Prueba en movimiento (R5) | El video del resultado | Una línea arriba («Y podés hacer cosas así 👀») | Nada |
+| Recurso y palabra | La laptop o el celular filmados con el recurso abierto; si no hay, foto de un lugar suyo con overlay negro | Qué es el recurso en caja arriba; «Respondé “PALABRA”» abajo | Si el fondo no lo muestra, la portada o el recurso en un celular, centrado; 👇👇👇 o flecha de lápiz centrada hacia la barra de respuesta |
+| Refuerzo | Foto suya o captura | La prueba arriba; la misma palabra abajo («así no te lo perdés») | El chat o el panel como captura |
 
 ### 🟡 Conciencia
 

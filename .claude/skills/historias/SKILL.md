@@ -12,7 +12,7 @@ Todo lo de la pestaña está en [docs/historias.md](../../../docs/historias.md):
 Antes de proponer una semana leé el método en `references/`:
 
 - [metodo.md](references/metodo.md): los tipos de día (venta, recurso, conciencia, libre), la semana normal y la de cierre, de 3 a 5 historias por día y cómo ajustar con las respuestas, que son la métrica principal.
-- [formulas.md](references/formulas.md): la fórmula de cada historia por tipo (V1 a V5, R1 a R4, C1 a C5). R4 es el recurso hypeado, para sacar volumen de respuestas.
+- [formulas.md](references/formulas.md): la fórmula de cada historia por tipo (V1 a V6, R1 a R7, C1 a C6). R4 es el recurso hypeado, para sacar volumen de respuestas. Las nuevas salen de medir qué respuestas trae cada historia: R5 aprovecha una novedad que el público está mirando (o un resultado recién hecho), R6 abre un recurso con la demanda del anterior, R7 parte de la pregunta que más llega, V6 es una venta al paso con un cupo real y C6 rompe una creencia con un caso.
 - [ganchos.md](references/ganchos.md): el banco de ganchos, reacciones y pedidos.
 - [diseno.md](references/diseno.md) y [estilos.md](references/estilos.md): el estilo nativo de Instagram, todo centrado, cómo se combinan texto, emojis, flechas y capturas, y los cuatro estilos.
 - [recursos.md](references/recursos.md): chat de WhatsApp, archivo del recurso, recurso tapado y los demás, con su markup en `motor-historias/recursos.html`.

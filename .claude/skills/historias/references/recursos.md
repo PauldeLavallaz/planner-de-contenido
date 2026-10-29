@@ -1,11 +1,13 @@
 # Recursos visuales
 
-Las piezas que se repiten en las historias que mejor funcionan y cómo se arman con el motor.
+Las piezas que se repiten en las historias de referencia (230 secuencias de cuentas que venden con historias y el
+análisis de paneles, ver [ganchos.md](ganchos.md)) y cómo se arman con el motor: el chat de WhatsApp, el archivo del
+recurso, el recurso tapado y los demás.
 
 Los que traen markup listo están en [motor-historias/recursos.html](../../../../motor-historias/recursos.html): bloques
 sueltos, con el estilo adentro y sin imágenes ni scripts, que se copian a la historia y se centran
 (`left = (1080 − ancho) / 2`). El editor del planner los ofrece en **Agregar → Recursos** (chat de WhatsApp, archivo)
-y, con una captura elegida, el botón **Tapar**.
+y, con una captura elegida, el botón **🔒 Tapar**.
 
 | Recurso | Para qué | Dónde va | Markup |
 |---|---|---|---|
@@ -19,6 +21,14 @@ y, con una captura elegida, el botón **Tapar**.
 | **Para quién es / no es** | Ordenar la oferta por perfiles | venta, V3 | caja negra con la palabra en color + etiquetas sueltas en `.caja blanca` |
 | **Pasos con captura** | El proceso en 2 a 4 pasos | R2, C3, venta | cada paso: etiqueta numerada + `.captura` + caja negra corta |
 | **Comparación de valor** | «Esto es Netflix» → «Esta es mi clase» | R4 | dos historias seguidas, cada una con su captura |
+| **Pantalla filmada** | El recurso o el resultado funcionando, sin mockup | R5, R6, R7, el pedido | video o foto real de la laptop o el celular con el recurso abierto, de fondo; con voz en off si se explica ([video-con-voz.md](video-con-voz.md)) |
+| **Panel de tus estadísticas** | La prueba de que un recurso anterior lo pidió mucha gente | R6 | `.captura` con la captura real del panel de esa historia («Respuestas 273»), recortada a esa parte; puede llevar un círculo de lápiz |
+| **Pila de comentarios** | Muchas reacciones reales juntas | C1, cierre de conciencia | de 3 a 6 `.captura` de comentarios reales superpuestas en escalera sobre una selfie, centradas como bloque |
+| **Pausa en negro** | Cortar antes de una lista o una regla | C6, conciencia | `.historia.lisa.negra` con una sola línea centrada en la Clásica y la parte clave en el color («Solo necesitás 2 cosas:») |
+| **Lista en cajas** | Beneficios, dolores o pasos, uno por renglón | venta, recurso, C6 | el título en `.resalte` blanco y cada ítem en su propio `.resalte` (del color si son beneficios: verde, nunca sobre fondo blanco) |
+
+Las cinco últimas salen del análisis de paneles ([metodo.md](metodo.md), «Tasas de referencia»). El panel y los
+comentarios son reales y recientes, como cualquier prueba.
 
 ## Reglas
 

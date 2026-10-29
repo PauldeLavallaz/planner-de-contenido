@@ -48,6 +48,12 @@ historias. Si una historia pide más de tres frases, partila en dos.
 | Tu método tiene una regla simple que se puede enseñar | 🔴 | R2 Una sola cosa |
 | Tenés un caso fuerte y el recurso explica cómo se hizo | 🔴 | R3 Caso primero |
 | Querés muchas respuestas y el recurso se puede vender por curiosidad, sin contar qué es | 🔴 | R4 Recurso hypeado |
+| Salió algo que tu público está mirando y tenés un recurso que lo aprovecha | 🔴 | R5 Novedad con recurso |
+| Acabás de hacer algo que se ve (una foto, un video, un trabajo para un cliente) y grabaste cómo | 🔴 | R5, variante del resultado recién hecho |
+| Un recurso de los últimos días trajo muchas respuestas y hay uno siguiente | 🔴 | R6 Segunda vuelta |
+| Te preguntan seguido cómo lograste un resultado y tenés el recurso que lo explica | 🔴 | R7 Me lo preguntan |
+| Hay un cupo real y la semana no tiene ventana de venta | 🟢 | V6 Venta al paso |
+| El público cree algo que tu método desmiente y hay un caso que lo muestra | 🟡 | C6 Creencia rota |
 | Hubo resultados de clientes esta semana | 🟡 | C1 Resultados de la semana |
 | Hubo trabajo con clientes que se puede mostrar (llamadas, entregas, sesiones) | 🟡 | C2 Detrás de escena |
 | Querés que se entienda qué pasa cuando alguien te contrata | 🟡 | C3 Cómo es por dentro |
@@ -79,7 +85,7 @@ Toda venta sigue el mismo camino: **gancho, vehículo, resultado y pedido**.
 Urgencia y escasez, sólo con una ventana real: una fecha de cierre, cupos contados, un precio que
 sube. Sin ventana, la palanca es un bono real (mejor si es algo que la oferta ya incluye, nunca se
 mencionó y ahorra tiempo o esfuerzo) o una ventaja cierta de escribir ahora, como enterarse primero
-de una apertura. V1 y V2 son para ventanas reales; V3, V4 y V5 sirven cualquier semana.
+de una apertura. V1 y V2 son para ventanas reales; V3, V4, V5 y V6 sirven cualquier semana.
 
 ### V1 · Anuncio con sorpresa · 4 historias
 
@@ -212,12 +218,44 @@ responde con la oferta y con un caso.
 > acompañamiento que busques… toquen acá y les mando todo». Una pregunta real sirve como gancho de vez
 > en cuando; una secuencia entera de preguntas no vende.
 
+### V6 · Venta al paso · 3 historias
+
+Una venta liviana, sin anuncio: algo del día y el pedido con un cupo real. Sirve en semana normal; la palanca es el
+cupo. Sale del análisis de paneles ([metodo.md](metodo.md)): en la cuenta de trading de referencia trajo 195 respuestas
+sobre 7.463 vistas (2,6%); en la cuenta de IA de referencia, con su mentoría, 155 sobre 4.212 (3,7%, «Busco 5-7
+personas»: su mejor venta) y, la misma forma tres semanas después con 6 cupos, 24 (1,6%).
+
+1. **Hace**: gancho. Una frase de charla, sin decir qué vende.
+   **Sensación**: curiosidad y cercanía.
+   **Fórmula**: «Hoy vendo rápido» (o como lo diga la persona: «Hoy vendo rápidoooo»).
+   **Visual**: foto de la persona donde está ese día, con un gesto.
+2. **Hace**: contexto. Por qué es rápido, con algo real del día.
+   **Sensación**: «es una persona como yo».
+   **Fórmula**: «Porque [✏️ plan real del día] más tarde.»
+   **Visual**: foto del lugar o del plan.
+3. **Hace**: pedido con el cupo.
+   **Sensación**: «es para mí, y son pocos».
+   **Fórmula**: «Busco [✏️ N real] personas que quieran: [📘 resultado de la oferta, concreto y con número si lo tiene].
+   Respondé "YO" 👇👇👇»
+   **Visual**: foto de trabajo. **Sticker**: ninguno (la cuenta de trading sumaba una encuesta «Yo soy el indicado / No
+   me interesa»; acá el pedido ya va escrito).
+
+> Así se hizo: «Hoy vendo rápidoooo» → «Porque voy a hacer Snow más tarde» → «Busco 5-7 personas que quieran: / Hacer 2
+> a 5k consistentemente con el Trading / Respondé "YO" 👇👇👇».
+
 ---
 
 ## 🔴 Recurso
 
 Primero se define el recurso y tiene que existir. Después: curiosidad con interacción, resultado o
 caso, y palabra clave. El recurso se muestra por dentro.
+
+Lo que dicen los números del análisis de paneles (61 secuencias, con las estadísticas de una cuenta de IA y de una
+cuenta de trading de referencia; ver [metodo.md](metodo.md)): la respuesta se junta en la historia del pedido, que tiene
+que entenderse sola (qué es, para qué sirve, la palabra y el recurso a la vista); las mejores tasas, entre el 4% y el 7%
+de sus vistas, son de 2 o 3 historias con el pedido en la segunda o la tercera; y una historia después del pedido, con
+una prueba y la misma palabra, suma entre un cuarto y el doble de lo que trajo el pedido. Si la fórmula deja historias
+después del pedido, que sean ese refuerzo.
 
 ### R1 · Encuesta, riesgo y recurso · 3 historias
 
@@ -307,6 +345,92 @@ va salvo que sea cierta: la palanca es el costo real, la reacción verdadera o e
 
 > Así se hizo: «Los profes de gym (la competencia) me van a matar por esto» → «Le mandé esta rutina a un cliente» con
 > la rutina detrás de una laptop → «Esta fue su respuesta:» y el chat → «Responde "PLAN" y te lo mando».
+
+### R5 · Novedad con recurso · 3 historias
+
+Para cuando sale algo que el público está mirando (una herramienta, una función, una noticia del rubro) y la marca tiene
+un recurso que lo aprovecha. Es lo que más respuestas le trajo a la cuenta de IA de referencia: 273 con el GPT para
+Sora 2 y 103 con la clase del video hecho en 13 minutos (entre el 4% y el 7% de las vistas del pedido).
+
+1. **Hace**: gancho. La novedad, contada como un aviso a un amigo.
+   **Sensación**: «me lo estoy perdiendo».
+   **Fórmula**: «Para el que vive debajo de una piedra… [✏️ hace unos días] salió [✏️ la novedad] 👉👉👉» o «Acabo de
+   hacer [✏️ resultado] con [✏️ la novedad] en [✏️ tiempo real]».
+   **Visual**: selfie con cara de sorpresa o con un gesto.
+2. **Hace**: prueba. Lo que se puede hacer, funcionando.
+   **Sensación**: «quiero hacer eso».
+   **Fórmula**: «Y podés hacer cosas así 👀»
+   **Visual**: [✏️ el video o la imagen del resultado, real]. Si es un video, la historia es ese video.
+3. **Hace**: pedido.
+   **Sensación**: «lo quiero ya».
+   **Fórmula**: «Armé [📘 recurso: una guía, una clase, una skill] para [📘 qué te resuelve con la novedad]. Respondé
+   "[PALABRA]" y [te lo paso / es tuyo] 👇👇👇»
+   **Visual**: la laptop o el celular filmados con el recurso abierto; puede ser video con voz en off
+   ([video-con-voz.md](video-con-voz.md)).
+
+La novedad es real y de los últimos días, y el recurso existe antes de publicar. Si trae muchas respuestas, a los dos o
+tres días va R6.
+
+**Variante sin novedad: el resultado recién hecho.** Funciona igual con algo que la persona acaba de hacer y se ve: en
+la cuenta de IA, cinco secuencias de dos meses entre 3,3% y 3,9% (210 + 124 con la foto de producto, 133, 125 y 99). La
+1 dice qué hizo, para quién y en cuánto tiempo, con ➡️➡️➡️: «Miren el video que acabo de armar para una marca», «Acabo
+de armar la mejor foto producto en menos de 7 minutos para una marca»; la 2 es el resultado (el video, o «Antes 👇 VS
+Después 👇»); la 3, «Hice una clase explicando el paso a paso de cómo lo hice / Respondé "[PALABRA]" y te la paso 👇👇👇»; y
+si hay otro resultado, una 4 de refuerzo («Otro ejemplo», con la misma palabra: sumó 124 a las 210 del pedido). El
+tiempo es el real. Con una caja de preguntas en lugar de la palabra, la misma secuencia trajo 0.
+
+> Así se hizo (cuenta de IA de referencia): «Para que el vive debajo de una piedra… Les aviso que hace unos días acaba
+> de salir el mejor generador de video de la historia SORA 2 👉👉👉» → un video hecho con Sora, «Y podes hacer cosas así 👀»
+> → la laptop filmada con el GPT y su voz («estuve creando, en base a los videos que mejor me quedaron, un GPT entrenado
+> para escribir guiones para Sora»), «Responde "GPT" 👇👇👇». 273 respuestas.
+
+### R6 · Segunda vuelta · 3 historias
+
+Después de un recurso que trajo muchas respuestas, la prueba de esa demanda abre el siguiente, un paso más hondo en el
+mismo tema. En la cuenta de IA de referencia: 288 respuestas sobre 4.272 vistas (6,7%), su mejor tasa.
+
+1. **Hace**: gancho. El desborde, sin explicarlo.
+   **Sensación**: «¿qué pasó?».
+   **Fórmula**: «SE ME FUE DE LAS MANOS ➡️» o «No me esperaba esto 👀».
+   **Visual**: selfie con un gesto.
+2. **Hace**: prueba de demanda.
+   **Sensación**: «todos lo pidieron y yo no».
+   **Fórmula**: «[✏️ El día] [✏️ N real] personas recibieron [✏️ el recurso anterior]»
+   **Visual**: [✏️ la captura del panel de esa historia o de los mensajes], recortada a la parte que importa.
+3. **Hace**: pedido.
+   **Sensación**: «este no me lo pierdo».
+   **Fórmula**: «Ahora armé [📘 recurso siguiente] para que [📘 resultado]. Respondé "[PALABRA]" y te lo paso 👇👇👇»
+   **Visual**: la pantalla con el recurso.
+
+Va dentro de la semana del recurso anterior, con su número tal cual sale del panel y una palabra nueva.
+
+> Así se hizo (cuenta de IA de referencia): «SE ME FUE DE LAS MANOS ➡️» → «El sábado 273 personas recibieron el ChatGPT
+> automatizado para Sora 2» con la captura del panel → «Ahora armé una clase / Para que aprendas a dominar Sora 2 /
+> Responde "YO" y te la paso 👇👇👇».
+
+### R7 · Me lo preguntan · 3 historias
+
+La pregunta que llega, con el resultado propio adentro, y el recurso que la responde. Es la forma de las mejores tasas de
+la cuenta de trading de referencia: 683 respuestas sobre 10.244 vistas (6,7%) con sólo las dos primeras historias.
+
+1. **Hace**: gancho. La pregunta que se repite, con el resultado y su número.
+   **Sensación**: «yo también quiero saber».
+   **Fórmula**: «Muchos me preguntan cómo [hice / hago] para [✏️ resultado propio con número]»
+   **Visual**: selfie, con la caja arriba.
+2. **Hace**: pedido.
+   **Sensación**: «me lo dan».
+   **Fórmula**: «Por eso [grabé / hice] [📘 recurso] mostrando [📘 qué]. Respondé "[PALABRA]" y te lo paso 👇👇👇»
+   **Visual**: la miniatura o la captura del recurso sobre una foto de la persona o su pantalla.
+3. **Hace**: refuerzo con la misma palabra.
+   **Sensación**: «a otros ya les sirvió».
+   **Fórmula**: «[✏️ la reacción real de alguien que lo recibió / lo que lograron quienes lo aplicaron]. Respondé
+   "[PALABRA]" así no te lo perdés»
+   **Visual**: [✏️ captura real del chat, con permiso] ([recursos.md](recursos.md)).
+
+> Así se hizo: «Muchos me preguntan cómo hice para fondearme con $1.5M» → «Por eso hice una clase mostrando toda mi
+> estrategia de Trading / Responde "YO" y te la paso 👇👇👇». Y con refuerzo: «Hice una clase explicando cómo lo
+> hacemos / Responde "CLASE" y es tuya» → «Todos mis alumnos se fondearon aplicando lo que explico en la clase / Responde
+> "CLASE"» (262 y 76 respuestas).
 
 ---
 
@@ -401,6 +525,36 @@ Prepara una venta o una novedad real de los próximos días.
 
 > Así se hizo: «Les dije que este mes se vienen cosas muy lindas para ustedes, así que estén
 > atentos porque mañana les cuento todooo».
+
+### C6 · Creencia rota · 4 historias
+
+Cambia una creencia del público con un caso real, sin pedido. Sale de las secuencias de cambio de creencia del análisis
+de paneles. No trae respuestas (entre 0 y 4 en la cuenta de IA, menos del 1% en las demás referencias): su
+trabajo es que el día de venta o de recurso alguien llegue sin esa traba.
+
+1. **Hace**: gancho. La creencia, tal como la dice el público.
+   **Sensación**: «eso pienso yo».
+   **Fórmula**: «Para [📘 deseo] tenés que [📘 la creencia]» y, debajo, «Eso dicen los que [📘 quienes la sostienen] 😅».
+   Variante: la frase entre comillas y «*dicen los que [📘…]».
+   **Visual**: foto o video de la persona trabajando.
+2. **Hace**: un caso que la contradice.
+   **Sensación**: «se parece a mí».
+   **Fórmula**: «Fijate en [✏️ cliente, con permiso]: / [✏️ su límite real: horas, plata, punto de partida].»
+3. **Hace**: lo que logró igual.
+   **Sensación**: «entonces se puede».
+   **Fórmula**: «Aún así, en [✏️ plazo]:» y [✏️ dos o tres logros], uno por renglón.
+4. **Hace**: la regla nueva.
+   **Sensación**: «cambia cómo lo veo».
+   **Fórmula**: «[📘 la creencia] NO es la solución.» y, en caja aparte, «La solución es [📘 la regla del método].»
+
+Para llegar a 5, una pausa antes de la regla: fondo negro y una sola línea («Solo necesitás 2 cosas:», ver
+[recursos.md](recursos.md)), y después las dos cosas. Si la marca lo prefiere, el cierre puede preguntar «Vos ya…?»
+con un «Respondé…»; si no, termina abierta.
+
+> Así se hizo: «Para ver resultados tenés que ir todos los días al gym / Eso dicen los que viven internados en el gym y
+> creen que es el único camino 😅» → «Fíjate en [cliente]: / Trabaja 8 horas al día. / Solo podía entrenar 3-4 horas por
+> semana.» → «Aún así / En 3 meses / - Recuperó su energía / - Ganó confianza en sí mismo / - Se sacó los dolores de
+> espalda» → «Ir todos los días a entrenar NO es la solución. ➡️➡️➡️» → «La solución es entrenar bien, no más.»
 
 ---
 

@@ -1,16 +1,14 @@
 # Historia con video y voz en off
 
-Un formato más para planificar la semana: sirve para mostrar algo que la persona construyó, cómo funciona su sistema o
-cómo hace algo. Suele funcionar muy bien, sobre todo para dar un recurso, una skill o una clase, y muchas veces el
-video es de YouTube.
-
 Es una historia de video con tres capas: abajo un video real, encima una voz en off que cuenta lo que se ve y arriba el
-texto de siempre, en el estilo nativo de Instagram ([diseno.md](diseno.md)).
+texto de siempre, en el estilo nativo de Instagram ([diseno.md](diseno.md)). Sirve para mostrar algo: algo que la
+persona construyó, cómo funciona su sistema, cómo hace algo, un recurso, una clase o un tramo de un video de YouTube.
+Suele rendir muy bien, y es uno de los formatos que se eligen al planificar la semana.
 
 ## Cuándo usarlo
 
-- **Recurso:** mostrar el recurso por dentro antes de pedir la palabra: la skill funcionando, un tramo de la clase de
-  YouTube, la plantilla abierta. Va en el nudo de R1, R2 o R3, y la historia del pedido sigue siendo una imagen con
+- **Recurso:** mostrar el recurso por dentro antes de pedir la palabra: la herramienta funcionando, un tramo de la clase
+  de YouTube, la plantilla abierta. Va en el nudo de R1, R2 o R3, y la historia del pedido sigue siendo una imagen con
   «Respondé PALABRA».
 - **Conciencia:** cómo funciona el sistema o cómo se hace algo (C2, C3). Mostrar el proceso real y no un resumen.
 - No reemplaza al gancho, que sigue siendo una imagen con una frase. Lo habitual es una o dos historias de video por
@@ -22,14 +20,18 @@ texto de siempre, en el estilo nativo de Instagram ([diseno.md](diseno.md)).
   Nada de enumerar lo que no está en pantalla.
 - Primera persona, como habla la persona. Entre 25 y 50 palabras por historia: de 8 a 15 segundos. Si hace falta más,
   se parte en dos historias de video seguidas.
-- **El guion se aprueba antes de generar el audio.** El texto de la voz se muestra completo y se espera el OK; mientras
-  haya correcciones, se devuelve sólo texto. En la propuesta de la semana va como «Voz en off: …» debajo del texto de
-  esa historia.
+- **El guion se aprueba antes de grabar o generar el audio.** El texto de la voz se muestra completo y se espera el
+  OK; mientras haya correcciones, se devuelve sólo texto. En la propuesta de la semana va como «Voz en off: …» debajo
+  del texto de esa historia.
+- Ya aprobado, el guion va a `<semana>/voces/<historia>.txt`, con el mismo nombre que la historia
+  (`voces/AAAA-MM-DD_N_tipo.txt`): es el que el editor del planner muestra en el teleprompter al grabar.
 
 ## La voz
 
-- La voz de la persona: su grabación o su clon de voz. Antes de usarla, controlá que diga exactamente lo que dice el
-  guion (una transcripción contra el texto alcanza).
+- Es la voz de la persona. Lo más simple es que la grabe ella en el editor del planner, leyendo el guion en el
+  teleprompter mientras corre el video: queda en sincro con lo que se ve. También puede ser un audio suyo o su clon de
+  voz. Antes de usar una voz que no se grabó leyendo el guion, controlá que diga exactamente lo que dice el guion (una
+  transcripción contra el texto alcanza).
 - **En historias, más rápida y con más energía que en un reel.** Se habla un poco más rápido, con más emoción y más
   dinámico. Como referencia, unas 4,3 palabras por segundo, contra unas 3,6 de un reel. Si el motor de voz admite
   tags de dirección, uno de apertura como `[enthusiastic, energetic, lively, showing a friend something I built]`; si
@@ -44,10 +46,10 @@ texto de siempre, en el estilo nativo de Instagram ([diseno.md](diseno.md)).
 - **Guía para filmar:** una toma por frase de la voz, en el mismo orden. Si filma el planner, que no mueva nada real:
   arrastrar y cambiar horas en una semana que no se publica y después **Volver al plan**; en el editor, cerrar sin
   guardar.
-- **Color:** un video del iPhone llega en HDR (HLG o Dolby Vision 8.4). `fondo_video.py` lo pasa a color normal con la
-  conversión de Apple (`avconvert`, la misma que muestran el iPhone y el Mac) y baja un poco las luces altas. La
-  conversión con zscale + hable deja la pantalla filmada quemada y demasiado brillante; fuera de macOS, sin
-  `avconvert`, el script la usa igual y lo avisa. Un video que ya es SDR no se toca.
+- **Color:** un video del iPhone llega en HDR (HLG o Dolby Vision 8.4). `motor-historias/fondo_video.py` lo pasa a
+  color normal con la conversión de Apple (`avconvert`, la misma que muestran el iPhone y el Mac) y baja un poco las
+  luces altas. La conversión con zscale + hable deja la pantalla filmada con el color roto y muy brillosa; fuera de
+  macOS, sin `avconvert`, el script la usa igual y lo avisa. Un video que ya es SDR no se toca.
 - **Encuadre:** vertical, llena la historia. Horizontal (YouTube), va entero, centrado sobre negro, con lugar arriba y
   abajo para el texto. `fondo_video.py` lo decide solo por la proporción; `--encuadre cubrir` o `--encuadre entero` lo
   fuerza.
@@ -77,10 +79,12 @@ texto de siempre, en el estilo nativo de Instagram ([diseno.md](diseno.md)).
    historia en MP4 sola cuando tiene `img[data-secuencia]` o `<audio class="voz">`: cuadro a cuadro, con la voz
    mezclada desde su segundo de inicio, en BT.709, y el PNG del segundo 1 como imagen fija. El chequeo avisa si la voz
    se corta o si pasa de 60 s (Instagram corta cada historia de video ahí: partila en dos).
-5. Revisión antes de entregar: el render completo, con audio. Que la voz diga lo que dice el guion, que la imagen
-   acompañe cada frase y que el texto no tape lo que importa.
+5. Antes de entregar, mirá y escuchá el MP4 completo: que la voz diga el guion, que la imagen acompañe cada frase y que
+   el texto no tape lo que importa.
 
-Lo mismo se hace desde el editor del planner, con el video de fondo y el cajón Audio: cómo se usa está en
+Lo mismo se hace desde el editor del planner, con el video de **Fondo** y el cajón **Audio**: ahí se graba la voz
+leyendo el guion en el teleprompter, se sube un audio o se elige una toma o una voz de `<semana>/voces/`, se ajusta en
+qué segundo empieza y se prueba con el video. Cómo se usa está en
 [«El editor» de docs/historias.md](../../../../docs/historias.md#el-editor). Lo que conviene saber al armar a mano o
 corregir lo que hizo el editor:
 
@@ -89,7 +93,10 @@ corregir lo que hizo el editor:
 - El planner prepara el video llamando al mismo `motor-historias/fondo_video.py`, con el Python del planner (`PYTHON`
   de su config: `PLANNER_PYTHON` si está definido; si no, `python3`, o `python` en Windows). El resultado es el mismo
   que corriéndolo a mano.
-- Las voces para elegir salen de `<semana>/voces/`; la elegida se copia a `fuente/assets/audio/` en WAV.
+- Las voces para elegir salen de `<semana>/voces/`; la elegida se copia a `fuente/assets/audio/` en WAV. Una toma
+  grabada queda como voz desde el segundo 0, sin el silencio del final y con un nivel parejo.
+- Si se cambia el guion en el editor, se guarda en el mismo `<semana>/voces/<historia>.txt` y la versión anterior queda
+  en `<semana>/tmp/ediciones/`.
 
 ## En semana.json y al publicar
 
