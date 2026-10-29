@@ -33,7 +33,7 @@ const pct = (a, b) => Number.isInteger(a) && Number.isInteger(b) && b > 0 ? Math
 // storyNeedsHand del servidor.
 const needsHand = () => false;
 const storyByImg = () => Object.fromEntries([...(stories.data?.semana?.dias || []), ...(stories.data?.entrantes || []).map(e => e.dia)].flatMap(d => d.historias.map(h => [h.imagen, h])));
-const defaultSeq = dia => ({ fecha: dia.fecha, historias: dia.historias.map(h => h.imagen), publicar: 'no', hora: null });
+const defaultSeq = dia => ({ fecha: dia.fecha, historias: dia.historias.map(h => h.imagen), publicar: 'no', hora: null, descartada: false });
 // Las secuencias tal como quedan con el borrador: cada una conserva su día original (tipo, fórmula, recurso).
 function storySeqs() {
   const sem = stories.data?.semana; if (!sem) return [];
@@ -44,48 +44,69 @@ function storySeqs() {
 // borrador de su semana de origen y se ve, se edita y se programa en la semana a la que fue: acá llegan como `entrantes`.
 const entrantes = () => (stories.data?.entrantes || []).map(e => ({ orig: e.orig, dia: e.dia, src: e.semana, recurso: e.recurso, entrante: true, ...e.secuencia }));
 const allSeqs = () => [...storySeqs(), ...entrantes()];
-const weekSeqs = () => allSeqs().filter(s => monday(s.fecha) === week);
-// Notas sin corregir de una secuencia (pendientes o copiadas que nadie tomó), por el run al que pertenece.
-const runOfSeq = s => s.entrante ? (stories.data?.entrantes || []).find(e => e.orig === s.orig && e.semana === s.src)?.run : stories.data?.semana?.run;
-const fbSinAplicar = s => stories.data?.feedback_sin_aplicar?.[runOfSeq(s) + '|' + s.orig] || [];
+// Una secuencia descartada sale del calendario: no se ve en su día ni lo ocupa.
+const weekSeqs = () => allSeqs().filter(s => monday(s.fecha) === week && !s.descartada);
 const seqOn = d => { const l = weekSeqs().filter(s => s.fecha === d); return l.find(s => s.historias.length) || l[0]; };
 const ownAccount = s => s.cuenta && s.cuenta !== stories.data?.cuenta ? s.cuenta : null;
-const seqChanged = s => JSON.stringify([s.fecha, s.historias, s.publicar, s.hora || null, ownAccount(s)]) !== JSON.stringify((({ fecha, historias, publicar, hora }) => [fecha, historias, publicar, hora, null])(defaultSeq(s.dia)));
+const seqChanged = s => JSON.stringify([s.fecha, s.historias, s.publicar, s.hora || null, ownAccount(s), !!s.descartada]) !== JSON.stringify((({ fecha, historias, publicar, hora }) => [fecha, historias, publicar, hora, null, false])(defaultSeq(s.dia)));
 async function saveSeqs(list, message) {
   const prev = structuredClone(stories.data.draft);
-  const secuencias = list.some(seqChanged) ? Object.fromEntries(list.map(s => [s.orig, { fecha: s.fecha, historias: s.historias, publicar: s.publicar, hora: s.publicar === 'postiz' ? (s.hora || STORY_DEFAULT_HOUR) : (s.hora || null), ...(ownAccount(s) ? { cuenta: s.cuenta } : {}) }])) : {};
+  const secuencias = list.some(seqChanged) ? Object.fromEntries(list.map(s => [s.orig, { fecha: s.fecha, historias: s.historias, publicar: s.publicar, hora: s.publicar === 'postiz' ? (s.hora || STORY_DEFAULT_HOUR) : (s.hora || null), ...(ownAccount(s) ? { cuenta: s.cuenta } : {}), ...(s.descartada ? { descartada: true } : {}) }])) : {};
   stories.data.draft = { ...stories.data.draft, secuencias }; renderStories();
   sSaving = sSaving.then(async () => {
-    try { setSave('Guardando…'); const r = await api('stories/draft', post({ week: stories.week, cuenta: stories.data.cuenta, revision: prev.revision, secuencias })); stories.data.draft = r; setSave('Guardado'); if (message) toast(message, () => saveSeqs(seqsFrom(prev))); }
+    try { setSave('Guardando…'); const r = await api('stories/draft', post({ week: stories.week, cuenta: stories.data.cuenta, revision: prev.revision, secuencias })); stories.data.draft = r; setSave('Guardado'); if (message) toast(message, () => saveSeqs(seqsFrom(prev))); refreshPending(); }
     catch (e) { stories.data.draft = prev; setSave(''); toast(e.message); if (e.status === 409) { stories.week = null; } }
     renderStories();
   });
   return sSaving;
 }
-// Guarda una sola secuencia en su semana de origen: correrla a otra semana o editar una que llegó de otra.
-function saveSeqOne(s, patch, message, goto) {
-  const next = { fecha: s.fecha, historias: s.historias, publicar: s.publicar, hora: s.hora || null, cuenta: s.cuenta || null, ...patch };
+// Guarda una sola secuencia en su semana de origen: correrla a otra semana, editar una que llegó de otra, descartarla o
+// recuperarla.
+function saveSeqOne(s, patch, message, goto, undo) {
+  const next = { fecha: s.fecha, historias: s.historias, publicar: s.publicar, hora: s.hora || null, cuenta: s.cuenta || null, descartada: !!s.descartada, ...patch };
   if (next.publicar === 'postiz' && !next.hora) next.hora = STORY_DEFAULT_HOUR;
   if (!next.cuenta || next.cuenta === stories.data.cuenta) delete next.cuenta;
+  if (!next.descartada) delete next.descartada;
   sSaving = sSaving.then(async () => {
-    try { setSave('Guardando…'); await api('stories/seq', post({ cuenta: stories.data.cuenta, semana: s.src || stories.week, orig: s.orig, revision: stories.data.draft.revision, secuencia: next })); setSave('Guardado'); if (message) toast(message, goto ? () => { week = monday(goto); render(); } : null, 'Ir a esa semana'); }
+    try { setSave('Guardando…'); await api('stories/seq', post({ cuenta: stories.data.cuenta, semana: s.src || stories.week, orig: s.orig, revision: stories.data.draft.revision, secuencia: next })); setSave('Guardado'); if (message) toast(message, goto ? () => { week = monday(goto); render(); } : undo || null, goto ? 'Ir a esa semana' : 'Deshacer'); }
     catch (e) { setSave(''); toast(e.message); }
     stories.week = null; await loadStories();
   });
   return sSaving;
 }
-// Cambiar una secuencia de día. En la misma semana intercambia con la del día elegido; a otra semana se corre, y el día
-// tiene que estar libre. Una que llegó de otra semana no intercambia: el día tiene que estar libre.
+// Cambiar una secuencia de día: arrastrando ⋮⋮ o tocando el día, también a otra semana. Si el día elegido ya tiene otra
+// secuencia, las dos intercambian el día: pasar la del lunes al martes manda la del martes al lunes. El servidor hace el
+// cambio en las dos semanas. A un día que ya pasó no se mueve nada.
 function moveSeq(orig, date) {
   const s = allSeqs().find(x => x.orig === orig); if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(date || '') || date === s.fecha) { renderStories(); return; }
-  const here = monday(date) === week, there = here ? weekSeqs().find(x => x.orig !== orig && x.fecha === date && x.historias.length) : null;
-  if (there && (there.entrante || s.entrante)) { toast(`El ${dayLong(date)} ya tiene otra secuencia. Mové primero esa.`); renderStories(); return; }
-  if (!s.entrante && here) {
-    const list = storySeqs(), src = list.find(x => x.orig === orig), other = list.find(x => x.orig !== orig && x.fecha === date), from = src.fecha;
-    src.fecha = date; if (other) other.fecha = from;
-    return saveSeqs(list, `Secuencia movida al ${dayLong(date)}.`);
-  }
-  return saveSeqOne(s, { fecha: date }, `Secuencia movida al ${dayLong(date)}.`, here ? null : date);
+  if (date < todayStr()) { toast(`El ${dayLong(date)} ya pasó: elegí hoy o un día que venga.`); renderStories(); return; }
+  const from = s.fecha, semana = s.src || stories.week;
+  sSaving = sSaving.then(async () => {
+    try {
+      setSave('Guardando…');
+      const r = await api('stories/move', post({ cuenta: stories.data.cuenta, semana, orig, fecha: date, revision: stories.data.draft.revision }));
+      setSave('Guardado');
+      const msg = r.intercambio ? `Secuencia movida al ${dayLong(date)}; la que estaba ahí pasó al ${dayLong(from)}.` : `Secuencia movida al ${dayLong(date)}.`;
+      if (monday(date) !== week) toast(msg, () => { week = monday(date); render(); }, 'Ir a esa semana');
+      else toast(msg, () => moveSeq(orig, from));
+    } catch (e) { setSave(''); toast(e.message); }
+    stories.week = null; await loadStories();
+  });
+  return sSaving;
+}
+// Descartar una secuencia: sale del calendario, deja el día libre y queda en Descartadas para recuperarla. Distinto de
+// «No se publica», que la deja en su día sin salir. Al programar, lo que tenía en Postiz se saca y queda en pausa; lo ya
+// publicado no se toca.
+function discardSeq(orig) {
+  const s = allSeqs().find(x => x.orig === orig); if (!s) return;
+  if (!confirm(`¿Descartar la secuencia del ${dayLong(s.fecha)}?\n\nSale del calendario y el día queda libre. Si ya estaba en Postiz, al programar se saca y queda en pausa, así nadie la vuelve a agendar. La recuperás desde Descartadas, abajo.\n\nPara dejarla en su día sin publicarla, usá «No se publica».`)) return;
+  const semana = s.src || stories.week;
+  return saveSeqOne(s, { descartada: true }, `Secuencia del ${dayLong(s.fecha)} descartada.`, null, () => recoverSeq(semana, orig));
+}
+function recoverSeq(semana, orig) {
+  const x = (stories.data?.descartadas || []).find(d => d.semana === semana && d.orig === orig); if (!x) return;
+  const s = { ...x.secuencia, orig: x.orig, src: x.semana, dia: x.dia }, otra = monday(s.fecha) !== week;
+  return saveSeqOne(s, { descartada: false }, `Secuencia recuperada en el ${dayLong(s.fecha)}.`, otra ? s.fecha : null);
 }
 // Dejar un día libre: la secuencia del día y las que le siguen pegadas se corren un día, salteando el domingo, hasta el
 // primer día vacío, también en las semanas siguientes. Cada una se guarda en el borrador de su semana de origen, de la
@@ -95,7 +116,7 @@ const nextWorkday = d => { const n = dateAdd(d, 1); return isSunday(n) ? dateAdd
 const seqsOfWeek = (data, w) => [
   ...(data?.semana?.dias || []).map(dia => ({ orig: dia.fecha, src: w, dia, ...defaultSeq(dia), ...(data.draft?.secuencias?.[dia.fecha] || {}) })),
   ...(data?.entrantes || []).map(e => ({ orig: e.orig, src: e.semana, dia: e.dia, entrante: true, ...e.secuencia })),
-].filter(s => monday(s.fecha) === w && s.historias.length);
+].filter(s => monday(s.fecha) === w && s.historias.length && !s.descartada);
 async function freeDay(date) {
   if (date < todayStr()) return toast('Ese día ya pasó.');
   const cuenta = stories.data.cuenta, semanas = new Map([[week, stories.data]]), moves = [];
@@ -145,8 +166,10 @@ function renderStories() {
   // Avisos de las historias en cadena de las últimas 24 h: una que falló, se demora o salió tarde.
   const avisos = stories.data.avisos_cadena || [];
   if (avisos.length) $('sSummary').innerHTML += avisos.slice(-3).map(x => `<span class="s-aviso" title="${esc(x.texto)}">⚠ ${esc(x.titulo)}: ${esc(x.texto)}</span>`).join('');
+  renderProgramar();
   if (!sem && !entrantes().length) {
-    $('sActions').hidden = true;
+    // Programar sigue a mano aunque esta semana no tenga historias: toma lo pendiente de todas.
+    $('sActions').hidden = !stories.data.pendiente?.total; $('sReset').hidden = true;
     const weeks = stories.data.weeks || [], nextW = weeks.find(w => w > week) || weeks[weeks.length - 1];
     const ac = stories.data.cuenta, principal = ac === cuentas[0]?.profile;
     $('sGrid').innerHTML = `<div class="s-empty">No hay historias planificadas para ${principal ? 'esta semana' : `@${esc(ac)} esta semana`}.${nextW ? ` <button class="link" data-sweek="${esc(nextW)}">Ir a la semana del ${esc(dayLong(nextW))}</button>` : ''}${weeks.length ? '' : `<br><span class="muted">Para armarlas, pedíselas a Claude Code: «armá la semana de historias${cuentas.length > 1 ? ` de @${esc(ac)}` : ''}». Cada semana es una carpeta en <code>${esc(stories.data.carpeta || 'historias')}/</code> con su semana.json (ver docs/historias.md).</span>`}</div>`;
@@ -154,26 +177,30 @@ function renderStories() {
   }
   const seqs = storySeqs(), byImg = storyByImg(), cola = stories.data.cola || {};
   const recursos = Object.fromEntries((sem?.recursos || []).map(r => [r.id, r]));
-  const changed = seqs.some(seqChanged), toPostiz = weekSeqs().filter(s => s.publicar === 'postiz' && s.historias.length).length;
-  const queued = Object.values(cola).some(q => q && q.estado !== 'publicada');
+  const changed = seqs.some(seqChanged), hhmm = nowLocal().slice(11, 16);
+  const descartadas = stories.data.descartadas || [];
   $('sActions').hidden = false;
   $('sReset').hidden = !changed;
-  // Programar también cuenta el feedback sin corregir de la semana: viaja en la propuesta.
-  const fbN = weekSeqs().reduce((k, s) => k + fbSinAplicar(s).length, 0);
-  $('sPropose').disabled = !(toPostiz || queued || fbN);
-  $('sProposeCount').textContent = toPostiz + fbN;
-  $('sPropose').title = [toPostiz ? `${toPostiz} día${toPostiz === 1 ? '' : 's'} a Postiz` : '', fbN ? `${fbN} nota${fbN === 1 ? '' : 's'} de feedback sin corregir` : ''].filter(Boolean).join(' · ');
   $('sGrid').innerHTML = Array.from({ length: 7 }, (_, n) => {
     const d = dateAdd(week, n), s = seqOn(d);
-    // Un día de esta semana sin secuencia: la semana de historias no lo cubre, o su secuencia se corrió a otra semana.
-    if (!s) { const out = seqs.find(x => x.orig === d && monday(x.fecha) !== week && x.historias.length);
-      return `<section class="s-row vacia ${d === today ? 'today' : ''}" data-srow="${d}" aria-label="${esc(dayLong(d))}"><div class="s-day"><div class="s-dayname"><span class="day-name">${esc(dayShort(d))}</span><span class="day-num">${Number(d.slice(8))}</span></div></div><div class="s-seq"><span class="s-free">${out ? `Su secuencia pasó al ${esc(dayLong(out.fecha))}. <button class="link" data-sweek="${esc(out.fecha)}">Ir a esa semana</button>` : 'Sin historias planificadas'}</span></div><aside class="s-res none"></aside></section>`; }
-    const dia = s.dia, tipo = dia.tipo || 'libre', mc = seqAccount(s), m = metricsFor(mc, d), moved = s.orig !== d;
+    // Un día de esta semana sin secuencia: la semana de historias no lo cubre, su secuencia se corrió a otra semana o se descartó.
+    if (!s) { const out = seqs.find(x => x.orig === d && monday(x.fecha) !== week && x.historias.length && !x.descartada), disc = descartadas.find(x => x.secuencia.fecha === d);
+      return `<section class="s-row vacia ${d === today ? 'today' : ''}" data-srow="${d}" aria-label="${esc(dayLong(d))}"><div class="s-day"><div class="s-dayname"><span class="day-name">${esc(dayShort(d))}</span><span class="day-num">${Number(d.slice(8))}</span></div></div><div class="s-seq"><span class="s-free">${out ? `Su secuencia pasó al ${esc(dayLong(out.fecha))}. <button class="link" data-sweek="${esc(out.fecha)}">Ir a esa semana</button>` : disc ? `Descartaste su secuencia${disc.dia?.tema ? ` («${esc(disc.dia.tema)}»)` : ''}. <button class="link" data-srecover="${esc(disc.semana)}|${esc(disc.orig)}">Recuperar</button>` : 'Sin historias planificadas'}</span></div><aside class="s-res none"></aside></section>`; }
+    const dia = s.dia, tipo = dia.tipo || 'libre', mc = seqAccount(s), m = metricsFor(mc, d), moved = s.orig !== d, pasado = d < today;
+    // Días que ya pasaron: atenuados, sin los controles de Postiz, con lo que dice la cola de cada historia. Hoy se marcan
+    // las que ya pasaron su hora.
+    const pasada = i => pasado || (d === today && s.publicar === 'postiz' && storyTime(s.hora, i) <= hhmm);
+    const nPub = s.historias.filter(img => storyPublished(cola[img])).length;
     const seqHtml = s.historias.length
       ? s.historias.map((img, i) => {
           const h = byImg[img] || {}, q = cola[img], hand = needsHand(h), from = img.includes(`/${s.orig}_`) ? '' : ' moved', fbn = stories.data.feedback?.[s.orig]?.historias?.[img] || 0;
-          const st = q ? (q.estado === 'publicada' ? '<span class="q ok">Publicada</span>' : q.cuenta && q.cuenta !== mc && s.publicar === 'postiz' ? `<span class="q warn" title="Está agendada en @${esc(q.cuenta)}: al confirmar la propuesta pasa a @${esc(mc)}">Pasa a @${esc(mc)}</span>` : q.cambio ? '<span class="q warn" title="Cambiaste la foto: se reemplaza en Postiz al confirmar la propuesta">Imagen nueva</span>' : q.estado === 'en_revision' ? `<span class="q" title="Espera en Postiz como borrador: sale apenas se publica la anterior y llega su hora">En cadena${q.cuando ? ' · ' + esc(new Date(q.cuando).toLocaleTimeString('es-AR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })) : ''}</span>` : `<span class="q">En Postiz${q.cuando ? ' · ' + esc(new Date(q.cuando).toLocaleTimeString('es-AR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })) : ''}</span>`) : '';
-          return `<button class="s-story${from}${s.publicar === 'postiz' && hand ? ' hand' : ''}" draggable="true" data-story="${esc(s.orig)}|${i}" data-img="${esc(img)}" title="${esc((h.texto || '') + (h.sticker ? ' · Sticker: ' + h.sticker : ''))}"><img src="/api/planner/poster?path=${esc(encodeURIComponent(img))}&v=${h.mtime || 0}" alt="" loading="lazy" draggable="false"><span class="n">${i + 1}</span>${h.video ? '<span class="s-vid" title="Video con voz en off">▶ video</span>' : ''}${h.editable ? '<span class="s-edit" data-edit-story title="Abrir el editor">✏️ Editar</span>' : ''}${fbn ? `<span class="s-fbn" title="${fbn} nota${fbn === 1 ? '' : 's'} de feedback pendiente${fbn === 1 ? '' : 's'}">💬 ${fbn}</span>` : ''}${st}${h.sticker && !/^zona segura/i.test(h.sticker) ? `<span class="stk">${hand ? '✋ ' : ''}${esc(h.sticker.split(':')[0])}</span>` : ''}</button>`;
+          // En la bandeja (inbox/) la historia está en la cola, pero sin fecha en Postiz.
+          const ya = pasada(i), pub = storyPublished(q), bandeja = q?.lugar === 'inbox', salia = s.publicar !== 'no' || (!!q && !bandeja);
+          const st = pub ? `<span class="q ok" title="${q.cuando ? 'Publicada el ' + esc(new Date(q.cuando).toLocaleString('es-AR', { timeZone: TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })) : 'Publicada'}">✓ Publicada</span>`
+            : ya ? `<span class="q ${salia ? 'bad' : 'mute'}" title="${q?.error ? 'Postiz marcó error al publicarla' : q ? 'Estaba en la cola de Postiz y no hay registro de que se haya publicado' : s.publicar === 'no' ? 'Ese día estaba en «No se publica»' : 'No llegó a Postiz: no hay registro de que se haya publicado'}">No salió</span>`
+            : bandeja ? '<span class="q mute" title="Está en la bandeja de la cola, sin fecha en Postiz">En la bandeja</span>'
+            : q ? (q.cuenta && q.cuenta !== mc && s.publicar === 'postiz' ? `<span class="q warn" title="Está agendada en @${esc(q.cuenta)}: al confirmar la propuesta pasa a @${esc(mc)}">Pasa a @${esc(mc)}</span>` : q.cambio ? '<span class="q warn" title="Cambiaste la foto: se reemplaza en Postiz al confirmar la propuesta">Imagen nueva</span>' : q.estado === 'en_revision' ? `<span class="q" title="Espera en Postiz como borrador: sale apenas se publica la anterior y llega su hora">En cadena${q.cuando ? ' · ' + esc(new Date(q.cuando).toLocaleTimeString('es-AR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })) : ''}</span>` : `<span class="q">En Postiz${q.cuando ? ' · ' + esc(new Date(q.cuando).toLocaleTimeString('es-AR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })) : ''}</span>`) : '';
+          return `<button class="s-story${from}${s.publicar === 'postiz' && hand ? ' hand' : ''}${ya ? ' pasada' : ''}" draggable="true" data-story="${esc(s.orig)}|${i}" data-img="${esc(img)}" title="${esc((h.texto || '') + (h.sticker ? ' · Sticker: ' + h.sticker : ''))}"><img src="/api/planner/poster?path=${esc(encodeURIComponent(img))}&v=${h.mtime || 0}" alt="" loading="lazy" draggable="false"><span class="n">${i + 1}</span>${h.video ? '<span class="s-vid" title="Video con voz en off">▶ video</span>' : ''}${h.editable ? '<span class="s-edit" data-edit-story title="Abrir el editor">✏️ Editar</span>' : ''}${fbn ? `<span class="s-fbn" title="${fbn} nota${fbn === 1 ? '' : 's'} de feedback pendiente${fbn === 1 ? '' : 's'}">💬 ${fbn}</span>` : ''}${st}${h.sticker && !/^zona segura/i.test(h.sticker) ? `<span class="stk">${hand ? '✋ ' : ''}${esc(h.sticker.split(':')[0])}</span>` : ''}</button>`;
         }).join('')
       : `<span class="s-free">${esc(dia.tema || 'Sin historias')}</span>`;
     const num = (k, ph, label) => `<input inputmode="numeric" pattern="[0-9]*" data-smetric="${k}" data-date="${d}" data-cuenta="${esc(mc)}" value="${Number.isInteger(m[k]) ? m[k] : ''}" placeholder="${ph}" title="${label}" aria-label="${label} del ${esc(dayLong(d))}">`;
@@ -184,19 +211,29 @@ function renderStories() {
     const metrics = tipo === 'libre' && !s.historias.length ? '' : `<div class="s-metrics"><label class="main"><span>Respuestas</span>${num('respuestas', '—', 'Respuestas')}</label><div class="s-vistas"><span>Vistas</span>${num('vistas_primera', '1.ª', 'Vistas de la primera historia')}${num('vistas_ultima', 'última', 'Vistas de la última historia')}</div>${auto || ratio ? `<p class="s-ratio">${auto}${esc(ratio)}</p>` : ''}</div>`;
     const handAt = s.historias.map((img, i) => needsHand(byImg[img]) ? `${i + 1} a las ${storyTime(s.hora, i)}` : null).filter(Boolean);
     const hands = handAt.length;
-    const pub = s.historias.length ? `<div class="s-pub" data-seq="${esc(s.orig)}">
-        <div class="seg">${(s.publicar === 'mano' ? ['postiz', 'mano', 'no'] : ['postiz', 'no']).map(k => `<button class="${s.publicar === k ? 'on' : ''}" data-pub="${k}" title="${k === 'postiz' ? 'Se agenda en Postiz cuando confirmes en el chat' : k === 'mano' ? 'La subís vos desde Instagram' : 'No sale'}">${MODE_NAME[k]}</button>`).join('')}</div>
+    const total = s.historias.length, salia = s.publicar !== 'no' || s.historias.some(img => cola[img]);
+    const paso = `<span class="s-paso ${nPub === total ? 'ok' : nPub ? 'warn' : salia ? 'bad' : 'mute'}" title="${nPub === total ? 'La cola de Postiz registra todas como publicadas' : salia ? 'Sin registro de publicación de las que faltan en la cola de Postiz' : 'Ese día estaba en «No se publica»'}">${nPub === total ? (total === 1 ? '✓ Salió' : `✓ Salieron las ${total}`) : nPub ? `Salieron ${nPub} de ${total}` : total === 1 ? 'No salió' : 'No salió ninguna'}</span>`;
+    const pub = pasado && total ? paso : s.historias.length ? `<div class="s-pub" data-seq="${esc(s.orig)}">
+        <div class="seg">${(s.publicar === 'mano' ? ['postiz', 'mano', 'no'] : ['postiz', 'no']).map(k => `<button class="${s.publicar === k ? 'on' : ''}" data-pub="${k}" title="${k === 'postiz' ? 'Se agenda en Postiz cuando confirmes en el chat' : k === 'mano' ? 'La subís vos desde Instagram' : 'Queda en su día sin salir; si estaba en Postiz, vuelve a la bandeja al programar. Para sacarla del calendario, Descartar'}">${MODE_NAME[k]}</button>`).join('')}</div>
         ${s.publicar !== 'no' ? '<div class="s-publine">' : ''}${s.publicar !== 'no' && cuentas.length > 1 ? `<label class="s-cuenta" title="Desde qué Instagram sale esta secuencia"><select data-scuenta="${esc(s.orig)}" aria-label="Cuenta de Instagram">${cuentas.map(a => `<option value="${esc(a.profile)}" ${a.profile === mc ? 'selected' : ''}>@${esc(a.profile)}</option>`).join('')}</select></label>` : ''}
         ${s.publicar === 'postiz' ? `<label class="s-hora">a las <input data-hora="${esc(s.orig)}" value="${esc(s.hora || STORY_DEFAULT_HOUR)}" inputmode="numeric" aria-label="Hora de la primera historia"></label>` : ''}${s.publicar !== 'no' ? '</div>' : ''}
         ${s.publicar === 'postiz' ? `${hands ? `<span class="s-hand" title="Instagram no deja publicar ese sticker por la API: la subís vos a esa hora, en su lugar de la secuencia">✋ A mano: ${esc(handAt.join(' · '))}</span>` : ''}` : ''}
       </div>` : '';
-    return `<section class="s-row tipo-${tipo} ${s.historias.length ? 'con-historias' : ''} ${tipo === 'libre' && !s.historias.length ? 'libre' : ''} ${d === today ? 'today' : ''} ${moved ? 'moved' : ''}" data-srow="${d}" data-seq="${esc(s.orig)}" aria-label="${esc(dayLong(d))}">
-      <div class="s-day"><div class="s-dayname"><span class="s-handle" draggable="true" data-seqdrag="${esc(s.orig)}" title="Arrastrá para cambiar de día" aria-label="Mover la secuencia a otro día">⋮⋮</span>${s.historias.length ? `<button class="s-move" data-smove="${esc(s.orig)}" title="Cambiar de día, también a otra semana"><span class="day-name">${esc(dayShort(d))}</span><span class="day-num">${Number(d.slice(8))}</span></button><input type="date" class="s-movedate" data-smovedate="${esc(s.orig)}" value="${esc(s.fecha)}" min="${dateAdd(s.orig, -28)}" max="${dateAdd(s.orig, 84)}" tabindex="-1" aria-hidden="true">` : `<span class="day-name">${esc(dayShort(d))}</span><span class="day-num">${Number(d.slice(8))}</span>`}${moved ? `<span class="s-was">era ${esc(monday(s.orig) === week ? `${dayShort(s.orig)} ${Number(s.orig.slice(8))}` : dayLong(s.orig))}</span>` : ''}${s.historias.length && d >= today ? `<button class="s-libre" data-sfree="${d}" title="Dejar este día libre: esta secuencia y las que siguen se corren un día (el domingo queda libre)">Dejar libre</button>` : ''}</div>
+    return `<section class="s-row tipo-${tipo} ${s.historias.length ? 'con-historias' : ''} ${tipo === 'libre' && !s.historias.length ? 'libre' : ''} ${d === today ? 'today' : ''} ${moved ? 'moved' : ''} ${pasado ? 'pasado' : ''}" data-srow="${d}" data-seq="${esc(s.orig)}" aria-label="${esc(dayLong(d))}">
+      <div class="s-day"><div class="s-dayname"><span class="s-handle" draggable="true" data-seqdrag="${esc(s.orig)}" title="Arrastrá para cambiar de día" aria-label="Mover la secuencia a otro día">⋮⋮</span>${s.historias.length ? `<button class="s-move" data-smove="${esc(s.orig)}" title="Cambiar de día, también a otra semana"><span class="day-name">${esc(dayShort(d))}</span><span class="day-num">${Number(d.slice(8))}</span></button><input type="date" class="s-movedate" data-smovedate="${esc(s.orig)}" value="${esc(s.fecha)}" min="${dateAdd(s.orig, -28)}" max="${dateAdd(s.orig, 84)}" tabindex="-1" aria-hidden="true">` : `<span class="day-name">${esc(dayShort(d))}</span><span class="day-num">${Number(d.slice(8))}</span>`}${moved ? `<span class="s-was">era ${esc(monday(s.orig) === week ? `${dayShort(s.orig)} ${Number(s.orig.slice(8))}` : dayLong(s.orig))}</span>` : ''}${s.historias.length && d >= today ? `<span class="s-dayacts"><button class="s-libre" data-sfree="${d}" title="Dejar este día libre: esta secuencia y las que siguen se corren un día (el domingo queda libre)">Dejar libre</button><button class="s-libre" data-sdiscard="${esc(s.orig)}" title="Sacar la secuencia del calendario: el día queda libre y, al programar, sale de Postiz y queda en pausa. Se recupera desde Descartadas. «No se publica», en cambio, la deja en su día sin salir">Descartar</button></span>` : ''}</div>
         <span class="s-tipo">${TIPO_NAME[tipo] || esc(tipo)}${dia.formula && dia.formula !== 'Libre' ? `<span>${esc(dia.formula)}</span>` : ''}</span>
         ${s.historias.length ? `<p class="s-tema" title="${esc((dia.tema || '') + (dia.relacionada ? ' · ' + dia.relacionada : ''))}">${esc(dia.tema || '')}</p>` : ''}${pub}${metrics}</div>
       <div class="s-seq" data-seqdrop="${esc(s.orig)}">${seqHtml}</div>
       ${storyResource(dia, s.entrante ? s.recurso : dia.recurso ? recursos[dia.recurso] : null, s.orig)}</section>`;
-  }).join('');
+  }).join('') + storyDiscarded(descartadas);
+}
+// Publicada de verdad: la cola o Postiz lo registran (estado publicada o PUBLISHED, id de Instagram o ficha archivada).
+const storyPublished = q => !!q && (q.estado === 'publicada' || /^PUBLISHED$/i.test(q.postiz || '') || !!q.release_id || q.lugar === 'publicado');
+// Las descartadas de la cuenta, de todas las semanas, para recuperarlas.
+let sDescOpen = false;
+function storyDiscarded(list) {
+  if (!list.length) return '';
+  return `<details class="s-desc" ${sDescOpen ? 'open' : ''}><summary>Descartadas · ${list.length}</summary>${list.map(x => `<div class="s-desc-row tipo-${esc(x.dia.tipo || 'libre')}"><b>${esc(dayLong(x.secuencia.fecha))}</b><span class="s-tipo">${TIPO_NAME[x.dia.tipo] || esc(x.dia.tipo || '')}${x.dia.formula && x.dia.formula !== 'Libre' ? `<span>${esc(x.dia.formula)}</span>` : ''}</span><span class="s-desc-tema">${esc(x.dia.tema || '')}</span><span class="s-desc-thumbs">${x.secuencia.historias.slice(0, 8).map(img => `<img src="/api/planner/poster?path=${esc(encodeURIComponent(img))}" alt="" loading="lazy">`).join('')}</span><button class="ghost" data-srecover="${esc(x.semana)}|${esc(x.orig)}" title="Vuelve a su día, con su hora y su forma de publicar">Recuperar</button></div>`).join('')}</details>`;
 }
 function storyResource(dia, r, orig) {
   if (!dia || (dia.tipo === 'libre' && !dia.historias?.length)) return '<aside class="s-res none">Libre</aside>';
@@ -399,7 +436,7 @@ function seSetup() {
   d.addEventListener('pointerdown', seDown, true); d.addEventListener('pointermove', seMove); d.addEventListener('pointerup', seUp); d.addEventListener('pointercancel', seUp);
   d.addEventListener('dblclick', seDbl); d.addEventListener('keydown', seKey); d.addEventListener('paste', sePaste);
   d.addEventListener('input', () => { if (se.editing) { se.edited.add(se.editing.dataset.se); se.dirty = true; seSaveButton(); } });
-  d.addEventListener('load', e => { if (e.target.tagName === 'IMG' && !se.play) { seSide(); se.mv?.updateRect(); } }, true);
+  d.addEventListener('load', e => { if (e.target.tagName === 'IMG' && !se.play && !se.rec) { seSide(); se.mv?.updateRect(); } }, true);
   // Al marcar palabras mientras se corrige, la barra muestra el color y el resaltado de lo marcado.
   let selT = 0; d.addEventListener('selectionchange', () => { if (!se?.editing) return; clearTimeout(selT); selT = setTimeout(() => se?.editing && seBar(), 80); });
   d.addEventListener('pointerdown', () => $('sePop') && ($('sePop').hidden = true), true);
@@ -608,6 +645,8 @@ function seKey(e) {
 }
 function seKeys(e) {
   if (!se?.root) return false;
+  // Grabando: Espacio termina la toma y Esc la descarta; el resto del teclado no toca la historia.
+  if (se.rec) { if (e.key === ' ' && !e.repeat) { e.preventDefault(); seRecStop(); } else if (e.key === 'Escape') { e.preventDefault(); seRecCancel(); } return true; }
   const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
   if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? seRedo() : seUndo(); return true; }
   if (mod && k === 'y') { e.preventDefault(); seRedo(); return true; }
@@ -891,9 +930,9 @@ function seAjustarDuracion() {
   const d = seVozFin() ? seVozFin() + 0.4 : seVideoDur();
   if (d > 0) { const v = String(Math.round(d * 10) / 10); se.root.dataset.duracion = v; se.dur = parseFloat(v); }
 }
-async function seSubirMedia(file, tipo) {
+async function seSubirMedia(file, tipo, extra = {}) {
   if (file.size > (tipo === 'video' ? 800e6 : 200e6)) throw new Error(tipo === 'video' ? 'El video pesa más de 800 MB: recortalo antes de subirlo.' : 'El audio pesa más de 200 MB.');
-  const q = new URLSearchParams({ imagen: se.img, tipo, name: file.name || tipo });
+  const q = new URLSearchParams({ imagen: se.img, tipo, name: file.name || tipo, ...extra });
   const r = await fetch('/api/planner/stories/media?' + q, { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
   const j = await r.json().catch(() => ({})); if (!r.ok || j.error) throw new Error(j.error || 'No se pudo subir.'); return j;
 }
@@ -937,11 +976,12 @@ async function seTrimVideo() {
   try { const r = await api('stories/video-trim', post({ imagen: se.img, secuencia: v.dataset.secuencia, desde, hasta })); if (se?.root) sePonerVideo(r); }
   catch (e) { toast(e.message); } finally { if (se) { se.mediaBusy = null; seDrawer(); } }
 }
-function sePonerVoz(r) {
+function sePonerVoz(r, inicio = null) {
   seChange(() => {
     let a = seVoz();
     if (!a) { a = seMark(se.d.createElement('audio')); a.className = 'voz'; a.dataset.inicio = '0.25'; se.root.prepend(a); }
     a.setAttribute('src', r.src); a.dataset.duracion = String(r.duracion || 0);
+    if (inicio !== null) a.dataset.inicio = String(inicio);
     seAjustarDuracion();
   });
 }
@@ -956,15 +996,20 @@ async function seElegirVoz(v) {
   try { const r = v.en_fuente ? { src: v.src, duracion: v.duracion } : await api('stories/voice-import', post({ imagen: se.img, path: v.path })); if (se?.root) { sePonerVoz(r); se.voces = null; seDrawer(); } }
   catch (e) { toast(e.message); }
 }
+// El cuadro del video de fondo en el segundo t; pasado el final queda el último, como en el render.
+function seFrameAt(v, t) {
+  const n = parseInt(v?.dataset.cuadros, 10) || 0; if (!n) return;
+  v.setAttribute('src', v.dataset.secuencia.replace('%03d', String(Math.min(n, Math.floor(t * (parseFloat(v.dataset.fps) || 30)) + 1)).padStart(3, '0')));
+}
 // Probar: la voz suena desde su segundo y el video corre en el editor cuadro a cuadro, como en el render.
 function seProbar() {
   if (se.play) { seParar(); return; }
-  const v = seVideo(), a = seVoz(), fps = parseFloat(v?.dataset.fps) || 30, n = parseInt(v?.dataset.cuadros, 10) || 0, pat = v?.dataset.secuencia;
+  const v = seVideo(), a = seVoz();
   const audio = a ? new Audio(se.src.base + a.getAttribute('src')) : null, ini = parseFloat(a?.dataset.inicio) || 0, t0 = performance.now(), dur = se.dur;
   se.play = { audio, raf: 0, v, poster: v?.getAttribute('src'), timer: audio ? setTimeout(() => audio.play().catch(() => {}), ini * 1000) : null };
   const tick = () => {
     if (!se?.play) return; const t = (performance.now() - t0) / 1000; if (t >= dur) { seParar(); return; }
-    if (v && n) v.setAttribute('src', pat.replace('%03d', String(Math.min(n, Math.floor(t * fps) + 1)).padStart(3, '0')));
+    if (v) seFrameAt(v, t);
     se.play.raf = requestAnimationFrame(tick);
   };
   tick(); seDrawer();
@@ -973,6 +1018,134 @@ function seParar() {
   const p = se?.play; if (!p) return; se.play = null;
   cancelAnimationFrame(p.raf); clearTimeout(p.timer); p.audio?.pause(); if (p.v && p.poster) p.v.setAttribute('src', p.poster);
   if (seTab === 'audio') seDrawer();
+}
+
+// ── Grabar la voz en off ──
+// Si hay un guion preparado, se lee con un teleprompter y la voz en off queda grabada ahí mismo, con la duración del
+// video a la vista. Grabar abre el micrófono, cuenta 3, 2, 1 y arranca la toma junto con el video de fondo, que corre en
+// el editor como en el render. El guion pasa grande en el panel, con una guía de ritmo que lo termina con el video. Al
+// terminar, la toma se sube (el servidor le corta el silencio del final y la nivela) y queda como voz desde el segundo
+// 0, en sincro con lo que se vio. El guion se guarda en <semana>/voces/<historia>.txt.
+// En historias se habla rápido: para estimar cuánto dura lo leído en vivo, 4 palabras por segundo.
+const SE_WPS = 4;
+let seMics = null;
+const seGuionTxt = t => String(t || '').replace(/\[[^\]]*\]/g, ' ');
+const seGuionWords = t => seGuionTxt(t).split(/\s+/).filter(w => /[\p{L}\p{N}]/u.test(w)).length;
+function seGuionMeta() {
+  const n = seGuionWords(se.guion?.texto), vd = seVideoDur(), est = n / SE_WPS;
+  if (!n) return '';
+  const largo = vd && est > vd + .5;
+  return `<span class="${largo ? 'warn' : ''}">${n} palabras · ≈ ${seFmtS(est)} s leído${vd ? ` · video de ${seFmtS(vd)} s` : ''}${largo ? ' · largo para el video' : ''}</span>`;
+}
+function seGuionLoad() {
+  if (se.guion || se.guionLoading) return;
+  se.guionLoading = true; const img = se.img;
+  api('stories/voice-script?imagen=' + encodeURIComponent(img)).then(r => ({ texto: r.texto || '', guardado: r.texto || '' }), () => ({ texto: '', guardado: '' }))
+    .then(g => { if (se?.img === img) { se.guion = g; se.guionLoading = false; if (seTab === 'audio' && !se.rec) seDrawer(); } });
+}
+async function seGuionSave() {
+  const g = se?.guion, img = se?.img; if (!g || g.texto.trim() === g.guardado.trim()) return;
+  const texto = g.texto;
+  try { await api('stories/voice-script', post({ imagen: img, texto })); if (se?.guion === g) g.guardado = texto; }
+  catch (e) { toast('No se guardó el guion: ' + e.message); }
+}
+async function seMicsLoad() {
+  try { seMics = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.label && d.deviceId !== 'communications'); } catch { seMics = []; }
+}
+async function seRecStart() {
+  if (se.rec || se.busy) return;
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return toast('Este navegador no permite grabar audio.');
+  seParar(); seGuionSave();
+  const img = se.img, mic = store.get('mic', ''), r = se.rec = { fase: 'mic', chunks: [], idx: 0 }; seDrawer(); seSaveButton();
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { ...(mic ? { deviceId: { ideal: mic } } : {}), echoCancellation: false, noiseSuppression: true, autoGainControl: false, channelCount: 1 } }); }
+  catch { if (se?.rec === r) { se.rec = null; seDrawer(); seSaveButton(); } return toast('No hay permiso para usar el micrófono: habilitalo en el candado de la barra de direcciones.'); }
+  if (se?.img !== img || se.rec !== r) { stream.getTracks().forEach(t => t.stop()); return; }
+  seMicsLoad();
+  const ctx = new AudioContext(), an = ctx.createAnalyser(); an.fftSize = 1024; ctx.createMediaStreamSource(stream).connect(an);
+  const v = seVideo(), vd = seVideoDur(), n = seGuionWords(se.guion?.texto), est = n / SE_WPS;
+  // La guía de ritmo termina el guion con el video (menos un respiro), sin ir mucho más lento ni más rápido que leído.
+  Object.assign(r, { fase: 'cuenta', n: 3, stream, ctx, an, buf: new Float32Array(an.fftSize), v, poster: v?.getAttribute('src'), vd, T: vd && n ? Math.min(Math.max(vd - .4, est * .75), est * 1.3) : est });
+  seDrawer(); r.raf = requestAnimationFrame(seRecTick);
+  const step = () => {
+    if (se?.rec !== r) return;
+    if (--r.n > 0) { const c = $('seDrawer').querySelector('[data-tp="count"]'); if (c) c.textContent = r.n; r.timer = setTimeout(step, 700); return; }
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find(m => MediaRecorder.isTypeSupported(m)) || '';
+    const mr = r.mr = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 128000 });
+    mr.ondataavailable = e => { if (e.data.size) r.chunks.push(e.data); };
+    mr.onstart = () => { if (se?.rec !== r) return; r.t0 = performance.now(); r.fase = 'grabando'; seDrawer(); };
+    mr.onstop = () => seRecSave(r, mr.mimeType || mime || 'audio/webm');
+    mr.start(500);
+  };
+  r.timer = setTimeout(step, 700);
+}
+function seRecTick() {
+  const r = se?.rec; if (!r?.an) return;
+  r.an.getFloatTimeDomainData(r.buf); let s = 0; for (const x of r.buf) s += x * x;
+  const db = 20 * Math.log10(Math.sqrt(s / r.buf.length) + 1e-6), lvl = Math.min(1, Math.max(0, (db + 60) / 50));
+  r.lvl = Math.max(lvl, (r.lvl || 0) - .03);
+  const box = $('seDrawer'), m = box.querySelector('[data-tp="level"]'); if (m) m.style.width = (r.lvl * 100).toFixed(1) + '%';
+  if (r.fase === 'grabando') {
+    const t = (performance.now() - r.t0) / 1000;
+    if (r.v) seFrameAt(r.v, t);
+    const time = box.querySelector('[data-tp="time"]'); if (time) { time.textContent = clock(t); time.classList.toggle('over', !!r.vd && t > r.vd); }
+    const bar = box.querySelector('[data-tp="bar"]'); if (bar) bar.style.width = Math.min(100, t / r.vd * 100).toFixed(2) + '%';
+    seTpPaint(t);
+    if (t >= 60) { seRecStop(); return; } // el máximo de una historia de video en Instagram
+  }
+  r.raf = requestAnimationFrame(seRecTick);
+}
+// Guía de ritmo: lo que ya tendría que estar dicho se apaga y el texto sube para dejar lo que sigue a la vista.
+function seTpPaint(t) {
+  const r = se.rec, tp = $('seDrawer').querySelector('[data-tp="text"]'); if (!tp) return;
+  const words = tp.querySelectorAll('[data-w]'), N = words.length; if (!N || !r.T) return;
+  if (r.tp !== tp) { r.tp = tp; r.idx = 0; }
+  const idx = Math.min(N, Math.floor(Math.max(0, (t - .25) / r.T) * N));
+  for (let k = r.idx; k < idx; k++) words[k].classList.add('ya');
+  r.idx = Math.max(r.idx, idx);
+  const cur = words[Math.min(idx, N - 1)], goal = cur.offsetTop - tp.clientHeight * .3;
+  tp.scrollTop += (goal - tp.scrollTop) * .12;
+}
+function seRecStop() { const r = se?.rec; if (r?.fase !== 'grabando') return; r.fase = 'subiendo'; seRecEnd(r); seDrawer(); }
+function seRecCancel() { const r = se?.rec; if (!r || r.fase === 'subiendo') return; r.cancel = true; seRecEnd(r); se.rec = null; seDrawer(); seSaveButton(); }
+function seRecEnd(r) {
+  cancelAnimationFrame(r.raf); clearTimeout(r.timer);
+  if (r.mr && r.mr.state !== 'inactive') r.mr.stop();
+  r.stream?.getTracks().forEach(t => t.stop()); r.ctx?.close().catch(() => {}); r.an = null;
+  if (r.v && r.poster) r.v.setAttribute('src', r.poster);
+}
+async function seRecSave(r, type) {
+  if (r.cancel || se?.rec !== r) return;
+  const file = new File(r.chunks, 'toma.' + (/mp4/.test(type) ? 'm4a' : /ogg/.test(type) ? 'ogg' : 'webm'), { type });
+  try { const res = await seSubirMedia(file, 'audio', { toma: '1' }); if (se?.rec === r) { se.rec = null; sePonerVoz(res, 0); se.voces = null; } }
+  catch (e) { toast(e.message); }
+  finally { if (se?.rec === r) se.rec = null; if (se) { seDrawer(); seSaveButton(); } }
+}
+function seTeleprompter() {
+  const r = se.rec;
+  if (r.fase === 'mic') return '<h4>Grabar</h4><p class="hint busy">Abriendo el micrófono…</p>';
+  if (r.fase === 'subiendo') return '<h4>Grabar</h4><p class="hint busy">Guardando la toma…</p>';
+  let k = 0;
+  const texto = seGuionTxt(se.guion?.texto).split(/\n+/).map(p => p.trim()).filter(Boolean)
+    .map(p => `<p>${p.split(/\s+/).map(w => `<span data-w="${k++}">${esc(w)}</span>`).join(' ')}</p>`).join('');
+  return `<div class="se-tp-head"><i class="se-rec-dot ${r.fase === 'grabando' ? 'on' : ''}"></i><b class="se-tp-time" data-tp="time">${r.fase === 'grabando' ? '0:00' : 'Preparate'}</b>${r.vd ? `<span class="muted">/ ${clock(r.vd)}</span>` : ''}<span class="se-meter" title="Nivel del micrófono"><i data-tp="level"></i></span></div>
+    ${r.vd ? '<div class="se-tp-bar"><i data-tp="bar"></i></div>' : ''}
+    <div class="se-tp-wrap"><div class="se-tp" data-tp="text">${texto || '<p class="se-tp-libre">Sin guion: hablá libre.</p>'}</div>${r.fase === 'cuenta' ? `<div class="se-tp-count" data-tp="count">${r.n}</div>` : ''}</div>
+    <div class="se-adds row">${seB('rec-parar', '■ Terminar', { cls: 'primary', disabled: r.fase !== 'grabando', title: 'Espacio' })}${seB('rec-cancelar', 'Descartar', { title: 'Esc' })}</div>`;
+}
+// La línea de tiempo de la voz contra el video: cuánto dura cada uno y dónde empieza la voz.
+function seTimeline() {
+  const vd = seVideoDur(), a = seVoz(); if (!vd || !a) return '';
+  const ini = parseFloat(a.dataset.inicio) || 0, dur = parseFloat(a.dataset.duracion) || 0, fin = ini + dur, total = Math.max(vd, fin, .1);
+  const bar = (l, w) => `<span class="se-tl-track"><i style="left:${(l / total * 100).toFixed(2)}%;width:${(w / total * 100).toFixed(2)}%"></i></span>`;
+  return `<div class="se-tl"><div class="se-tl-row" title="Video de fondo"><span>🎬</span>${bar(0, vd)}<b>${seFmtS(vd)} s</b></div><div class="se-tl-row voz" title="La voz va del segundo ${seFmtS(ini)} al ${seFmtS(fin)}"><span>🎙</span>${bar(ini, dur)}<b>${seFmtS(dur)} s</b></div></div>${fin > vd + .05 ? `<p class="hint warn">La voz sigue ${seFmtS(fin - vd)} s después del video: el último cuadro queda quieto.</p>` : ''}`;
+}
+// Las tomas grabadas acá se llaman <fecha UTC>-<id>-toma.wav: en la lista, «Toma» con su hora.
+function seVozNombre(v) {
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\d*-[0-9a-f]{4}-(.+)\.\w+$/.exec(v.nombre);
+  if (!m) return v.nombre.replace(/\.\w+$/, '');
+  const d = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`), p = n => String(n).padStart(2, '0');
+  return `${m[7] === 'toma' ? 'Toma' : m[7]} · ${d.getDate()}/${d.getMonth() + 1} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 // ── Colores ──
@@ -1101,7 +1274,7 @@ function seSetBoxStyle(el, style) {
   seSetBox(el, style === 'translucida' ? 'caja translucida' : style);
   if (style !== 'translucida') seColorAct('cajacolor', color === 'acento' ? 'acento' : color);
 }
-function seSaveButton() { $('seSave').disabled = !se?.dirty || se.busy; $('seSave').textContent = se?.busy ? (se.root && (seVideo() || seVoz()) ? 'Renderizando el video…' : 'Renderizando…') : 'Guardar y renderizar'; $('seUndo').disabled = !se?.undo.length || se?.busy; $('seRedo').disabled = !se?.redo.length || se?.busy; }
+function seSaveButton() { $('seSave').disabled = !se?.dirty || se.busy || !!se.rec; $('seSave').textContent = se?.busy ? (se.root && (seVideo() || seVoz()) ? 'Renderizando el video…' : 'Renderizando…') : 'Guardar y renderizar'; $('seUndo').disabled = !se?.undo.length || se?.busy; $('seRedo').disabled = !se?.redo.length || se?.busy; }
 // Los mismos números que el chequeo de render.py: el centro a 14 px del eje y el texto entre 240 y 1660 px.
 const SE_TOL_CENTRO = 14, SE_ARRIBA = 240, SE_ABAJO = 1660, SE_GANCHO_MAX = 20, SE_HISTORIA_MAX = 47;
 const seWarnTarget = el => el.closest('[data-grupo]') || seTop(el) || el;
@@ -1211,6 +1384,8 @@ function seBar() {
 // El panel de la izquierda (se abre con los botones del costado).
 function seDrawer() {
   const box = $('seDrawer'); document.querySelectorAll('#storyEditor [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === seTab));
+  // Grabando, el panel se ensancha para el teleprompter.
+  const tp = !!se?.rec && seTab === 'audio'; if (box.classList.contains('tp') !== tp) { box.classList.toggle('tp', tp); seFit(); }
   box.hidden = !seTab; if (!seTab || !se?.root) return;
   if (seTab === 'agregar') {
     box.innerHTML = `<h4>Texto</h4><div class="se-adds">
@@ -1239,14 +1414,21 @@ function seDrawer() {
       <h4>Video</h4>${seVideoBox(vid)}
       <h4>Color liso</h4><div class="se-colors big">${SE_PALETTE.map(([h, n]) => `<button class="se-color ${bg === h ? 'on' : ''}" data-act="bgcolor" data-val="${h}" title="${n}" style="background:${h}"></button>`).join('')}<label class="se-color custom" title="Otro color"><input type="color" data-act="bgcolor" value="${bg.startsWith('#') ? bg : '#ff3366'}"></label></div>`;
   } else if (seTab === 'audio') {
-    const a = seVoz(), busy = /audio/i.test(se.mediaBusy || '');
-    box.innerHTML = `<h4>Voz en off</h4>${a ? `<audio controls preload="metadata" src="${esc(se.src.base + a.getAttribute('src'))}"></audio>
+    if (se.rec) { box.innerHTML = seTeleprompter(); return; }
+    const a = seVoz(), busy = /audio/i.test(se.mediaBusy || ''), g = se.guion, uso = a?.getAttribute('src');
+    // Al volver a dibujar el panel (llega la lista de voces, por ejemplo), el guion que se está escribiendo sigue con el foco.
+    const ta = document.activeElement?.matches?.('#seDrawer [data-guion]') ? document.activeElement : null, sel = ta && [ta.selectionStart, ta.selectionEnd, ta.scrollTop];
+    box.innerHTML = `<h4>Voz en off</h4>${a ? `<audio controls preload="metadata" src="${esc(se.src.base + uso)}"></audio>${seTimeline()}
         <div class="se-tramo"><label>Empieza en <input type="number" min="0" step="0.05" data-voz="inicio" value="${esc(a.dataset.inicio || '0')}"> s</label></div>
-        <div class="se-adds row">${seB('voz-probar', se.play ? '■ Parar' : (seVideo() ? '▶ Probar con el video' : '▶ Probar'))}${seB('voz-sacar', 'Sacar la voz')}</div>` : '<p class="hint">Sin voz en off. Subí un audio o elegí una voz de la carpeta voces/ de la semana.</p>'}
-      <p class="hint">La historia dura ${seFmtS(se.dur)} s${seVideo() ? ` · el video, ${seFmtS(seVideoDur())} s` : ''}${a && seVozFin() ? ` · la voz termina en ${seFmtS(seVozFin())} s` : ''}.${a && seVideo() && seVozFin() > seVideoDur() ? ' El video termina antes que la voz: el último cuadro queda quieto.' : ''}</p>
-      <h4>Subir</h4>${busy ? `<p class="hint busy">${esc(se.mediaBusy)}</p>` : '<label class="se-upload"><input type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg" data-upload-audio hidden>⬆︎ Subir un audio</label>'}
-      <h4>Voces de la semana</h4><div class="se-voces">${se.voces ? (se.voces.map((v, k) => `<button class="se-add" data-act="voz-elegir" data-val="${k}" title="${esc(v.path)}">🎙 ${esc(v.nombre)}${v.duracion ? ` · ${seFmtS(v.duracion)} s` : ''}${a && v.src && v.src === a.getAttribute('src') ? ' · en uso' : ''}</button>`).join('') || '<p class="hint">No hay voces en la carpeta voces/ de la semana.</p>') : '<p class="hint">Cargando…</p>'}</div>`;
-    if (!se.voces && !se.vocesLoading) { se.vocesLoading = true; api('stories/voices?imagen=' + encodeURIComponent(se.img)).then(r => { se.voces = r.voces; }, () => { se.voces = []; }).finally(() => { if (se) { se.vocesLoading = false; if (seTab === 'audio') seDrawer(); } }); }
+        <div class="se-adds row">${seB('voz-probar', se.play ? '■ Parar' : (seVideo() ? '▶ Probar con el video' : '▶ Probar'), { cls: 'line' })}${seB('voz-sacar', 'Sacar la voz', { cls: 'line', title: 'Sale de la historia y queda en la lista de tomas' })}</div>` : '<p class="hint">Sin voz. Grabala leyendo el guion, subí un audio o elegí una toma.</p>'}
+      <p class="hint">La historia dura ${seFmtS(se.dur)} s${seVideo() ? ` · el video, ${seFmtS(seVideoDur())} s` : ''}${a && seVozFin() ? ` · la voz termina en ${seFmtS(seVozFin())} s` : ''}.</p>
+      <h4>Guion</h4>${g ? `<textarea class="se-guion" data-guion rows="6" placeholder="Escribí o pegá lo que vas a decir. Mientras grabás, pasa grande acá.">${esc(g.texto)}</textarea><p class="hint" data-guion-meta>${seGuionMeta()}</p>` : '<p class="hint">Cargando…</p>'}
+      <div class="se-rec-acts">${busy ? `<p class="hint busy">${esc(se.mediaBusy)}</p>` : `${seB('rec-grabar', '<i class="se-rec-dot"></i>Grabar', { cls: 'rec', disabled: se.busy, title: seVideo() ? 'Graba tu voz mientras corre el video, leyendo el guion' : 'Graba tu voz leyendo el guion' })}<label class="se-b se-up" title="MP3, WAV, M4A u OGG"><input type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg" data-upload-audio hidden>⬆︎ Subir audio</label>`}</div>
+      ${seMics?.length > 1 ? `<label class="se-mic"><span>Micrófono</span><select data-mic>${seMics.map(d => `<option value="${esc(d.deviceId)}" ${d.deviceId === (store.get('mic', '') || 'default') ? 'selected' : ''}>${esc(d.label)}</option>`).join('')}</select></label>` : ''}
+      <h4>Tomas y voces</h4><div class="se-voces">${se.voces ? (se.voces.map((v, k) => `<button class="se-voz ${uso && v.src === uso ? 'on' : ''}" data-act="voz-elegir" data-val="${k}" title="${esc(v.path)}"><span>${uso && v.src === uso ? '✓' : '🎙'} ${esc(seVozNombre(v))}</span>${v.duracion ? `<small>${seFmtS(v.duracion)} s</small>` : ''}</button>`).join('') || '<p class="hint">Todavía no hay tomas. También podés dejar audios en la carpeta voces/ de la semana.</p>') : '<p class="hint">Cargando…</p>'}</div>`;
+    if (ta && sel) { const t2 = box.querySelector('[data-guion]'); if (t2) { t2.focus(); t2.setSelectionRange(sel[0], sel[1]); t2.scrollTop = sel[2]; } }
+    seGuionLoad(); if (seMics === null && navigator.mediaDevices?.enumerateDevices) { seMics = []; seMicsLoad().then(() => { if (seTab === 'audio' && se && !se.rec && seMics.length > 1) seDrawer(); }); }
+    if (!se.voces && !se.vocesLoading) { se.vocesLoading = true; api('stories/voices?imagen=' + encodeURIComponent(se.img)).then(r => { se.voces = r.voces; }, () => { se.voces = []; }).finally(() => { if (se) { se.vocesLoading = false; if (seTab === 'audio' && !se.rec) seDrawer(); } }); }
   } else if (seTab === 'capas') {
     const items = [...se.root.children].filter(x => !x.matches('script, audio')).reverse();
     box.innerHTML = `<h4>Capas</h4><p class="hint">De adelante hacia atrás. Tocá una para elegirla.</p>${items.map(x => `<div class="se-layer ${x === se.sel || x.contains(se.sel) ? 'on' : ''} ${seLayer(x) ? 'fija' : ''}"><button class="se-layer-name" data-act="layer" data-val="${esc(x.dataset.se || '')}">${esc(seLabel(x))}</button>${seLayer(x) ? '' : `<button class="icon" data-act="layer-up" data-val="${esc(x.dataset.se || '')}" title="Adelante">↑</button><button class="icon" data-act="layer-down" data-val="${esc(x.dataset.se || '')}" title="Atrás">↓</button>`}</div>`).join('')}`;
@@ -1331,7 +1513,7 @@ document.querySelector('#storyEditor').addEventListener('click', e => {
   if (pick) { const p = $('sePop'); seClosePop(); sePick(p.dataset.kind, p.dataset.act, pick.dataset.pick); return; }
   if (e.target.closest('#sePop')) return;
   const st = e.target.closest('[data-step]'); if (st) { seStepClick(st.dataset.step, Number(st.dataset.d)); return; }
-  const tab = e.target.closest('[data-tab]'); if (tab) { seTab = seTab === tab.dataset.tab ? null : tab.dataset.tab; seClosePop(); seDrawer(); return; }
+  const tab = e.target.closest('[data-tab]'); if (tab) { if (se?.rec) return; seTab = seTab === tab.dataset.tab ? null : tab.dataset.tab; seClosePop(); seDrawer(); return; }
   const b = e.target.closest('[data-act]'); seClosePop();
   if (!b || b.matches('input')) return;
   if (b.dataset.pop) { seOpenPop(b); return; }
@@ -1347,6 +1529,9 @@ document.querySelector('#storyEditor').addEventListener('click', e => {
     case 'voz-probar': return seProbar();
     case 'voz-sacar': seParar(); return seChange(() => { seVoz()?.remove(); seAjustarDuracion(); });
     case 'voz-elegir': return se.voces?.[+val] && seElegirVoz(se.voces[+val]);
+    case 'rec-grabar': return seRecStart();
+    case 'rec-parar': return seRecStop();
+    case 'rec-cancelar': return seRecCancel();
     case 'add': { const [kind, v] = val.split(/:(.*)/s); return seAdd(kind, v); }
     case 'layer': { const x = seById(val); return seSelect(x && !seLayer(x) ? x : null); }
     case 'layer-up': return seOrder(seById(val), 1);
@@ -1376,9 +1561,15 @@ document.querySelector('#storyEditor').addEventListener('change', e => {
   else if (t.matches('[data-upload]')) { seUploadFiles(t.files); t.value = ''; }
   else if (t.matches('[data-upload-video]')) { seUploadVideo(t.files[0]); t.value = ''; }
   else if (t.matches('[data-upload-audio]')) { seUploadAudio(t.files[0]); t.value = ''; }
+  else if (t.matches('[data-guion]')) seGuionSave();
+  else if (t.matches('[data-mic]')) store.set('mic', t.value);
   else if (t.matches('[data-voz="inicio"]')) { const v = Math.max(0, parseFloat(String(t.value).replace(',', '.')) || 0); seChange(() => { const a = seVoz(); if (a) { a.dataset.inicio = String(Math.round(v * 100) / 100); seAjustarDuracion(); } }); seDrawer(); }
   else if (t.matches('[data-pick-input]')) { const p = $('sePop'); sePick('color', p.dataset.act, seHex(t.value)); seClosePop(); }
   else if (t.matches('input[type=color][data-act="bgcolor"]')) seChange(() => seColorAct('bgcolor', seHex(t.value)));
+});
+document.querySelector('#storyEditor').addEventListener('input', e => {
+  if (!e.target.matches('[data-guion]') || !se?.guion) return;
+  se.guion.texto = e.target.value; const m = $('seDrawer').querySelector('[data-guion-meta]'); if (m) m.innerHTML = seGuionMeta();
 });
 document.querySelector('#storyEditor').addEventListener('keydown', e => {
   const t = e.target;
@@ -1450,10 +1641,10 @@ function seClose() {
   $('storyEditor').close();
 }
 $('seClose').onclick = seClose;
-$('storyEditor').addEventListener('cancel', e => { e.preventDefault(); if (!$('sePop').hidden) seClosePop(); else if (se?.editing) seEndEdit(); else if (se?.sel) seSelect(null); else seClose(); });
+$('storyEditor').addEventListener('cancel', e => { e.preventDefault(); if (se?.rec) seRecCancel(); else if (!$('sePop').hidden) seClosePop(); else if (se?.editing) seEndEdit(); else if (se?.sel) seSelect(null); else seClose(); });
 document.addEventListener('paste', e => { if (!$('storyEditor').open || !se?.root || se.editing || e.target.closest?.('input, textarea, [contenteditable]')) return; sePasteImage(e); });
 // El aviso de cierre llega después: si para entonces se abrió otra historia, no se toca.
-$('storyEditor').addEventListener('close', () => { if ($('storyEditor').open) return; seParar(); try { se?.mv?.destroy(); } catch {} $('seFrame').srcdoc = ''; se = null; });
+$('storyEditor').addEventListener('close', () => { if ($('storyEditor').open) return; seParar(); if (se?.rec) seRecCancel(); if (se) seGuionSave(); try { se?.mv?.destroy(); } catch {} $('seFrame').srcdoc = ''; se = null; });
 
 // Elegir una foto de tu carpeta (planner.config.json → historias.fotos) para el fondo o como sticker. La foto se
 // copia a la carpeta de la semana y entra al editor centrada; el encuadre se ajusta arrastrándola.
@@ -1516,29 +1707,52 @@ $('ppApply').onclick = async () => {
   finally { if (pp) { pp.busy = false; renderPickerSide(); } }
 };
 
-// Propuesta: lo que va a Postiz se congela y se confirma en el chat, como en reels y carruseles.
-function renderStoryProposal() {
-  const seqs = weekSeqs(), byImg = storyByImg(), cola = stories.data.cola || {};
-  const rows = seqs.filter(s => s.historias.length).sort((a, b) => a.fecha.localeCompare(b.fecha)).map(s => {
-    const hands = s.historias.map((img, i) => [img, i]).filter(([img]) => needsHand(byImg[img]));
-    const queued = s.historias.filter(img => cola[img] && cola[img].estado !== 'publicada').length;
-    const nuevas = s.historias.filter(img => cola[img]?.cambio && cola[img].estado !== 'publicada').length;
-    const en = (stories.data.cuentas || []).length > 1 ? ` en @${esc(seqAccount(s))}` : '';
-    const what = s.publicar === 'postiz' ? `Postiz${en} desde las ${esc(s.hora || STORY_DEFAULT_HOUR)}, cada ${STORY_GAP_MIN} min · ${s.historias.length - hands.length} historia${s.historias.length - hands.length === 1 ? '' : 's'}${nuevas ? ` · se reemplaza${nuevas === 1 ? '' : 'n'} ${nuevas} con la foto nueva` : ''}${hands.length ? ` · a mano: ${hands.map(([, i]) => `${i + 1} a las ${storyTime(s.hora, i)}`).join(', ')}` : ''}` : s.publicar === 'mano' ? 'A mano' + en + (queued ? ' · se quita de Postiz' : '') : 'No se publica' + (queued ? ' · se quita de Postiz' : '');
-    return `<div class="sp-row ${s.publicar}"><b>${esc(dayLong(s.fecha))}</b><span>${TIPO_NAME[s.dia.tipo] || ''} ${esc(s.dia.formula || '')}</span><span class="what">${what}</span></div>`;
-  }).join('');
-  const fb = seqs.filter(s => fbSinAplicar(s).length).sort((a, b) => a.fecha.localeCompare(b.fecha)).map(s => {
-    const l = fbSinAplicar(s), txt = l.map(e => `${e.alcance === 'secuencia' ? 'Secuencia' : `Historia ${e.n || '?'}`}: ${e.text || (e.audio ? 'audio' : '')}`).join(' · ');
-    return `<div class="sp-row fb"><b>${esc(dayLong(s.fecha))}</b><span>${l.length} nota${l.length === 1 ? '' : 's'}</span><span class="what">${esc(txt.length > 240 ? txt.slice(0, 240) + '…' : txt)}${s.publicar === 'postiz' ? ' · su agenda espera la corrección' : ''}</span></div>`;
-  }).join('');
-  $('spList').innerHTML = rows + (fb ? `<h4 class="sp-sec">Contenido · feedback sin corregir</h4>${fb}` : ''); $('spResult').hidden = true; $('spPrepare').disabled = false;
+// Programar manda todo lo pendiente de una vez: las secuencias de hoy en adelante de todas las semanas y cuentas, las
+// descartadas que siguen en Postiz y las notas sin corregir de cualquier semana. Lo calcula el servidor (`pendiente`),
+// igual que la propuesta.
+function renderProgramar() {
+  const p = stories.data?.pendiente, total = p?.total || 0, pl = (k, a, b = a + 's') => `${k} ${k === 1 ? a : b}`;
+  $('sPropose').disabled = !total;
+  $('sProposeCount').textContent = total;
+  $('sPropose').title = p ? [p.postiz ? `${pl(p.postiz, 'día')} a Postiz` : '', p.salen ? `${pl(p.salen, 'día')} que ${p.salen === 1 ? 'sale' : 'salen'} de Postiz` : '', p.notas ? `${pl(p.notas, 'nota')} de feedback sin corregir` : ''].filter(Boolean).join(' · ') + (total ? '. Todas las semanas y cuentas, de hoy en adelante.' : 'Nada pendiente de hoy en adelante.') : '';
 }
-$('sPropose').onclick = async () => { await sSaving; renderStoryProposal(); $('storyProposal').showModal(); };
+async function refreshPending() { try { const r = await api('stories/pending'); if (stories.data) { stories.data.pendiente = r; renderProgramar(); } } catch {} }
+// Propuesta: lo que va a Postiz se congela y se confirma en el chat, como en reels y carruseles. El panel muestra lo mismo
+// que va a llevar, por semana y día.
+function renderStoryProposal() {
+  const p = stories.data.pendiente || { dias: [], feedback: [] }, pl = (k, a, b = a + 's') => `${k} ${k === 1 ? a : b}`;
+  const multi = new Set(p.dias.map(d => d.cuenta)).size > 1 || (stories.data.cuentas || []).length > 1, hoy = monday(todayStr());
+  const row = d => {
+    const a = d.acciones, en = multi ? ` en @${esc(d.cuenta)}` : '', n = Object.values(a).reduce((k, x) => k + x, 0);
+    let what;
+    if (d.descartada) what = `Descartada${en} · ${pl(a.descartar || 0, 'historia')} ${a.descartar === 1 ? 'sale' : 'salen'} de Postiz y ${a.descartar === 1 ? 'queda' : 'quedan'} en pausa`;
+    else if (d.publicar === 'postiz') {
+      const partes = [a.agendar ? pl(a.agendar, 'nueva') : '', a.mover ? `${a.mover} ${a.mover === 1 ? 'cambia' : 'cambian'} de día, hora o cuenta` : '', a.en_postiz ? `${a.en_postiz} ya en Postiz así` : '', a.reemplazar ? `${a.reemplazar} con la imagen nueva` : '', a.espera_feedback ? `${pl(a.espera_feedback, 'espera', 'esperan')} la corrección del feedback` : '', a.ya_publicada ? `${a.ya_publicada} ya ${a.ya_publicada === 1 ? 'publicada' : 'publicadas'}` : '', a.a_mano ? `${a.a_mano} a mano` : '', d.historias > n ? `${d.historias - n} ya ${d.historias - n === 1 ? 'pasó' : 'pasaron'}` : ''].filter(Boolean);
+      what = `Postiz${en} desde las ${esc(d.hora || STORY_DEFAULT_HOUR)}, cada ${STORY_GAP_MIN} min · ${pl(d.historias, 'historia')}${partes.length ? ': ' + partes.join(', ') : ''}`;
+    } else what = (d.publicar === 'mano' ? 'A mano' : 'No se publica') + en + (a.quitar ? ` · ${a.quitar === 1 ? 'se quita 1' : `se quitan ${a.quitar}`} de Postiz` : '');
+    return `<div class="sp-row ${d.descartada ? 'descartada' : d.publicar}"><b>${esc(dayLong(d.fecha))}</b><span>${TIPO_NAME[d.tipo] || ''} ${esc(d.formula || '')}</span><span class="what">${what}</span></div>`;
+  };
+  const vivos = p.dias.filter(d => !d.descartada), semanas = [...new Set(vivos.map(d => d.semana))].sort();
+  const rango = w => { const f = dateAdd(w, 6); return w.slice(5, 7) === f.slice(5, 7) ? `${Number(w.slice(8))} – ${Number(f.slice(8))} ${fmt(f, { month: 'short' })}` : `${Number(w.slice(8))} ${fmt(w, { month: 'short' })} – ${Number(f.slice(8))} ${fmt(f, { month: 'short' })}`; };
+  const titulo = w => [w === hoy ? 'Esta semana' : w === dateAdd(hoy, 7) ? 'La semana que viene' : 'Semana', rango(w)].join(' · ');
+  // Una semana en la que nada sale ni cambia va en un renglón.
+  const agenda = semanas.map(w => { const l = vivos.filter(d => d.semana === w), nada = l.every(d => d.publicar !== 'postiz' && !d.acciones.quitar);
+    return `<h4 class="sp-sec">${esc(titulo(w))}</h4>${nada ? `<div class="sp-row no"><b>${pl(l.length, 'día')}</b><span></span><span class="what">No se publica: nada para Postiz todavía</span></div>` : l.map(row).join('')}`; }).join('');
+  const desc = p.dias.filter(d => d.descartada).map(row).join('');
+  const fb = (p.feedback || []).map(f => {
+    const l = f.notas, txt = l.map(e => `${e.alcance === 'secuencia' ? 'Secuencia' : `Historia ${e.n || '?'}`}: ${e.text || (e.audio ? 'audio' : '')}`).join(' · ');
+    const espera = vivos.some(d => d.run === f.run && d.secuencia === f.secuencia && d.acciones.espera_feedback);
+    return `<div class="sp-row fb"><b>${esc(dayLong(f.fecha))}</b><span>${pl(l.length, 'nota')}</span><span class="what">${esc(txt.length > 240 ? txt.slice(0, 240) + '…' : txt)}${espera ? ' · su agenda espera la corrección' : ''}</span></div>`;
+  }).join('');
+  $('spList').innerHTML = (agenda + (desc ? `<h4 class="sp-sec">Descartadas · salen de Postiz</h4>${desc}` : '') + (fb ? `<h4 class="sp-sec">Contenido · feedback sin corregir</h4>${fb}` : '')) || '<p class="hint">No hay nada pendiente de hoy en adelante.</p>';
+  $('spResult').hidden = true; $('spPrepare').disabled = !p.total;
+}
+$('sPropose').onclick = async () => { await sSaving; await refreshPending(); renderStoryProposal(); $('storyProposal').showModal(); };
 $('sReset').onclick = () => { if (!confirm('¿Volver al plan original de la semana? Lo que ya está en Postiz no cambia.')) return; saveSeqs(storySeqs().map(s => ({ ...s, ...defaultSeq(s.dia) })), 'Volviste al plan original.'); };
 $('spPrepare').onclick = async () => {
   try {
     $('spPrepare').disabled = true; await sSaving;
-    const r = await api('stories/proposal', post({ week: stories.week, cuenta: stories.data.cuenta, revision: stories.data.draft.revision }));
+    const r = await api('stories/proposal', post({ revision: stories.data.draft.revision }));
     $('spResult').hidden = false;
     $('spResult').innerHTML = `<p class="hint">Pegá este mensaje en Claude Code: ${r.feedback ? 'corrige el feedback' + (r.prompt.includes('historias.py aplicar') ? ' y agenda las historias en Postiz.' : '.') : 'agenda las historias en Postiz.'}</p><textarea readonly aria-label="Mensaje de confirmación">${esc(r.prompt)}</textarea><button class="primary" id="spCopy">${ICON.copy} Copiar mensaje</button>`;
     $('spCopy').onclick = () => copyText(r.prompt, 'Copiado. Pegalo en el chat.');
@@ -1693,8 +1907,9 @@ $('sGrid').addEventListener('change', e => {
   else if (e.target.matches('[data-scuenta]')) setStoryPub(e.target.dataset.scuenta, { cuenta: e.target.value === stories.data.cuenta ? undefined : e.target.value });
   else if (e.target.matches('[data-hora]')) { const t = parseTime(e.target.value); if (!t) { toast('Hora inválida: usá 15:00.'); e.target.value = ''; return; } setStoryPub(e.target.dataset.hora, { hora: t }); }
 });
+$('sGrid').addEventListener('toggle', e => { if (e.target.matches?.('.s-desc')) sDescOpen = e.target.open; }, true);
 $('sGrid').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('[data-smetric], [data-hora]')) { e.preventDefault(); e.target.blur(); } });
-$('sGrid').addEventListener('click', e => { const fr = e.target.closest('[data-sfree]'); if (fr) { freeDay(fr.dataset.sfree); return; } const mv = e.target.closest('[data-smove]'); if (mv) { const inp = mv.parentElement.querySelector('[data-smovedate]'); try { inp.showPicker(); } catch { inp.focus(); } return; } const b = e.target.closest('[data-pub]'); if (b) { setStoryPub(b.closest('[data-seq]').dataset.seq, { publicar: b.dataset.pub }); } });
+$('sGrid').addEventListener('click', e => { const fr = e.target.closest('[data-sfree]'); if (fr) { freeDay(fr.dataset.sfree); return; } const ds = e.target.closest('[data-sdiscard]'); if (ds) { discardSeq(ds.dataset.sdiscard); return; } const rc = e.target.closest('[data-srecover]'); if (rc) { const [w, o] = rc.dataset.srecover.split('|'); recoverSeq(w, o); return; } const mv = e.target.closest('[data-smove]'); if (mv) { const inp = mv.parentElement.querySelector('[data-smovedate]'); try { inp.showPicker(); } catch { inp.focus(); } return; } const b = e.target.closest('[data-pub]'); if (b) { setStoryPub(b.closest('[data-seq]').dataset.seq, { publicar: b.dataset.pub }); } });
 $('sCuenta').onchange = () => { sCuenta = $('sCuenta').value; store.set('sCuenta', sCuenta); render(); };
 $('sPrev').onclick = () => { week = dateAdd(week, -7); render(); };
 $('sNext').onclick = () => { week = dateAdd(week, 7); render(); };
