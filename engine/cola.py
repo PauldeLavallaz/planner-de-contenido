@@ -1003,7 +1003,8 @@ def cmd_ahora(a):
         tmp.mkdir(exist_ok=True)
         for red in redes:
             old = next((p for p in records if p.get('red') == red and p.get('estado') != 'cancelado'), None)
-            if old and (old.get('type') == 'now' or old.get('estado') in ('publicado', 'enviado_inbox')):
+            # Un envío inmediato que Postiz marcó en error se puede volver a mandar (los reintentos de las historias en cadena).
+            if old and old.get('estado') != 'fallido' and (old.get('type') == 'now' or old.get('estado') in ('publicado', 'enviado_inbox')):
                 print(f"  {red}: ya salió ({old.get('id')}), no se toca")
                 continue
             if old and not old.get('id'):

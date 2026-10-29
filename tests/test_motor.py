@@ -284,6 +284,88 @@ class Motor(unittest.TestCase):
         self.run_py('historias.py', 'aplicar', 'c2', '--ejecutar', ok=False)
         self.assertEqual(json.loads((state / 'proposal-historias-c2.json').read_text())['resultados'][0]['resultado'], 'fecha_pasada')
 
+    def historias_agendadas(self, nombre, day, n, hora='15:00'):
+        """Arma una semana con `n` historias para `day` y las agenda en cadena desde la cuenta principal."""
+        self.run_py('conectar.py')
+        run = self.content / 'historias' / nombre
+        (run / 'historias').mkdir(parents=True)
+        imgs = []
+        for k in range(1, n + 1):
+            png = run / f'historias/{day}_{k}_venta.png'
+            png.write_bytes(os.urandom(800 + k))
+            imgs.append(png.relative_to(self.content).as_posix())
+        state = self.content / 'publicar/.planner'
+        state.mkdir(parents=True, exist_ok=True)
+        acciones = [{'orden': k, 'imagen': imgs[k - 1], 'video': None, 'fecha': day, 'hora': hora, 'cuenta': 'mimarca', 'cuenta_id': 'ig-main',
+                     'accion': 'agendar', 'sticker': None, 'a_mano': False, 'cola': None} for k in range(1, n + 1)]
+        pid = f'{nombre}-1'
+        (state / f'proposal-historias-{pid}.json').write_text(json.dumps({'id': pid, 'status': 'awaiting_chat_confirmation', 'run': f'historias/{nombre}', 'acciones': acciones}))
+        self.run_py('historias.py', 'aplicar', pid, '--ejecutar')
+        fichas = {json.loads(f.read_text())['slug']: f for f in (self.content / 'publicar/agendado').glob('*.json') if nombre in f.name}
+        slugs = [next(s for s in fichas if s.endswith(f'{k}-venta')) for k in range(1, n + 1)]
+        return state, acciones, slugs, fichas
+
+    def test_historias_descartadas(self):
+        # Una secuencia descartada en el planner sale de Postiz y queda en pausa; la segunda vez no se toca.
+        day, _ = self.future(10)
+        state, acciones, slugs, _ = self.historias_agendadas('semana-descartada', day, 1)
+        db = self.tmp / 'postiz.json'
+        en_postiz = lambda: [p for p in json.loads(db.read_text())['posts'] if p['publishDate'].startswith(day) and p['settings'].get('post_type') == 'story']
+        self.assertEqual(len(en_postiz()), 1)
+        descartar = {**acciones[0], 'accion': 'descartar', 'cola': {'slug': slugs[0]}}
+        for pid in ('desc-1', 'desc-2'):
+            (state / f'proposal-historias-{pid}.json').write_text(json.dumps({'id': pid, 'status': 'awaiting_chat_confirmation', 'run': 'historias/semana-descartada', 'acciones': [descartar]}))
+        seco = self.run_py('historias.py', 'aplicar', 'desc-1').stdout
+        self.assertIn(f'cola.py pausar {slugs[0]} --motivo descartada en el planner', seco)
+        self.assertEqual(len(en_postiz()), 1, 'en seco no toca Postiz')
+        self.run_py('historias.py', 'aplicar', 'desc-1', '--ejecutar')
+        self.assertEqual(json.loads((state / 'proposal-historias-desc-1.json').read_text())['resultados'][0]['resultado'], 'ok')
+        self.assertEqual(en_postiz(), [])
+        ficha = next(f for f in (self.content / 'publicar/inbox').glob('*.json') if json.loads(f.read_text())['slug'] == slugs[0])
+        self.assertEqual(json.loads(ficha.read_text())['pausa']['motivo'], 'descartada en el planner')
+        out = self.run_py('historias.py', 'aplicar', 'desc-2', '--ejecutar').stdout
+        self.assertIn('ya en pausa', out)
+        prop = json.loads((state / 'proposal-historias-desc-2.json').read_text())
+        self.assertEqual((prop['status'], prop['resultados'][0]['resultado']), ('aplicada', 'ya en pausa'))
+
+    def test_historias_en_cadena_reintentos(self):
+        # Ante un ERROR de Postiz la cadena reintenta dos veces, 4 minutos después de cada intento que falló; si sigue
+        # fallando, frena las que siguen y avisa con el archivo para subirla a mano.
+        day, _ = self.future(11)
+        state, _, slugs, fichas = self.historias_agendadas('semana-reintentos', day, 2)
+        db = self.tmp / 'postiz.json'
+        def error_en(post_id):
+            d = json.loads(db.read_text())
+            for p in d['posts']:
+                if p['id'] == post_id:
+                    p['state'], p['error'] = 'ERROR', 'Unknown error'
+                    p.pop('releaseId', None)
+            db.write_text(json.dumps(d))
+        ultimo_post = lambda: [p for p in json.loads(next(f for f in (self.content / 'publicar/agendado').glob('*.json') if json.loads(f.read_text())['slug'] == slugs[0]).read_text())['postiz']['posts'] if p.get('estado') != 'cancelado'][-1]['id']
+        cadena = lambda hora: self.run_py('historias.py', 'cadena', '--ahora', f'{day}T{hora}').stdout
+        avisos = lambda: [a for a in json.loads((state / 'historias-cadena.json').read_text())['avisos'] if slugs[0] in a['id']]
+        primero = ultimo_post()
+        error_en(primero)
+        out = cadena('15:01')
+        self.assertNotIn('→ ahora', out, 'el primer reintento espera 4 minutos desde el intento que falló')
+        self.assertIn('La reintento en 3 min', avisos()[-1]['texto'])
+        self.assertIn(f'→ ahora {slugs[0]}', cadena('15:05'))
+        segundo = ultimo_post()
+        self.assertNotEqual(segundo, primero)
+        error_en(segundo)
+        self.assertIn(f'→ ahora {slugs[0]}', cadena('15:06'))
+        tercero = ultimo_post()
+        self.assertNotEqual(tercero, segundo, 'un envío inmediato que falló se vuelve a mandar')
+        error_en(tercero)
+        self.assertNotIn('→ ahora', cadena('15:07'))
+        self.assertEqual(ultimo_post(), tercero)
+        frenada = avisos()[-1]
+        self.assertIn('frenadas', frenada['titulo'])
+        self.assertIn('2 reintentos', frenada['texto'])
+        self.assertIn('Frené la que sigue', frenada['texto'])
+        self.assertIn('publicar/agendado/', frenada['texto'])
+        self.assertNotIn('→ ahora', cadena('15:30'), 'frenada: ni se reintenta ni sale la siguiente')
+
     def test_sincronizar_carpetas(self):
         state = self.content / 'publicar/.planner'
         state.mkdir(parents=True, exist_ok=True)
