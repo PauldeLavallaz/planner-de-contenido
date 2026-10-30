@@ -28,8 +28,8 @@ function gvSetRango(r) {
 }
 // Los planes de una semana: uno por subcarpeta (o el de la carpeta de la semana).
 const gvPlanes = (weeks, wk) => (weeks || []).filter(w => w.week === wk).sort((a, b) => a.perfil.localeCompare(b.perfil));
-// El filtro de formato de arriba también separa videos de carruseles.
-const gvFormatoOk = p => { const f = $('format').value; return f === 'all' || (f === 'carrusel') === (p.tipo === 'carrusel'); };
+// El formato de la barra lateral también separa videos de carruseles.
+const gvFormatoOk = p => formatoPasa(p.tipo === 'carrusel' ? 'carrusel' : 'reel');
 
 const gvDia = d => new Date(d + 'T12:00:00Z').toLocaleDateString('es-AR', { day: 'numeric', month: 'short', timeZone: 'UTC' }).replace('.', '');
 function gvRangoLabel(d) {
@@ -60,19 +60,35 @@ function gvMenu(anchor, html, onClick) {
 }
 function gvMenuClose() { const p = document.getElementById('gvPop'); if (p) { p.hidden = true; p.innerHTML = ''; } gv.menuAnchor = null; }
 
-// Semanas: «Esta semana», «Todas» o varias marcadas. Sólo las que tienen guiones.
+// El calendario de semanas: los guiones van por la semana en que se planificaron. Tocar un día abre su semana; la casilla
+// de cada semana la suma a las elegidas; «Hoy» vuelve a la semana de hoy y «Todas las semanas» muestra todo. Cada semana
+// con guiones dice cuántas piezas tiene. Lo elegido se guarda (gvRango y la semana en la dirección).
 function gvMenuSemanas(anchor) {
-  const weeks = gv.data?.weeks || [], xs = gvConPlanes(weeks), sel = gvSemanas(weeks), hoy = monday(todayStr());
-  const n = wk => gvPlanes(weeks, wk).reduce((t, w) => t + (w.piezas || 0), 0);
-  const html = () => `<div class="gv-pop-quick"><button class="ghost${gv.rango === 'semana' ? ' on' : ''}" data-r="semana">Una semana</button><button class="ghost${gv.rango === 'todas' ? ' on' : ''}" data-r="todas">Todas</button></div>
-    <div class="gv-pop-list">${xs.map(wk => `<label class="gv-pop-row"><input type="checkbox" data-wk="${wk}" ${(gv.rango === 'todas' || sel.includes(wk)) ? 'checked' : ''}><span>${esc(gvSemana(wk))}${wk === hoy ? ' <span class="muted">· esta</span>' : ''}</span><span class="muted">${n(wk)}</span></label>`).join('') || '<p class="muted">No hay semanas con guiones.</p>'}</div>`;
+  const weeks = gv.data?.weeks || [], hoy = todayStr(), n = wk => gvPlanes(weeks, wk).reduce((t, w) => t + (w.piezas || 0), 0);
+  let mes = (gv.rango === 'todas' ? monday(hoy) : gvSemanas(weeks)[0] || week).slice(0, 7);
+  const html = () => {
+    const sel = gv.rango === 'todas' ? [] : gvSemanas(weeks), primero = mes + '-01', fin = new Date(primero + 'T12:00:00Z');
+    fin.setUTCMonth(fin.getUTCMonth() + 1); fin.setUTCDate(0);
+    const filas = []; for (let wk = monday(primero); wk <= fin.toISOString().slice(0, 10); wk = dateAdd(wk, 7)) filas.push(wk);
+    const titulo = new Date(primero + 'T12:00:00Z').toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    return `<div class="gv-cal">
+      <div class="gv-cal-h"><button class="icon" data-mes="-1" aria-label="Mes anterior"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button><b>${esc(titulo)}</b><button class="icon" data-mes="1" aria-label="Mes siguiente"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button></div>
+      <div class="gv-cal-dias"><span></span>${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(d => `<span>${d}</span>`).join('')}<span></span></div>
+      ${filas.map(wk => { const k = n(wk), on = gv.rango === 'todas' ? !!k : sel.includes(wk);
+        return `<div class="gv-cal-sem${on ? ' on' : ''}"><input type="checkbox" data-wk="${wk}" ${sel.includes(wk) ? 'checked' : ''} title="Sumar esta semana a las que se ven" aria-label="Sumar la semana del ${esc(gvSemana(wk))}">${[0, 1, 2, 3, 4, 5, 6].map(i => { const d = dateAdd(wk, i);
+          return `<button class="gv-cal-d${d.slice(0, 7) !== mes ? ' fuera' : ''}${d === hoy ? ' hoy' : ''}" data-dia="${d}" title="Ver la semana del ${esc(gvSemana(wk))}">${Number(d.slice(8))}</button>`; }).join('')}<span class="gv-cal-n" title="${k ? `${k} pieza${k === 1 ? '' : 's'}` : 'Sin guiones'}">${k || ''}</span></div>`; }).join('')}
+      <div class="gv-pop-quick gv-cal-pie"><button class="ghost${gv.rango === 'semana' && week === monday(hoy) ? ' on' : ''}" data-r="hoy">Hoy</button><button class="ghost${gv.rango === 'todas' ? ' on' : ''}" data-r="todas">Todas las semanas</button></div>
+    </div>`;
+  };
   gvMenu(anchor, html(), e => {
-    const b = e.target.closest('[data-r]');
-    if (b) { if (b.dataset.r === 'semana') { gvSetRango([gv.rango === 'semana' ? week : sel.includes(hoy) ? hoy : sel[0] || week]); } else gvSetRango('todas'); gvMenuClose(); return; }
-    const c = e.target.closest('[data-wk]'); if (!c) return;
-    const marcadas = [...e.currentTarget.querySelectorAll('[data-wk]:checked')].map(x => x.dataset.wk);
+    const t = e.target, pop = document.getElementById('gvPop');
+    const m = t.closest('[data-mes]'); if (m) { const d = new Date(mes + '-01T12:00:00Z'); d.setUTCMonth(d.getUTCMonth() + Number(m.dataset.mes)); mes = d.toISOString().slice(0, 7); pop.innerHTML = html(); return; }
+    const r = t.closest('[data-r]'); if (r) { gvSetRango(r.dataset.r === 'todas' ? 'todas' : [monday(hoy)]); gvMenuClose(); return; }
+    const dia = t.closest('[data-dia]'); if (dia) { gvSetRango([monday(dia.dataset.dia)]); gvMenuClose(); return; }
+    const c = t.closest('[data-wk]'); if (!c) return;
+    const antes = gv.rango === 'todas' ? [] : gvSemanas(weeks), marcadas = c.checked ? [...new Set([...antes, c.dataset.wk])] : antes.filter(x => x !== c.dataset.wk);
     if (!marcadas.length) { c.checked = true; return; }
-    gvSetRango(marcadas.length === xs.length && xs.length > 1 ? 'todas' : marcadas);
+    gvSetRango(marcadas); if (pop && !pop.hidden) pop.innerHTML = html();
   });
 }
 
@@ -93,6 +109,8 @@ function gvMenuEtapas(anchor) {
 // El estado de la tarjeta, arriba a la derecha, se cambia desde ahí. La etapa (guion, rough cut,
 // final) la da lo que hay en la carpeta; a mano se elige revisar, aprobado, pausado o descartado.
 const gvActual = p => p.descartado ? 'descartado' : p.pausado ? 'pausado' : p.estado === 'aprobado' ? 'aprobado' : 'revisar';
+// Abre la carpeta de la pieza con el video o el audio seleccionado (revealInFinder vive en planner.js).
+const gvFinder = path => `<button class="gv-finder" data-gvfinder="${esc(path)}" title="Abrir en el Finder" aria-label="Abrir en el Finder">${ICON.folder}</button>`;
 function gvEstadoTag(p, fecha) {
   // Una pieza publicada ya no cambia de estado desde acá: la publicación se maneja en Publicadas.
   if (p.publicado) return `<span class="tag ok gv-st" title="Publicada${p.publicado.redes?.length ? ' en ' + esc(p.publicado.redes.join(', ')) : ''}">Publicado${p.publicado.fecha ? ' · ' + esc(p.publicado.fecha.slice(8, 10) + '-' + p.publicado.fecha.slice(5, 7)) : ''}</span>`;
@@ -134,13 +152,13 @@ async function loadGuiones() {
     const [lista, prod] = await Promise.all([api(`guiones?week=${wk}`), gv.prod ? gv.prod : api('guiones/produccion').catch(() => null)]);
     gv.prod = prod;
     const semanas = gvSemanas(lista.weeks), ws = semanas.flatMap(s => gvPlanes(lista.weeks, s));
-    const res = await Promise.all(ws.map(w => lista.plan?.path === w.path ? lista : api(`guiones?perfil=${encodeURIComponent(w.perfil)}&week=${w.week}`)));
-    const planes = res.map((r, k) => ({ perfil: ws[k].perfil, week: ws[k].week, plan: r.plan, piezas: (r.piezas || []).map(p => ({ ...p, planPath: r.plan?.path })) }))
+    const res = await Promise.all(ws.map(w => lista.plan?.path === w.path ? lista : api(`guiones?perfil=${encodeURIComponent(w.perfil)}&week=${w.week}&path=${encodeURIComponent(w.path)}`)));
+    const planes = res.map((r, k) => ({ perfil: ws[k].perfil, week: ws[k].week, path: ws[k].path, plan: r.plan, piezas: (r.piezas || []).map(p => ({ ...p, planPath: r.plan?.path })) }))
       .filter(x => x.plan && x.piezas.length);
     // Dos planes pueden repetir un id (R01 de dos semanas): la tarjeta se identifica por `key`, que en el segundo lleva el
     // plan y la semana adelante. El id va tal cual al servidor.
     const ids = new Set();
-    for (const x of planes) for (const p of x.piezas) { p.key = ids.has(p.id) ? `${x.perfil}·${x.week}·${p.id}` : p.id; ids.add(p.key); }
+    for (const x of planes) for (const p of x.piezas) { p.key = ids.has(p.id) ? `${x.path}·${p.id}` : p.id; ids.add(p.key); }
     gv.data = { key, weeks: lista.weeks, carpeta: lista.carpeta, semanas, planes, piezas: planes.flatMap(x => x.piezas) };
   } catch (e) { gv.data = { key, error: e.message, weeks: [], planes: [], piezas: [] }; }
   finally { gv.loading = false; }
@@ -160,7 +178,7 @@ function renderGuiones(fresh) {
   const planes = conFormato.map(x => ({ ...x, piezas: x.piezas.filter(gvEtapaOk) })).filter(x => x.piezas.length);
   if (!planes.length) {
     const otras = gvConPlanes(d.weeks).filter(wk => !d.semanas.includes(wk)).sort();
-    const que = $('format').value === 'carrusel' ? 'carruseles' : $('format').value === 'reel' ? 'reels' : 'guiones';
+    const que = !formatoPasa('reel') ? 'carruseles' : !formatoPasa('carrusel') ? 'reels' : 'guiones';
     const donde = gv.rango === 'semana' ? 'esta semana' : 'en estas semanas';
     $('gvCopy').hidden = true;
     $('gvGrid').innerHTML = conFormato.length
@@ -202,7 +220,7 @@ function gvCard(p) {
     ? `<div class="gv-video gv-slides"><button class="gv-video-open gv-slide-open" data-gvslides="${esc(p.key)}" data-i="0" title="Ver el carrusel en grande"><img src="${esc(mediaUrl(p.laminas[0].png))}&v=${Math.round(p.laminas[0].modified || 0)}" alt="Portada de ${esc(p.titulo || p.id)}" loading="lazy"><span class="gv-count">${p.laminas.length} láminas</span></button>
       <div class="gv-thumbs">${p.laminas.slice(1, 9).map((l, i) => `<button data-gvslides="${esc(p.key)}" data-i="${i + 1}" title="Lámina ${l.n}"><img src="${esc(mediaUrl(l.png))}&v=${Math.round(l.modified || 0)}" alt="Lámina ${l.n}" loading="lazy"></button>`).join('')}</div></div>`
     : p.video
-    ? `<div class="gv-video"><video data-gvvid="${esc(p.key + '|' + p.video.path + '|' + Math.round(p.video.modified || 0))}" src="${esc(mediaUrl(p.video.path))}&v=${Math.round(p.video.modified || 0)}" poster="/api/planner/poster?path=${encodeURIComponent(p.video.path)}&v=${Math.round(p.video.modified || 0)}" controls playsinline preload="none"></video><span class="muted">${p.video.final ? 'Final' : 'Rough cut'}${p.video.versiones > 1 ? ' · v' + p.video.versiones : ''}${p.video.seconds ? ' · ' + clock(p.video.seconds) : ''} · <a class="link" href="${esc(mediaUrl(p.video.path))}" target="_blank" rel="noopener">abrir archivo</a></span></div>`
+    ? `<div class="gv-video"><video data-gvvid="${esc(p.key + '|' + p.video.path + '|' + Math.round(p.video.modified || 0))}" src="${esc(mediaUrl(p.video.path))}&v=${Math.round(p.video.modified || 0)}" poster="/api/planner/poster?path=${encodeURIComponent(p.video.path)}&v=${Math.round(p.video.modified || 0)}" controls playsinline preload="none"></video><span class="muted">${p.video.final ? 'Final' : 'Rough cut'}${p.video.versiones > 1 ? ' · v' + p.video.versiones : ''}${p.video.seconds ? ' · ' + clock(p.video.seconds) : ''} · <a class="link" href="${esc(mediaUrl(p.video.path))}" target="_blank" rel="noopener">abrir archivo</a>${gvFinder(p.video.path)}</span></div>`
     : `<div class="gv-poster ${esc(t.clase || '')}${m0 ? ' has-sample' : ''}" style="${posterStyle}" title="Título en pantalla · ${esc(e.nombre || '')}${m0 ? ' · fondo: muestra del estilo' : ''}">
       ${m0 ? `<img class="gv-sample" src="/api/planner/poster?path=${encodeURIComponent(m0.path)}" alt="" loading="lazy">` : ''}
       <span class="gv-poster-t">${gvTitLineas(p.titulo_pantalla || p.titulo || '').filter(Boolean).map(esc).join('<br>')}</span><span class="gv-poster-s">${esc(e.nombre || '')}</span>
@@ -217,7 +235,7 @@ function gvCard(p) {
       <div class="gv-chips">${gvProdBtns(p)}</div>
       <p class="gv-hook">${esc(p.hook || '')}</p>
       ${p.portadas?.length ? gvPortadas(p) : ''}
-      ${p.video || (p.tipo === 'carrusel' && p.run_ok) ? '' : p.audio ? `<div class="gv-audio"><audio controls preload="none" src="${esc(mediaUrl(p.audio.path))}&v=${Math.round(p.audio.modified || 0)}"></audio><span class="muted">${p.audio.seconds ? clock(p.audio.seconds) : ''}${p.guion ? ` · ${p.guion.palabras} palabras` : ''}</span></div>` : `<p class="muted gv-noaudio">${!p.run_ok ? (p.tipo === 'carrusel' ? 'Borrador en preparación.' : 'Falta el run de esta pieza.') : p.mudo ? 'Va mudo a propósito: revisá el texto en pantalla en «Guion».' : 'Audio en preparación.'}</p>`}
+      ${p.video || (p.tipo === 'carrusel' && p.run_ok) ? '' : p.audio ? `<div class="gv-audio"><audio controls preload="none" src="${esc(mediaUrl(p.audio.path))}&v=${Math.round(p.audio.modified || 0)}"></audio><span class="muted">${p.audio.seconds ? clock(p.audio.seconds) : ''}${p.guion ? ` · ${p.guion.palabras} palabras` : ''}</span>${gvFinder(p.audio.path)}</div>` : `<p class="muted gv-noaudio">${!p.run_ok ? (p.tipo === 'carrusel' ? 'Borrador en preparación.' : 'Falta el run de esta pieza.') : p.mudo ? 'Va mudo a propósito: revisá el texto en pantalla en «Guion».' : 'Audio en preparación.'}</p>`}
       <div class="gv-acts">
         ${p.estado === 'aprobado' ? `<button class="secondary on-ok" data-gvok="${esc(p.key)}" data-v="por_escuchar" title="Deshacer la aprobación">${ICON.check} Aprobado</button>` : `<button class="secondary" data-gvok="${esc(p.key)}" data-v="aprobado" ${gvAprobable(p) ? '' : 'disabled'}>${ICON.check} ${p.laminas?.length || p.tipo === 'carrusel' ? 'Aprobar borrador' : p.mudo && !p.video ? 'Aprobar texto' : p.video?.final ? 'Aprobar final' : p.video ? 'Aprobar corte' : 'Aprobar audio'}</button>`}
         <button class="ghost ${o === 'guion' ? 'on' : ''}" data-gvopen="guion" data-id="${esc(p.key)}">${p.tipo === 'carrusel' ? 'Texto' : 'Guion'}</button>
@@ -664,6 +682,7 @@ async function gvRecord(p) {
 
 $('guionesView').addEventListener('click', async e => {
   const t = e.target;
+  const fd = t.closest('[data-gvfinder]'); if (fd) { revealInFinder(fd.dataset.gvfinder); return; }
   const wk = t.closest('[data-gvweek]'); if (wk) { week = monday(wk.dataset.gvweek); gvSetRango('semana'); return; }
   const rg = t.closest('[data-gvrango]'); if (rg) { gvSetRango(rg.dataset.gvrango); return; }
   const et = t.closest('[data-gvetapas]'); if (et) { gvSetEtapas(et.dataset.gvetapas ? et.dataset.gvetapas.split(',') : []); return; }
@@ -708,7 +727,7 @@ $('gvCopy').onclick = async () => {
   // Un pedido por plan con notas; si hay más de uno, se copian juntos.
   const planes = (gv.data?.planes || []).filter(x => x.piezas.some(p => gvFb(p).length && gvFormatoOk(p) && gvEtapaOk(p)));
   try {
-    const rs = await Promise.all(planes.map(x => api('guiones/copiar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ perfil: x.perfil, week: x.week }) })));
+    const rs = await Promise.all(planes.map(x => api('guiones/copiar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ perfil: x.perfil, week: x.week, path: x.path }) })));
     await copyText(rs.map(r => r.prompt).filter(Boolean).join('\n\n---\n\n'), 'Copiado: pegalo en Claude Code.');
   }
   catch (e) { toast(e.message); }

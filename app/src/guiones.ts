@@ -281,9 +281,11 @@ function guionesPrompt(plan: any, piezas: any[]) {
 
 export function registerGuiones(app: Hono) {
   app.get('/api/planner/guiones', async c => {
-    const plans = guionesPlans(), perfil = c.req.query('perfil') ?? null, week = c.req.query('week') || '';
+    const plans = guionesPlans(), perfil = c.req.query('perfil') ?? null, week = c.req.query('week') || '', path = c.req.query('path') || '';
     const weeks = plans.map(p => ({ week: p.week, perfil: p.perfil, titulo: p.titulo, piezas: p.piezas, path: p.path }));
-    const pick = plans.filter(p => (perfil === null || p.perfil === perfil) && (!week || p.week === week)).pop() || (!week ? plans.at(-1) : null);
+    // El plan pedido por su archivo (dos planes pueden compartir semana y nombre); si no, el de la semana pedida o, sin
+    // semana, el más nuevo.
+    const pick = (path ? plans.find(p => p.path === path) : null) || plans.filter(p => (perfil === null || p.perfil === perfil) && (!week || p.week === week)).pop() || (!week ? plans.at(-1) : null);
     if (!pick) return c.json({ weeks, plan: null, piezas: [], carpeta: rel(paths().guiones) });
     const { conProduccion } = await import('./produccion.ts');
     const estados = fileRead(ESTADO(), {}), estilos = fileRead(ESTILOS(), {});
@@ -449,7 +451,7 @@ export function registerGuiones(app: Hono) {
   // «Copiar feedback para Claude Code»: las notas sin corregir del plan en un mensaje; pasan a «enviado».
   app.post('/api/planner/guiones/copiar', async c => {
     const body = await c.req.json().catch(() => null);
-    const pick = guionesPlans().filter(p => p.perfil === (body?.perfil ?? '') && p.week === body?.week).pop();
+    const plans = guionesPlans(), pick = (body?.path ? plans.find(p => p.path === body.path) : null) || plans.filter(p => p.perfil === (body?.perfil ?? '') && p.week === body?.week).pop();
     if (!pick) return c.json({ error: 'No encuentro ese plan.' }, 404);
     const { conProduccion } = await import('./produccion.ts');
     const estados = fileRead(ESTADO(), {}), estilos = fileRead(ESTILOS(), {});

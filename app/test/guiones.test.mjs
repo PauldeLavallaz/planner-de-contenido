@@ -122,6 +122,20 @@ test('guiones: plan, aprobar, feedback, estilos, looks y títulos', async () => 
     await post('guiones/produccion', { plan, run: reel, campo: 'titulo_tipo', valor: null });
     assert.equal(planJson()[0].titulo_tipo, undefined);
     assert.equal(notas(reel).length, antes);
+
+    // Dos planes de la misma semana con el mismo nombre (uno guardado en otra carpeta de semana): cada uno se pide por su
+    // archivo, también al copiar el feedback.
+    const otro = 'guiones/2026-10-19/plan.json';
+    mkdirSync(resolve(root, 'guiones/2026-10-19/L01'), { recursive: true });
+    writeFileSync(resolve(root, 'guiones/2026-10-19/L01/guion.txt'), 'Guion del lote.\n');
+    writeFileSync(resolve(root, otro), JSON.stringify({ semana: W, titulo: 'Lote aparte', piezas: [{ id: 'L01', titulo: 'Del lote', carpeta: 'L01' }] }));
+    const lista = await get();
+    assert.deepEqual(lista.weeks.filter(w => w.week === W).map(w => w.path).sort(), [otro, plan].sort());
+    const porArchivo = async path => (await fetch(base + `/api/planner/guiones?perfil=&week=${W}&path=${encodeURIComponent(path)}`)).json();
+    assert.deepEqual((await porArchivo(otro)).piezas.map(p => p.id), ['L01']);
+    assert.equal((await porArchivo(plan)).plan.titulo, 'Semana de prueba');
+    assert.equal((await post('guiones/copiar', { perfil: '', week: W, path: otro, marcar: false })).status, 400);
+    assert.equal((await post('guiones/copiar', { perfil: '', week: W, path: plan, marcar: false })).status, 200);
     assert.equal(errors.trim(), '');
   } finally {
     child.kill();

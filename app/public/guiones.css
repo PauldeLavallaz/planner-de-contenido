@@ -29,6 +29,9 @@
 .gv-player-nav .muted { color: #cfc8bb; }
 .gv-player-nav .secondary { color: var(--ink); }
 .gv-video .muted { font: 11.5px var(--mono); }
+.gv-finder { display: inline-grid; place-items: center; vertical-align: middle; padding: 2px 3px; margin-left: 4px; border-radius: 5px; color: var(--ink-2); }
+.gv-finder svg { width: 14px; height: 14px; }
+.gv-finder:hover { color: var(--ink); background: var(--line); }
 .gv-poster { aspect-ratio: 9 / 16; border-radius: 8px; background: var(--gv-bg); color: var(--gv-fg); display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px 8px; text-align: center; position: relative; overflow: hidden; align-self: start; }
 .gv-poster-t { font: 800 15px/1.02 var(--sans); text-transform: uppercase; letter-spacing: -.2px; overflow-wrap: anywhere; }
 .gv-poster-s { position: absolute; bottom: 6px; left: 0; right: 0; font: 500 9px var(--mono); opacity: .7; }
@@ -284,3 +287,22 @@
 @media (max-width: 640px) {
   .gv-look-grid, .gv-tit-grid { grid-template-columns: 1fr; }
 }
+
+/* El calendario de semanas: tocar un día abre su semana; la casilla suma semanas. */
+.gv-pop:has(.gv-cal) { width: 300px; }
+.gv-cal-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.gv-cal-h b { font-weight: 600; font-size: 13.5px; }
+.gv-cal-h b::first-letter { text-transform: uppercase; }
+.gv-cal-h .icon { width: 28px; height: 28px; }
+.gv-cal-dias, .gv-cal-sem { display: grid; grid-template-columns: 22px repeat(7, minmax(0, 1fr)) 24px; align-items: center; gap: 2px; }
+.gv-cal-dias span { font: 500 10.5px var(--mono); color: var(--muted); text-align: center; padding: 4px 0; }
+.gv-cal-sem { border-radius: 8px; padding: 1px 0; }
+.gv-cal-sem:hover { background: var(--bg); }
+.gv-cal-sem.on { background: var(--accent-soft); }
+.gv-cal-sem input { margin: 0 auto; accent-color: var(--ink); width: 13px; height: 13px; }
+.gv-cal-d { height: 30px; border-radius: 6px; font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.gv-cal-d:hover { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-2); }
+.gv-cal-d.fuera { color: var(--muted); }
+.gv-cal-d.hoy { font-weight: 700; color: var(--accent-ink); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.gv-cal-n { font: 500 10.5px var(--mono); color: var(--ink-2); text-align: center; }
+.gv-cal-pie { margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); border-bottom: 0; }
