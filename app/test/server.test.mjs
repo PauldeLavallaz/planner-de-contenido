@@ -96,6 +96,8 @@ test('standalone HTTP, media cancellation and durable draft across process exit'
     await t.test('only exposes public app files and approved media paths', async () => {
       for (const path of ['/.env', '/package.json', '/api/runs', '/api/planner/media?path=.env', '/api/planner/media?path=piezas%2F..%2F.env', '/api/planner/media?path=.git%2Fhidden.mp4', '/api/planner/media?path=..%2F..%2Fetc%2Fhosts']) assert.equal((await fetch(base + path)).status, 404);
       assert.equal((await request('/api/planner/draft', 'PUT', { revision: 7, changes: {} }, 'https://other.invalid')).status, 403);
+      // «Abrir en el Finder» sólo abre lo que está dentro de la carpeta de contenido.
+      for (const path of ['..', '../..', '/etc/hosts', 'no-existe.mp4']) assert.equal((await request('/api/planner/reveal', 'POST', { path })).status, 404);
     });
     await t.test('range playback and canceled streams leave the server alive', async () => {
       const path = '/api/planner/media?path=piezas%2Ftest%2Ffinal.mp4';

@@ -12,8 +12,7 @@
     ]
   },
   "publish_root": "publicar",
-  "slots": ["12:30", "18:30", "21:30"],
-  "suggested_times": ["09:00", "12:30", "15:00", "18:30", "20:00", "21:30"],
+  "slots": ["11:00", "13:00", "17:00", "20:00"],
   "jitter_minutes": 0,
   "default_networks": [],
   "channels": {},

@@ -194,6 +194,17 @@ button.chip-ov:hover { background: #000; }
 .section-head { display: flex; align-items: baseline; gap: 10px; padding: 0 0 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 .section-head h3 { margin: 0; font: 600 15px/1.2 var(--sans); }
 .section-head .n { font: 12px var(--mono); color: var(--muted); }
+/* Publicadas: Agendadas y Publicadas se pliegan; adentro, los meses. */
+.pub-grupo { margin-bottom: 18px; }
+.pub-grupo-h { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; list-style: none; user-select: none; }
+.pub-grupo-h::-webkit-details-marker { display: none; }
+.pub-grupo-h:hover { border-color: var(--line-2); }
+.pub-grupo-h h2 { margin: 0; font: 600 16px/1 var(--sans); }
+.pub-grupo-h .n { font: 12px var(--mono); color: var(--muted); }
+.pub-grupo-h .chev { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .15s; }
+.pub-grupo[open] > .pub-grupo-h .chev { transform: rotate(90deg); }
+.pub-grupo-c { padding: 14px 2px 0; }
+.pub-grupo-c > .gallery { padding-top: 0; }
 
 /* ---------- drawer ---------- */
 dialog { color: var(--ink); }
@@ -216,6 +227,9 @@ dialog::backdrop { background: #1d1b1838; backdrop-filter: blur(1.5px); }
 .d-assets:empty { display: none; }
 .d-assets button { font-size: 11.5px; padding: 3px 8px; border-radius: 6px; color: #d9d2c4; border: 1px solid #ffffff26; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .d-assets button.on { border-color: #fff; color: #fff; }
+.d-assets .finder { flex: none; display: grid; place-items: center; padding: 3px 6px; align-self: center; }
+.d-assets .finder svg { width: 14px; height: 14px; }
+.d-assets .finder:hover { border-color: #fff; color: #fff; }
 .d-media { position: relative; }
 .slide-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: #fffdf9e6; color: var(--ink); box-shadow: var(--shadow-lift); }
 .slide-nav:hover { background: #fff; }
@@ -284,6 +298,8 @@ details.fold pre { white-space: pre-wrap; font: 12.5px/1.55 var(--sans); color: 
 #dSaveMessage { flex-basis: 100%; margin: 0; }
 .drawer-footer .primary { margin-left: auto; }
 .pubrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.publicar-ya { margin-top: 12px; }
+.publicar-ya .hint { margin: 0; }
 .pubrow input[type=date] { height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 0 8px; font-size: 12.5px; }
 .secondary { border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 12px; background: var(--surface); font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
 .secondary:hover:not(:disabled) { border-color: var(--ink); }
@@ -342,9 +358,8 @@ details.fold pre { white-space: pre-wrap; font: 12.5px/1.55 var(--sans); color: 
 .toast button { color: #ffb79f; font-weight: 600; }
 
 /* ---------- responsive ---------- */
-/* Encabezado en una fila desde 1181 px; bajo 1367 se va el título (la pestaña ya dice dónde estás) y bajo 1181
-   los filtros pasan a su propia fila en vez de esconderse. */
-@media (max-width: 1366px) { .brandmark { display: none; } .topbar { padding: 12px 24px; column-gap: 14px; } }
+/* Encabezado en una fila; las secciones y los filtros viven en la barra lateral. */
+@media (max-width: 1366px) { .topbar { padding: 12px 24px; column-gap: 14px; } }
 @media (max-width: 1280px) and (min-width: 961px) {
   .week-layout { grid-template-columns: minmax(0, 1fr); }
   .backlog { min-width: 0; min-height: 0; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px 24px 18px; }
@@ -447,6 +462,11 @@ body.dragging .col[data-drop] .lane-empty { border-color: var(--dot); }
 .d-guion span { font: 11px var(--mono); color: #8a8273; }
 .d-guion pre { margin: 6px 0 0; white-space: pre-wrap; font: 15px/1.6 var(--sans); color: #f4f1ea; }
 .stage-pick { margin: 0; }
+.stage-row { display: flex; align-items: stretch; gap: 8px; }
+.stage-row .stage-pick { flex: 1; min-width: 0; }
+.stage-discard { flex: none; width: 42px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 9px; color: var(--ink-2); }
+.stage-discard:hover { color: var(--accent-ink); background: var(--accent-soft); border-color: transparent; }
+.stage-discard svg { width: 17px; height: 17px; }
 
 /* Feedback por video */
 .segmented button:disabled { opacity: .45; cursor: default; }
@@ -538,6 +558,8 @@ body.dragging .col[data-drop] .lane-empty { border-color: var(--dot); }
 .pill.on { background: var(--ink); border-color: var(--ink); color: #fff; }
 .pill svg { width: 13px; height: 13px; stroke-width: 2.2; }
 .dest-note { font-size: 12.5px; color: var(--muted); }
+.dest-split { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; }
+.dest-split .hint { margin: 0; flex: 1; min-width: 180px; }
 .dest-warn { margin: -4px 14px 12px 60px; font-size: 12px; line-height: 1.45; color: var(--warn); }
 .dest-sub .dest-warn { margin: 0; }
 
@@ -553,3 +575,77 @@ body.dragging .col[data-drop] .lane-empty { border-color: var(--dot); }
 .setup h1 { font: 600 22px/1.2 var(--sans); margin: 0 0 12px; }
 .setup p { color: var(--ink-2); }
 .setup pre { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; font: 13px var(--mono); white-space: pre-wrap; }
+
+/* ---------- barra lateral: secciones, marca, formato y cuentas ---------- */
+body { padding-left: 236px; }
+body.side-plegada { padding-left: 64px; }
+.appside { position: fixed; top: 0; left: 0; bottom: 0; z-index: 30; width: 236px; display: flex; flex-direction: column; gap: 8px; padding: 12px 10px 16px; background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; }
+body.side-plegada .appside { width: 64px; padding: 12px 8px; }
+.appside-h { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 4px 8px; }
+.appside-h .icon { width: 30px; height: 30px; }
+body.side-plegada .appside-h { justify-content: center; padding: 2px 0 4px; }
+body.side-plegada .appside-h .brandmark { display: none; }
+.perfil-sw { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); text-align: left; }
+.perfil-sw[hidden] { display: none; }
+.perfil-sw:hover { border-color: var(--line-2); }
+.perfil-av { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; font-size: 13px; }
+.perfil-t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.perfil-t small { font-size: 11px; color: var(--muted); }
+.perfil-t b { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.perfil-sw .chev { width: 14px; height: 14px; color: var(--muted); }
+body.side-plegada .perfil-sw { padding: 6px; justify-content: center; }
+body.side-plegada .perfil-t, body.side-plegada .perfil-sw .chev { display: none; }
+.appside-nav { display: flex; flex-direction: column; gap: 1px; margin-top: 6px; }
+.appside-nav button { display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; padding: 0 10px; border-radius: 8px; color: var(--ink-2); font-size: 13.5px; text-align: left; }
+.appside-nav button .ti { width: 17px; height: 17px; stroke-width: 1.9; }
+.appside-nav button:hover { background: var(--bg); color: var(--ink); }
+.appside-nav button[aria-current=page] { background: var(--sunk); color: var(--ink); font-weight: 600; }
+body.side-plegada .appside-nav button { justify-content: center; padding: 0; }
+body.side-plegada .appside-nav button span { display: none; }
+.appside-sep { margin: 6px 10px; border: 0; border-top: 1px solid var(--line); }
+body.side-plegada .appside-sep { margin: 6px 4px; }
+/* El formato y las cuentas van abajo de todo; si no entran, la barra se desplaza. */
+.appside-filtros { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); }
+#formatoGrupo { margin-bottom: 16px; }
+#formatoGrupo[hidden] { display: none; }
+.appside-filtros h5 { margin: 0 8px 8px; font: 600 10.5px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+body.side-plegada .appside-filtros { display: none; }
+.cuentas-lista { display: flex; flex-direction: column; gap: 1px; }
+.cuentas-marca { margin: 8px 0 2px; padding: 2px 8px; font-size: 11.5px; font-weight: 600; color: var(--ink-2); text-align: left; border-radius: 6px; }
+.cuentas-marca:first-child { margin-top: 0; }
+.cuentas-marca:hover { background: var(--bg); }
+.cuenta-tg { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 8px; border-radius: 7px; font-size: 12.5px; color: var(--muted); text-align: left; }
+.cuenta-tg:hover { background: var(--bg); }
+.cuenta-tg.on { color: var(--ink); }
+.cuenta-tg .caja { width: 14px; height: 14px; flex: none; display: grid; place-items: center; border: 1.5px solid var(--line-2); border-radius: 4px; }
+.cuenta-tg.on .caja { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.cuenta-tg .caja svg { width: 10px; height: 10px; stroke-width: 2.6; }
+.cuenta-tg .net svg { width: 13px; height: 13px; }
+.cuenta-tg .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmt-seg { margin: 0; }
+.fmt-seg button { padding: 5px 4px; font-size: 12px; }
+/* Más específico que el ancho de los menús de Guiones (guiones.css se carga después). */
+#gvPop:has(.perfiles-pop) { width: 296px; }
+.perfil-op { gap: 10px; width: 100%; padding: 7px 8px; }
+.perfil-op .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; font-size: 13.5px; }
+.perfil-op .t small { font-size: 11.5px; color: var(--muted); font-weight: 400; }
+.perfil-av.todos { background: var(--sunk); color: var(--ink-2); }
+.perfil-ok { width: 14px; flex: none; display: grid; place-items: center; color: var(--ink); }
+.perfil-redes { display: inline-flex; gap: 5px; color: var(--muted); }
+.perfil-redes svg { width: 12px; height: 12px; fill: currentColor; stroke: none; }
+.view-title { margin: 0; font: 600 17px/1 var(--sans); letter-spacing: -.2px; }
+.topbar { justify-content: space-between; }
+/* El buscador se lee entero: va en la fila de controles de la vista que filtra. */
+.busca-slot { display: inline-flex; flex: 0 1 340px; min-width: 240px; }
+.busca-slot .search { flex: 1 1 auto; width: 100%; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 13.5px; }
+.busca-slot .search:focus-within { border-color: var(--ink-2); }
+/* En el teléfono la barra queda plegada a íconos. */
+@media (max-width: 720px) {
+  body, body.side-plegada { padding-left: 56px; }
+  .appside, body.side-plegada .appside { width: 56px; padding: 10px 6px; }
+  .appside-h { justify-content: center; padding: 2px 0 4px; }
+  .appside-h .brandmark, #sideToggle, .perfil-t, .perfil-sw .chev, .appside-nav button span, .appside-filtros { display: none; }
+  .perfil-sw { padding: 6px; justify-content: center; }
+  .appside-nav button { justify-content: center; padding: 0; }
+  .busca-slot { flex: 1 1 100%; min-width: 0; }
+}

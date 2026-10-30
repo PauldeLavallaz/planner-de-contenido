@@ -31,12 +31,15 @@ const netName = n => NET_NAME[n] || (n ? n[0].toUpperCase() + n.slice(1) : '');
 const netIcon = n => NET_ICON[n] || `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11"/><text x="12" y="16.5" text-anchor="middle" font-size="13" font-family="sans-serif" font-weight="700" fill="#fff">${(n || '?')[0].toUpperCase()}</text></svg>`;
 const ICON = {
   check: '<svg viewBox="0 0 16 16"><path d="m3.5 8.5 3 3 6-7"/></svg>',
+  send: '<svg viewBox="0 0 16 16"><path d="M14 2 7.5 8.5M14 2l-4 12-2.5-5.5L2 6z"/></svg>',
+  folder: '<svg viewBox="0 0 16 16"><path d="M2.5 4.5a1 1 0 0 1 1-1h2.8l1.4 1.5h4.8a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z"/></svg>',
   trash: '<svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>',
   restore: '<svg viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.5-3.6M3 2.5v2.8h2.8"/></svg>',
   left: '<svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg>',
   right: '<svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg>',
   copy: '<svg viewBox="0 0 16 16"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 10.5V4a1 1 0 0 1 1-1h6.5"/></svg>',
   pause: '<svg viewBox="0 0 16 16"><path d="M6 3.5v9M10 3.5v9"/></svg>',
+  plus: '<svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>',
   mic: '<svg viewBox="0 0 16 16"><rect x="6" y="2" width="4" height="8" rx="2"/><path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V14"/></svg>',
   stop: '<svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1.5" style="fill:currentColor"/></svg>',
 };
@@ -92,9 +95,18 @@ const pager = (key, total, size) => { if (total <= size) return ''; const p = Ma
 const pageSlice = (key, list, size) => { const p = Math.max(0, Math.min(pages[key] || 0, Math.ceil(list.length / size) - 1)); pages[key] = p; return list.slice(p * size, (p + 1) * size); };
 const undoStack = [];
 const cfg = () => data.config || {};
-const slotsCfg = () => cfg().slots || ['12:45', '18:30', '22:00'];
-// Horarios sugeridos de los botones; `slots` mide la capacidad del día.
-const suggestedTimes = () => cfg().suggested_times?.length ? cfg().suggested_times : slotsCfg();
+const slotsCfg = () => cfg().slots || ['11:00', '13:00', '17:00', '20:00'];
+// Los horarios de cada día: los de `slots`, corridos todos para un mismo lado 15 o 30 minutos cada uno, así no sale
+// siempre a la misma hora. El sorteo sale de la fecha: el mismo día da los mismos horarios entre un arrastre y otro, y
+// cada día da otros. Con `suggested_times` en la config, los botones muestran ésos tal cual.
+function corrimientosDelDia(day) {
+  let s = [...String(day || '')].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 7);
+  const azar = () => (s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 2 ** 32;
+  const lado = azar() < .5 ? -1 : 1;
+  return slotsCfg().map(() => lado * (azar() < .5 ? 15 : 30));
+}
+const horariosDelDia = day => day ? slotsCfg().map((t, k) => fromMin(toMin(t) + corrimientosDelDia(day)[k])) : slotsCfg();
+const suggestedTimes = day => cfg().suggested_times?.length ? cfg().suggested_times : horariosDelDia(day);
 const windowMin = () => cfg().occupied_window_minutes || 75;
 
 // ---------- lectura de piezas ----------
@@ -140,13 +152,47 @@ const canIgMode = i => editable(i) && ['reel', 'video'].includes(i.format) && (i
 const liveIgTrial = i => { const c = (i.channels || []).find(x => normNet(x.network) === 'instagram' && x.verified && x.state === 'QUEUE'); return c ? !!c.trial : null; };
 const collabText = i => nets(i).includes('instagram') && !i.trial && collab(i).length ? `<span class="collab">+${collab(i).map(v => esc(collabLabel(v).replace(/^La /, ''))).join(', ')}</span>` : '';
 
+// Qué se ve, desde la barra lateral: la marca (si hay más de una), que vale para todas las secciones, y dentro de ella
+// sus cuentas, que se apagan de a una. Las cuentas son `red:id`; una cuenta con `marca` en la config es de esa marca y
+// una sin marca, de todas.
+const cuentasTodas = () => (cfg().networks || []).flatMap(nw => (nw.accounts || []).map(a => ({ ...a, net: nw.id, key: nw.id + ':' + a.id })));
+const marcas = () => [...new Set([...BRANDS, ...data.items.map(i => i.brand).filter(Boolean)])].filter(b => data.items.some(i => i.brand === b));
+const cuentasDeMarca = m => cuentasTodas().filter(a => !a.brand || a.brand === m);
+let perfilActual = 'all', cuentasApagadas = {};
+const cuentasDelPerfil = () => perfilActual === 'all' ? cuentasTodas() : cuentasDeMarca(perfilActual);
+const cuentasSel = () => { const off = new Set(cuentasApagadas[perfilActual] || []); return new Set(cuentasDelPerfil().filter(a => !off.has(a.key)).map(a => a.key)); };
+const cuentaNombre = a => a.profile ? '@' + String(a.profile).replace(/^@/, '') : String(a.label || '').replace(/^(TikTok|Instagram|YouTube|LinkedIn|Facebook|X|Threads|Pinterest|Bluesky)\s+/i, '') || netName(a.net);
+// Historias sólo sale por Instagram: ahí la barra lista nada más esas cuentas.
+const cuentasVisibles = () => view === 'stories' ? cuentasDelPerfil().filter(a => a.net === 'instagram') : cuentasDelPerfil();
+// El formato: botones que se prenden y se apagan. Trial es el reel que sale a Instagram como reel de prueba.
+const FORMATOS = [['reel', 'Reels', 'Reels y videos al feed'], ['trial', 'Trial', 'Reels de prueba de Instagram (Trial reels)'], ['carrusel', 'Carruseles', 'Carruseles']];
+let formatosElegidos = null;
+const formatosSel = () => formatosElegidos || new Set(FORMATOS.map(f => f[0]));
+const todosFormatos = () => FORMATOS.every(([k]) => formatosSel().has(k));
+const formatoDe = i => isCarousel(i) ? 'carrusel' : ['reel', 'video'].includes(i.format) ? (i.trial && nets(i).includes('instagram') ? 'trial' : 'reel') : null;
+// Lo que no sabe de Trial (Guiones): un reel pasa con Reels o con Trial.
+const formatoPasa = tipo => todosFormatos() || (tipo === 'carrusel' ? formatosSel().has('carrusel') : formatosSel().has('reel') || formatosSel().has('trial'));
+const pieceKeys = i => nets(i).map(n => { const a = acctOf(n, accounts(i)); return a ? n + ':' + a.id : null; }).filter(Boolean);
+// Lo que tiene fecha se ve en la cuenta por la que sale. Lo que todavía no tiene fecha es de la marca y no de una cuenta:
+// se ve con cualquier cuenta prendida en sus redes (la cuenta se elige al agendar).
+const redesSel = () => new Set([...cuentasSel()].map(k => k.split(':')[0]));
+const redesQueSale = i => when(i) ? pieceKeys(i).filter(k => cuentasSel().has(k)).map(k => k.split(':')[0]) : nets(i).filter(n => redesSel().has(n));
+// Una pieza sin redes (Postiz sin cuentas todavía) no se esconde.
+const cuentaScope = i => !cuentasTodas().length || !nets(i).length || redesQueSale(i).length > 0;
+// Trial es cómo sale un reel a Instagram; en TikTok o YouTube la misma pieza es un reel.
+function formatoPasaPieza(i) {
+  if (todosFormatos()) return true;
+  const f = formatoDe(i); if (!f) return true;
+  if (f !== 'trial') return formatosSel().has(f);
+  const redes = redesQueSale(i);
+  return (formatosSel().has('trial') && redes.includes('instagram')) || (formatosSel().has('reel') && redes.some(n => n !== 'instagram'));
+}
 function inScope(i) {
   // Borradores sueltos de Postiz (p. ej. historias que nunca salieron): no son piezas para planificar.
   if (i.id.startsWith('remote:') && (i.channels || []).every(c => c.state === 'DRAFT')) return false;
-  const b = $('brand').value, f = $('format').value, q = $('search').value.toLowerCase().trim();
-  if (b && b !== 'mine' && i.brand !== b) return false;
-  if (f === 'reel' && !['reel', 'video'].includes(i.format)) return false;
-  if (f === 'carrusel' && !isCarousel(i)) return false;
+  if (perfilActual !== 'all' && i.brand !== perfilActual) return false;
+  if (!cuentaScope(i) || !formatoPasaPieza(i)) return false;
+  const q = $('search').value.toLowerCase().trim();
   return !q || (i.title + ' ' + i.slug + ' ' + i.brand).toLowerCase().includes(q);
 }
 // La ocupación de horarios no depende del filtro de marca. Lo que está en desarrollo no ocupa el calendario.
@@ -182,8 +228,14 @@ renderBacklogVisibility();
 function render() {
   const wantHash = week === monday(todayStr()) ? '' : `#semana=${week}`;
   if (location.hash !== wantHash) history.replaceState(null, '', location.pathname + location.search + wantHash);
-  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === view)));
+  document.querySelectorAll('#navMenu [data-view]').forEach(b => b.setAttribute('aria-current', b.dataset.view === view ? 'page' : 'false'));
+  $('viewName').textContent = VISTAS[view] || '';
   $('weekView').hidden = view !== 'week'; $('piecesView').hidden = view !== 'pieces'; $('historyView').hidden = view !== 'history'; $('storiesView').hidden = view !== 'stories'; $('guionesView').hidden = view !== 'guiones';
+  // El buscador sólo va donde filtra una lista y dice qué busca ahí; en las demás vistas no aparece ni filtra.
+  const slot = document.querySelector('main:not([hidden]) [data-busca]'), sw = $('searchWrap');
+  if (slot) { if (sw.parentElement !== slot) slot.append(sw); sw.hidden = false; $('search').placeholder = slot.dataset.busca; $('search').setAttribute('aria-label', slot.dataset.busca); }
+  else { sw.hidden = true; $('search').value = ''; }
+  renderCuentas();
   document.body.classList.toggle('stories-mode', view === 'stories');
   const n = Object.keys(draft.changes).length + feedbackItems().filter(i => !draft.changes[i.id]).length;
   $('changeCount').textContent = n; $('review').disabled = !n || saveError || busy;
@@ -336,13 +388,27 @@ function renderPieces() {
 function boardFit() { const box = $('piecesList'); if (box.offsetParent) box.style.setProperty('--board-top', Math.round(box.getBoundingClientRect().top + scrollY) + 'px'); }
 window.addEventListener('resize', () => { if (view === 'pieces') boardFit(); });
 
+// Publicadas muestra todo el contenido: arriba lo agendado en Postiz, de lo más próximo a lo más lejano, y abajo lo
+// publicado por mes. Los dos grupos se pliegan y lo plegado se recuerda por navegador.
+let pubCerradas = new Set(store.get('pubCerradas', []) || []);
 function renderHistory() {
-  const list = data.items.filter(i => inScope(i) && i.status === 'published').sort((a, b) => (b.history_date || '').localeCompare(a.history_date || ''));
+  const scope = data.items.filter(inScope);
+  const queued = scope.filter(i => i.status === 'scheduled').sort((a, b) => (when(a) || '').localeCompare(when(b) || ''));
+  const list = scope.filter(i => i.status === 'published').sort((a, b) => (b.history_date || '').localeCompare(a.history_date || ''));
   const months = {};
   for (const i of list) { const k = i.history_date ? i.history_date.slice(0, 7) : 'none'; (months[k] ||= []).push(i); }
   const keys = Object.keys(months).sort((a, b) => a === 'none' ? 1 : b === 'none' ? -1 : b.localeCompare(a));
-  $('historyList').innerHTML = keys.map(k => `<section class="section"><div class="section-head"><h3>${k === 'none' ? 'Sin fecha registrada' : esc(fmt(k + '-15', { month: 'long', year: 'numeric' }))}</h3><span class="n">${months[k].length}</span></div><div class="gallery">${months[k].map(i => tile(i, 'history')).join('')}</div></section>`).join('') || '<div class="empty">Todavía no hay publicaciones con estos filtros.</div>';
+  const section = (title, items) => `<section class="section"><div class="section-head"><h3>${title}</h3><span class="n">${items.length}</span></div><div class="gallery">${items.map(i => tile(i, 'history')).join('')}</div></section>`;
+  const grupo = (id, title, n, cuerpo) => `<details class="pub-grupo" data-grupo="${id}"${pubCerradas.has(id) ? '' : ' open'}><summary class="pub-grupo-h"><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg><h2>${title}</h2><span class="n">${n}</span></summary><div class="pub-grupo-c">${cuerpo}</div></details>`;
+  $('historyList').innerHTML = (queued.length ? grupo('agendadas', 'Agendadas en Postiz', queued.length, `<div class="gallery">${queued.map(i => tile(i, 'history')).join('')}</div>`) : '')
+    + (list.length ? grupo('publicadas', 'Publicadas', list.length, keys.map(k => section(k === 'none' ? 'Sin fecha registrada' : esc(fmt(k + '-15', { month: 'long', year: 'numeric' })), months[k])).join('')) : '')
+    || '<div class="empty">Todavía no hay publicaciones ni piezas agendadas con estos filtros.</div>';
 }
+// `toggle` no burbujea: se escucha en la captura.
+$('historyList').addEventListener('toggle', e => {
+  const g = e.target.closest?.('.pub-grupo'); if (!g) return;
+  g.open ? pubCerradas.delete(g.dataset.grupo) : pubCerradas.add(g.dataset.grupo); store.set('pubCerradas', [...pubCerradas]);
+}, true);
 
 // ---------- guardar el borrador ----------
 function toast(text, action, label = 'Deshacer') {
@@ -435,10 +501,10 @@ function takenTimes(day, exceptId, me = exceptId && byId(exceptId)) { return tim
 function isTaken(day, time, exceptId, me) { return takenTimes(day, exceptId, me).some(t => Math.abs(toMin(t) - toMin(time)) < windowMin()); }
 function freeTime(day, i) {
   const soon = addMinutes(nowLocal(), 45);
-  const free = suggestedTimes().find(s => day + 'T' + s > soon && !isTaken(day, s, i.id));
+  const free = suggestedTimes(day).find(s => day + 'T' + s > soon && !isTaken(day, s, i.id));
   if (free) return free;
   if (day === todayStr()) { const m = toMin(soon.slice(11, 16)); return soon.slice(0, 10) === day ? fromMin(Math.ceil(m / 15) * 15) : null; }
-  return slotsCfg()[1] || slotsCfg()[0];
+  return horariosDelDia(day)[1] || horariosDelDia(day)[0];
 }
 const pauseItem = i => i.status !== 'scheduled' ? (toast('Sólo se pausa una pieza programada en Postiz.'), false) : ch(i)?.pause ? false : commit(i, { when: null, pause: true }, `${i.title.slice(0, 40)}: se pausa en tu propuesta.`);
 const resumeItem = i => commit(i, { when: null, resume: true }, `${i.title.slice(0, 40)}: vuelve a Listos en tu propuesta.`);
@@ -459,18 +525,20 @@ function openItem(id) {
   const assets = []; const seen = new Set();
   for (const a of [i.primary, i.newer_final, ...(i.media || []), ...(i.components || [])]) if (a && !seen.has(a.path)) { seen.add(a.path); assets.push(a); }
   ed.slides = slidesOf(i, assets); ed.slide = 0;
+  const finder = localDir(i) || assets.length ? `<button class="finder" data-finder title="Abrir en el Finder" aria-label="Abrir en el Finder">${ICON.folder}</button>` : '';
   if (ed.slides.length > 1) {
-    $('dAssets').innerHTML = ed.slides.map((a, n) => `<button class="slide-thumb" data-slide="${n}" title="${esc(a.name)}" aria-label="Lámina ${n + 1}"><img src="${esc(a.kind === 'video' ? '/api/planner/poster?path=' + encodeURIComponent(a.path) : mediaUrl(a))}" alt="" loading="lazy">${a.kind === 'video' ? '<i>▶</i>' : ''}</button>`).join('');
+    $('dAssets').innerHTML = ed.slides.map((a, n) => `<button class="slide-thumb" data-slide="${n}" title="${esc(a.name)}" aria-label="Lámina ${n + 1}"><img src="${esc(a.kind === 'video' ? '/api/planner/poster?path=' + encodeURIComponent(a.path) : mediaUrl(a))}" alt="" loading="lazy">${a.kind === 'video' ? '<i>▶</i>' : ''}</button>`).join('') + finder;
     $('dAssets').querySelectorAll('[data-slide]').forEach(b => b.onclick = () => showSlide(Number(b.dataset.slide)));
     showSlide(0);
   } else {
     const visual = assets.filter(a => a.kind !== 'audio').slice(0, 8);
-    $('dAssets').innerHTML = visual.length > 1 ? visual.map((a, n) => `<button data-asset="${n}" title="${esc(a.path)}">${a.kind === 'video' ? '▶ ' : ''}${esc(a.name)}</button>`).join('') : '';
+    $('dAssets').innerHTML = (visual.length > 1 ? visual.map((a, n) => `<button data-asset="${n}" title="${esc(a.path)}">${a.kind === 'video' ? '▶ ' : ''}${esc(a.name)}</button>`).join('') : '') + finder;
     // Elegir otro video lo deja como versión a publicar y habilita Guardar.
-    $('dAssets').querySelectorAll('button').forEach(b => b.onclick = () => pickVersion(visual[Number(b.dataset.asset)]));
+    $('dAssets').querySelectorAll('[data-asset]').forEach(b => b.onclick = () => pickVersion(visual[Number(b.dataset.asset)]));
     const first = assets.find(a => a.path === ed.version) || i.primary || assets.find(a => a.kind === 'video') || assets.find(a => a.kind !== 'audio');
     if (first) showAsset(first); else showDraft(i, assets.find(a => a.kind === 'audio'));
   }
+  const fbtn = $('dAssets').querySelector('[data-finder]'); if (fbtn) fbtn.onclick = () => revealInFinder(finderPath(i));
   if (fb?.id !== id) { if (fb?.rec) fb.rec.rec.stop(); fb = { id, entries: [], prompt: null, dir: '', loading: true, text: '', copy: null }; loadFeedback(id); }
   renderDrawer();
   if (!$('drawer').open) $('drawer').showModal();
@@ -483,11 +551,23 @@ function pickVersion(a) {
   showAsset(a);
   const top = $('drawer').querySelector('.drawer-scroll').scrollTop; renderDrawer(); $('drawer').querySelector('.drawer-scroll').scrollTop = top;
 }
+// «Abrir en el Finder»: la carpeta de la pieza, con el archivo que se está viendo seleccionado. Si lo que se ve es la
+// copia de la cola (publicar/), se abre la carpeta de la pieza, que es donde vive.
+const localDir = i => typeof i.source === 'string' && i.source && !i.id.startsWith('remote:') ? i.source : null;
+function finderPath(i) {
+  const dir = localDir(i), shown = ed?.shown?.path;
+  return shown && (!dir || shown.startsWith(dir + '/') || shown === dir) ? shown : dir || shown || null;
+}
+async function revealInFinder(path) {
+  if (!path) return toast('Esta pieza no tiene archivos en tu computadora.');
+  try { await api('reveal', post({ path })); } catch (err) { toast(err.message); }
+}
 function showAsset(a) {
+  if (ed) ed.shown = a;
   $('dMedia').querySelectorAll('video,audio').forEach(v => v.pause());
   $('dMedia').innerHTML = !a ? '<div class="empty">Todavía no hay un archivo para ver.</div>' : a.kind === 'video' ? `<video src="${esc(mediaUrl(a))}" ${ed && byId(ed.id) && thumbUrl(byId(ed.id)) && a.path === byId(ed.id).primary?.path ? `poster="${esc(thumbUrl(byId(ed.id)))}"` : ''} controls playsinline preload="metadata"></video>` : a.kind === 'audio' ? `<audio src="${esc(mediaUrl(a))}" controls preload="metadata"></audio>` : `<img src="${esc(mediaUrl(a))}" alt="${esc(a.name)}">`;
   const pub = ed && byId(ed.id) ? (ed.version || byId(ed.id).primary?.path) : null;
-  $('dAssets').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.title === a?.path); b.classList.toggle('pub', !!pub && b.title === pub); });
+  $('dAssets').querySelectorAll('[data-asset]').forEach(b => { b.classList.toggle('on', b.title === a?.path); b.classList.toggle('pub', !!pub && b.title === pub); });
 }
 // Sin video ni imagen todavía (en desarrollo), se ve lo que hay: hasta dónde llegó, el audio y el guion.
 function showDraft(i, audio) {
@@ -541,7 +621,8 @@ function renderDrawer() {
       <div class="when-summary">${w ? esc(whenLabel(w)) : '<span class="muted">Sin fecha</span>'}${moved ? `<small><s>${esc(whenLabel(orig))}</s></small>` : ''}</div>
       ${miniCal(i)}
       <div class="time-row"><div class="timefield"><button data-step="-15" aria-label="15 minutos antes">−</button><input id="edTime" value="${esc(ed.time)}" placeholder="--:--" inputmode="numeric" aria-label="Hora (24 h)" maxlength="5"><button data-step="15" aria-label="15 minutos después">+</button></div>
-      <div class="chips">${suggestedTimes().map(s => { const taken = ed.date && isTaken(ed.date, s, i.id, edProbe(i)); return `<button class="chip ${ed.time === s ? 'on' : ''} ${taken ? 'taken' : ''}" data-slot="${s}" title="${taken ? 'Hay otra pieza cerca de este horario en la misma cuenta' : ''}">${s}</button>`; }).join('')}</div></div>
+      <div class="chips">${suggestedTimes(ed.date || dateAdd(todayStr(), 1)).map(s => { const taken = ed.date && isTaken(ed.date, s, i.id, edProbe(i)); return `<button class="chip ${ed.time === s ? 'on' : ''} ${taken ? 'taken' : ''}" data-slot="${s}" title="${taken ? 'Hay otra pieza cerca de este horario en la misma cuenta' : ''}">${s}</button>`; }).join('')}</div></div>
+      ${noFinal(i) ? '' : `<div class="pubrow publicar-ya"><button class="secondary" id="publishNowBtn" title="Copia la orden para pegarla en Claude Code, que la publica apenas la recibe">${ICON.send}Publicar ahora</button><span class="hint">Copia la orden para Claude Code</span></div>`}
       ${noFinal(i) ? '<p class="hint">Todavía no tiene archivo final: queda como reserva y se agenda cuando lo tenga.</p>' : w && !i.approved && i.status !== 'scheduled' ? '<p class="hint">Con fecha en el calendario queda aprobada al confirmar.</p>' : ''}</section>`);
     blocks.push(destBlock(i));
   }
@@ -552,11 +633,12 @@ function renderDrawer() {
   if (stageable || i.status === 'published' || canMark(i)) {
     const locked = !stageable && i.status !== 'published';
     const pubWhen = i.status === 'published' ? (i.history_date ? esc(dayLong(i.history_date)) + (i.history_basis === 'scheduled_reference' ? ' (fecha de agenda)' : '') : 'Sin fecha registrada') + (i.publication ? ' · marcada por vos' : ' · confirmada por Postiz') : '';
-    blocks.push(`<section class="block"><h4>Estado</h4><div class="segmented stage-pick">${[...STAGES, ['published', 'Publicado']].map(([k, l]) => `<button class="${i.status === k ? 'on' : ''}" data-stage="${k}" ${(k !== 'published' && locked) || postizPub ? 'disabled' : ''}>${l}</button>`).join('')}</div><p class="hint">${i.status === 'published' ? pubWhen + (i.publication ? '. Elegí otro estado para traerla de vuelta.' : '') : locked ? (i.status === 'scheduled' ? 'Está en Postiz: pausala o quitale la fecha para cambiarle el estado.' : 'Está pausada: volvela a Listos o agendala.') : i.status === 'ready' ? 'Aprobada: se puede agendar.' : 'Pasala a Listos cuando apruebes el final.'}</p></section>`);
+    // Descartar va primero en la fila del estado, como un estado más; su explicación, en el title.
+    blocks.push(`<section class="block"><h4>Estado</h4><div class="stage-row">${canDiscard(i) ? `<button class="stage-discard" id="discardBtn" title="Descartar: deja de aparecer en el panel. No borra ningún archivo; la recuperás desde Tablero → Descartadas." aria-label="Descartar pieza">${ICON.trash}</button>` : ''}<div class="segmented stage-pick">${[...STAGES, ['published', 'Publicado']].map(([k, l]) => `<button class="${i.status === k ? 'on' : ''}" data-stage="${k}" ${(k !== 'published' && locked) || postizPub ? 'disabled' : ''}>${l}</button>`).join('')}</div></div><p class="hint">${i.status === 'published' ? pubWhen + (i.publication ? '. Elegí otro estado para traerla de vuelta.' : '') : locked ? (i.status === 'scheduled' ? 'Está en Postiz: pausala o quitale la fecha para cambiarle el estado.' : 'Está pausada: volvela a Listos o agendala.') : i.status === 'ready' ? 'Aprobada: se puede agendar.' : 'Pasala a Listos cuando apruebes el final.'}</p></section>`);
   }
   // El copy va debajo del estado, plegado a dos renglones: se lee poco y se abre para editarlo. Lo arma renderCopy.
   if (hasCopy(i)) blocks.push('<section class="block copy-block" id="copyBlock"></section>');
-  if (canDiscard(i)) blocks.push(`<section class="block"><h4>Descartar</h4><div class="pubrow"><button class="secondary danger" id="discardBtn">${ICON.trash} Descartar pieza</button></div><p class="hint">Deja de aparecer en el panel. No borra ningún archivo; la recuperás desde Tablero → Descartadas.</p></section>`);
+  if (canDiscard(i) && !blocks.some(b => b.includes('id="discardBtn"'))) blocks.push(`<section class="block"><h4>Descartar</h4><div class="pubrow"><button class="secondary danger" id="discardBtn">${ICON.trash} Descartar pieza</button></div><p class="hint">Deja de aparecer en el panel. No borra ningún archivo; la recuperás desde Tablero → Descartadas.</p></section>`);
   if (i.status === 'discarded') blocks.push(`<section class="block"><h4>Descartada</h4><p class="hint" style="margin:0 0 10px">${i.discard?.discarded_at ? 'El ' + esc(dayLong(i.discard.discarded_at.slice(0, 10))) : ''}${i.discard?.reason ? ' · ' + esc(i.discard.reason) : ''}</p><button class="secondary" id="restoreBtn">${ICON.restore} Recuperar</button></section>`);
   blocks.push(`<details class="fold"><summary>Archivos</summary><div class="doclinks">${(i.documents || []).map(d => `<a class="link" href="${esc(mediaUrl(d.path))}" target="_blank" rel="noopener">${esc(d.name)}</a>`).join('')}</div><div class="path">${esc(i.source || 'Creada en Postiz, sin archivo local')}</div>${i.sidecar ? `<div class="path">${esc(i.sidecar)}</div>` : ''}</details>`);
   $('dBody').innerHTML = blocks.join('');
@@ -587,7 +669,33 @@ function destBlock(i) {
       <button class="switch" role="switch" data-net="${n}" aria-checked="${on}" aria-label="${on ? 'No publicar' : 'Publicar'} en ${esc(netName(n))}"><i></i></button></div>
       ${n === 'instagram' && on ? igExtras(i, opts) : ''}</div>`;
   }).join('');
-  return `<section class="block"><h4>Dónde</h4><div class="dest">${rows || '<p class="hint" style="margin:12px 14px">Todavía no hay redes conectadas.</p>'}</div>${ed.nets.length ? '' : '<p class="hint warn">Prendé al menos una red.</p>'}</section>`;
+  const moving = SPLIT_NETS.filter(n => origNets(i).includes(n)).map(netName), stays = origNets(i).filter(n => !SPLIT_NETS.includes(n)).map(netName);
+  const split = canSplit(i) ? `<div class="dest-split"><button class="secondary" data-split>${ICON.plus} Otro horario para Instagram</button><span class="hint">${esc(netList(moving))} ${moving.length > 1 ? 'pasan' : 'pasa'} a una tarjeta propia, sin fecha; ${esc(netList(stays))} ${stays.length > 1 ? 'quedan' : 'queda'} en esta.</span></div>` : '';
+  return `<section class="block"><h4>Dónde</h4><div class="dest">${rows || '<p class="hint" style="margin:12px 14px">Todavía no hay redes conectadas.</p>'}</div>${ed.nets.length ? '' : '<p class="hint warn">Prendé al menos una red.</p>'}${split}</section>`;
+}
+// Un horario para TikTok y otro para Instagram: Instagram, con YouTube y LinkedIn que van con él, pasa a una tarjeta
+// propia en la cola (`cola.py separar`); la original se queda con el resto. Si ya está en Postiz, sacarle esas redes
+// viaja en «Revisar cambios», con tu OK.
+const SPLIT_NETS = ['instagram', 'youtube', 'linkedin'];
+const netList = names => new Intl.ListFormat('es', { type: 'conjunction' }).format(names);
+const canSplit = i => String(i.id).startsWith('queue:') && ['reel', 'video'].includes(i.format) && editable(i) && origNets(i).includes('instagram') && origNets(i).some(n => !SPLIT_NETS.includes(n));
+async function splitInstagram(i, btn) {
+  if (busy || saveError) return;
+  if (edDirty(i)) { toast('Guardá o descartá los cambios de esta pieza antes de separarla.'); return; }
+  busy = true; btn.disabled = true; btn.textContent = 'Separando…';
+  let r = null;
+  try {
+    await saving; if (saveError) return;
+    r = await api('separar', post({ id: i.id, fingerprint: i.fingerprint }));
+    data = r.data; draft = r.draft; acked = structuredClone(draft.changes);
+    const orig = byId(i.id);
+    if (orig) applyChange(orig, { when: when(orig), note: ch(orig)?.note || '', networks: nets(orig).filter(n => !r.redes.includes(n)), collaborators: collab(orig), accounts: accounts(orig), version: version(orig), pause: ch(orig)?.pause, resume: ch(orig)?.resume });
+    queueSave();
+  } catch (e) { toast(e.message); } finally { busy = false; render(); }
+  if (!r) { if ($('drawer').open && ed?.id === i.id) renderDrawer(); return; }
+  const names = netList(r.redes.map(netName));
+  if (byId(r.created)) openItem(r.created); else $('drawer').close();
+  toast(`${names} ${r.redes.length > 1 ? 'quedaron' : 'quedó'} en su propia tarjeta: elegile fecha.${r.original_agendada ? ` Sacar${r.redes.length > 1 ? 'los' : 'lo'} de la original agendada va en Revisar cambios.` : ''}`);
 }
 // Instagram: feed (default) o Trial se guarda al tocarlo, en la ficha que lee la cola al agendar (no en la propuesta);
 // en Postiz no cambia nada. En Trial no hay collab.
@@ -618,8 +726,21 @@ function miniCal(i) {
   return `<div class="minical"><div class="minical-head"><button class="icon" data-cal="-7" aria-label="Semana anterior" ${ed.calStart <= monday(today) ? 'disabled' : ''}>${ICON.left}</button><span>${esc(label)}</span><button class="icon" data-cal="7" aria-label="Semana siguiente">${ICON.right}</button></div><div class="minical-grid">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(d => `<span class="dow">${d}</span>`).join('')}${days.map(d => `<button data-day="${d}" class="${d === ed.date ? 'sel' : ''} ${d === today ? 'today' : ''}" ${d < today ? 'disabled' : ''} aria-label="${esc(dayLong(d))}">${Number(d.slice(8))}${counts[d] ? `<i>${'<b></b>'.repeat(Math.min(3, counts[d]))}</i>` : ''}</button>`).join('')}</div></div>`;
 }
 
+// Publicar ahora: copia la orden con la pieza y las cuentas elegidas en el detalle; Claude Code la publica con la skill
+// publicar. Pegarla es la aprobación de esa publicación.
+function publicarAhoraPrompt(i) {
+  const donde = ed.nets.map(n => { const a = acctOf(n, ed.accounts); return `${netName(n)} ${a ? cuentaNombre({ ...a, net: n }) : ''}`.trim() + (n === 'instagram' ? (i.trial ? ' (Trial)' : ' (feed)') : ''); });
+  const co = ed.nets.includes('instagram') && !i.trial && collab(i).length ? `\n- Colaboradora en Instagram: ${collab(i).map(v => '@' + String(v).replace(/^@/, '')).join(', ')}` : '';
+  const ya = i.status === 'scheduled' && i.scheduled ? `\nYa está agendada en Postiz para el ${whenLabel(i.scheduled)}: publicala ya sin duplicarla.` : '';
+  return `Publicá ahora esta pieza del planner, sin agendarla para después (toqué «Publicar ahora»):
+- «${i.title}»${i.slug && i.id.startsWith('queue:') ? `\n- En la cola: ${i.slug}` : ''}${i.sidecar ? `\n- Ficha: ${i.sidecar}` : ''}${i.source ? `\n- Carpeta: ${i.source}` : ''}
+- Dónde: ${donde.join(', ') || 'las redes por defecto'}${co}${ya}
+Usá la skill publicar (sección «Publicar ahora»). Cuando salga, pasame el link de cada red.`;
+}
 function wireDrawer(i) {
   const body = $('dBody'), refresh = () => { const top = $('drawer').querySelector('.drawer-scroll').scrollTop; renderDrawer(); $('drawer').querySelector('.drawer-scroll').scrollTop = top; };
+  body.querySelector('[data-split]')?.addEventListener('click', e => splitInstagram(i, e.currentTarget));
+  body.querySelector('#publishNowBtn')?.addEventListener('click', () => copyText(publicarAhoraPrompt(i), 'Copiado. Pegalo en Claude Code y sale apenas lo lea.'));
   body.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { ed.date = b.dataset.day; if (!ed.time || isTaken(ed.date, ed.time, i.id, edProbe(i))) ed.time = freeTime(ed.date, i) || ed.time; refresh(); });
   body.querySelectorAll('[data-cal]').forEach(b => b.onclick = () => { ed.calStart = dateAdd(ed.calStart, Number(b.dataset.cal)); refresh(); });
   body.querySelectorAll('[data-slot]').forEach(b => b.onclick = () => { ed.time = b.dataset.slot; if (!ed.date) ed.date = todayStr() + 'T' + ed.time > addMinutes(nowLocal(), 30) ? todayStr() : dateAdd(todayStr(), 1); refresh(); });
@@ -858,7 +979,7 @@ const setDiscard = (id, action) => remote('discard', { id, action }, action === 
 // ---------- edición rápida de la hora ----------
 function openTimePop(i, anchor) {
   const pop = $('timePop'), day = when(i).slice(0, 10), cur = when(i).slice(11, 16);
-  pop.innerHTML = `<div class="muted" style="font-size:12px;margin-bottom:8px">${esc(dayLong(day))}</div><div class="timefield"><button data-pstep="-15" aria-label="15 minutos antes">−</button><input id="popTime" value="${esc(cur)}" inputmode="numeric" maxlength="5" aria-label="Hora (24 h)"><button data-pstep="15" aria-label="15 minutos después">+</button></div><div class="chips">${suggestedTimes().map(s => `<button class="chip ${s === cur ? 'on' : ''} ${isTaken(day, s, i.id) ? 'taken' : ''}" data-pslot="${s}">${s}</button>`).join('')}</div><div class="row-actions"><button class="ghost" data-popclose>Cancelar</button><button class="primary" data-popsave>Listo</button></div>`;
+  pop.innerHTML = `<div class="muted" style="font-size:12px;margin-bottom:8px">${esc(dayLong(day))}</div><div class="timefield"><button data-pstep="-15" aria-label="15 minutos antes">−</button><input id="popTime" value="${esc(cur)}" inputmode="numeric" maxlength="5" aria-label="Hora (24 h)"><button data-pstep="15" aria-label="15 minutos después">+</button></div><div class="chips">${suggestedTimes(day).map(s => `<button class="chip ${s === cur ? 'on' : ''} ${isTaken(day, s, i.id) ? 'taken' : ''}" data-pslot="${s}">${s}</button>`).join('')}</div><div class="row-actions"><button class="ghost" data-popclose>Cancelar</button><button class="primary" data-popsave>Listo</button></div>`;
   const r = anchor.getBoundingClientRect();
   pop.hidden = false;
   pop.style.left = Math.min(window.innerWidth - pop.offsetWidth - 12, Math.max(12, r.left - 6)) + 'px';
@@ -902,7 +1023,8 @@ function topicModel(items) {
     s = Math.min(1, s); memo.set(key, s); return s;
   };
 }
-function jitterFor(day, slot) { const j = cfg().jitter_minutes || 0; if (!j || !$('autoJitter')?.checked) return 0; return (hash(day + ':' + slot) % (2 * j + 1)) - j; }
+// Distribuir corre los horarios igual que el calendario: cada día, todos para el mismo lado.
+function jitterFor(day, slot) { const j = cfg().jitter_minutes || 0; if (!j || !$('autoJitter')?.checked) return 0; const k = slotsCfg().indexOf(slot); return k < 0 ? 0 : corrimientosDelDia(day)[k]; }
 
 function autoPlan() {
   const from = $('autoFrom').value || todayStr();
@@ -1083,7 +1205,7 @@ document.addEventListener('click', e => {
   const t = e.target;
   if (!$('timePop').hidden && !t.closest('#timePop') && !t.closest('[data-time]')) $('timePop').hidden = true;
   if (t.closest('.close')) { const dlg = t.closest('dialog'); if (dlg.id === 'drawer') closeDrawer(); else dlg.close(); return; }
-  const tab = t.closest('.tabs [data-view]'); if (tab) { view = tab.dataset.view; store.set('view', view); render(); return; }
+  const tab = t.closest('#navMenu [data-view]'); if (tab) { view = tab.dataset.view; store.set('view', view); scrollTo(0, 0); render(); return; }
   const wk = t.closest('[data-week]'); if (wk) { week = monday(wk.dataset.week); render(); scrollTo({ top: 0 }); return; }
   if (t.closest('[data-restamp-all]')) { snapshot(); for (const [id, c] of Object.entries(draft.changes)) { const i = byId(id); if (i && staleChange(i, c)) draft.changes[id] = { ...c, fingerprint: i.fingerprint, primary: i.primary }; } queueSave(); render(); renderProposal(); return; }
   const rs = t.closest('[data-restamp]'); if (rs) { const i = byId(rs.dataset.restamp), c = draft.changes[rs.dataset.restamp]; if (i && c) { snapshot(); draft.changes[i.id] = { ...c, fingerprint: i.fingerprint, primary: i.primary }; queueSave(); render(); if ($('proposal').open) renderProposal(); if ($('drawer').open && ed?.id === i.id) renderDrawer(); } return; }
@@ -1110,14 +1232,59 @@ document.addEventListener('keydown', e => {
   if (['week', 'stories', 'guiones'].includes(view) && e.key === 'ArrowLeft') { week = dateAdd(week, -7); render(); }
   else if (['week', 'stories', 'guiones'].includes(view) && e.key === 'ArrowRight') { week = dateAdd(week, 7); render(); }
   else if (e.key === 'h') { week = monday(todayStr()); render(); }
-  else if (e.key === '/') { e.preventDefault(); $('search').focus(); }
+  else if (e.key === '/' && !$('searchWrap').hidden) { e.preventDefault(); $('search').focus(); }
 });
 $('prev').onclick = () => { week = dateAdd(week, -7); render(); };
 $('next').onclick = () => { week = dateAdd(week, 7); render(); };
 $('today').onclick = () => { week = monday(todayStr()); render(); };
 $('weekTitle').onclick = () => { try { $('jumpDate').showPicker(); } catch { $('jumpDate').focus(); } };
 $('jumpDate').onchange = () => { if ($('jumpDate').value) { week = monday($('jumpDate').value); render(); } };
-['search', 'brand', 'format', 'age', 'showRefs'].forEach(id => $(id).addEventListener(id === 'search' ? 'input' : 'change', () => { if (id === 'brand' || id === 'format') store.set(id, $(id).value); render(); }));
+['search', 'age', 'showRefs'].forEach(id => $(id).addEventListener(id === 'search' ? 'input' : 'change', () => render()));
+// ---------- barra lateral: secciones, marca, formato y cuentas ----------
+const VISTAS = { week: 'Semana', stories: 'Historias', guiones: 'Guiones', pieces: 'Tablero', history: 'Publicadas' };
+const plegar = si => { document.body.classList.toggle('side-plegada', si); store.set('sidePlegada', si); $('sideToggle').title = si ? 'Desplegar la barra' : 'Plegar la barra'; };
+$('sideToggle').onclick = () => plegar(!document.body.classList.contains('side-plegada'));
+plegar(store.get('sidePlegada', false));
+// Con una sola marca no hay selector arriba; con «Todas las marcas», las cuentas van agrupadas por marca.
+function renderCuentas() {
+  const ms = marcas(), m = perfilActual === 'all' ? null : perfilActual, nombre = m ? BRAND_LABEL[m] || m : 'Todas las marcas', sel = cuentasSel();
+  $('perfilBtn').hidden = ms.length < 2;
+  $('perfilBtn').innerHTML = `<span class="perfil-av${m ? '' : ' todos'}">${esc(m ? nombre.slice(0, 1) : '∗')}</span><span class="perfil-t"><small>Marca</small><b>${esc(nombre)}</b></span><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="m5 6.5 3 3 3-3"/></svg>`;
+  $('perfilBtn').title = `Marca: ${nombre}. Vale para todas las secciones.`;
+  const cuentas = cuentasVisibles(), conMarca = !m && ms.length > 1 && cuentas.some(a => a.brand);
+  const grupos = conMarca ? [...ms.map(x => [x, cuentas.filter(a => a.brand === x)]), [null, cuentas.filter(a => !a.brand)]].filter(([, xs]) => xs.length) : [[null, cuentas]];
+  $('formatoGrupo').hidden = view === 'stories';
+  $('cuentasLista').innerHTML = grupos.map(([g, xs]) => `${g ? `<button class="cuentas-marca" data-cmarca="${esc(g)}" title="Prender o apagar todas las de ${esc(BRAND_LABEL[g] || g)}">${esc(BRAND_LABEL[g] || g)}</button>` : conMarca ? '<span class="cuentas-marca">Todas</span>' : ''}${[...xs].sort((a, b) => NET_ORDER.indexOf(a.net) - NET_ORDER.indexOf(b.net)).map(a => { const on = sel.has(a.key);
+      return `<button class="cuenta-tg${on ? ' on' : ''}" data-cuenta="${esc(a.key)}" aria-pressed="${on}" title="${esc(`${netName(a.net)} ${cuentaNombre(a)}${on ? '' : ' (apagada)'}`)}"><span class="caja">${on ? ICON.check : ''}</span><span class="net">${netIcon(a.net)}</span><span class="t">${esc(cuentaNombre(a))}</span></button>`; }).join('')}`).join('') || '<p class="hint" style="margin:0 8px">Todavía no hay cuentas conectadas.</p>';
+  $('formatoBar').innerHTML = FORMATOS.map(([k, l, tip]) => { const on = formatosSel().has(k); return `<button class="${on ? 'on' : ''}" data-fmt="${k}" aria-pressed="${on}" title="${esc(tip + (on ? '' : ' (ocultos)'))}">${esc(l)}</button>`; }).join('');
+}
+function setPerfil(id) { perfilActual = id; store.set('perfilActual', id); render(); }
+function setApagadas(keys) { cuentasApagadas = { ...cuentasApagadas, [perfilActual]: keys }; store.set('cuentasApagadas', cuentasApagadas); render(); }
+// Cada marca con su inicial, cuántas cuentas tiene y los íconos de sus redes.
+$('perfilBtn').onclick = () => {
+  const opciones = [...marcas().map(m => [m, BRAND_LABEL[m] || m, cuentasDeMarca(m)]), ['all', 'Todas las marcas', cuentasTodas()]];
+  gvMenu($('perfilBtn'), `<div class="perfiles-pop">${opciones.map(([id, l, xs]) => { const on = perfilActual === id;
+    return `<button class="gv-pop-opt perfil-op${on ? ' on' : ''}" data-perfil="${esc(id)}" aria-current="${on}"><span class="perfil-av${id === 'all' ? ' todos' : ''}">${esc(id === 'all' ? '∗' : l.slice(0, 1))}</span><span class="t">${esc(l)}<small>${xs.length} cuenta${xs.length === 1 ? '' : 's'}</small></span><span class="perfil-redes">${[...new Set(xs.map(a => a.net))].sort((a, b) => NET_ORDER.indexOf(a) - NET_ORDER.indexOf(b)).map(netIcon).join('')}</span><span class="perfil-ok">${on ? ICON.check : ''}</span></button>`; }).join('')}</div>`,
+    e => { const b = e.target.closest('[data-perfil]'); if (!b) return; gvMenuClose(); setPerfil(b.dataset.perfil); });
+};
+// Una cuenta (o, con todas las marcas, las de una marca) se apaga o se prende; queda siempre al menos una.
+$('cuentasLista').addEventListener('click', e => {
+  const off = new Set(cuentasApagadas[perfilActual] || []), todas = cuentasVisibles().map(a => a.key);
+  const c = e.target.closest('[data-cuenta]'), g = e.target.closest('[data-cmarca]');
+  const keys = c ? [c.dataset.cuenta] : g ? cuentasVisibles().filter(a => a.brand === g.dataset.cmarca).map(a => a.key) : null;
+  if (!keys) return;
+  const prender = keys.some(k => off.has(k));
+  keys.forEach(k => prender ? off.delete(k) : off.add(k));
+  if (todas.every(k => off.has(k))) return;
+  setApagadas([...off]);
+});
+// Un formato se apaga o se prende; queda siempre al menos uno.
+$('formatoBar').addEventListener('click', e => {
+  const b = e.target.closest('[data-fmt]'); if (!b) return;
+  const f = new Set(formatosSel());
+  if (f.has(b.dataset.fmt)) { if (f.size === 1) return; f.delete(b.dataset.fmt); } else f.add(b.dataset.fmt);
+  formatosElegidos = f; store.set('formatosSel', todosFormatos() ? null : [...f]); render();
+});
 // Cerrar el detalle con cambios sin guardar pide confirmación (Esc, clic afuera o la X).
 const drawerDirty = () => { const i = ed && byId(ed.id); return !!i && ((editable(i) && edDirty(i)) || (fb?.id === i.id && (!!fb.text.trim() || copyDirty()))); };
 function closeDrawer() { if (drawerDirty() && !confirm('Tenés cambios sin guardar en esta pieza. ¿Cerrar igual?')) return; $('drawer').close(); }
@@ -1184,11 +1351,12 @@ window.addEventListener('beforeunload', e => { if (saveError || $('saveStatus').
     [data, draft] = await Promise.all([api('data'), api('draft')]);
     acked = structuredClone(draft.changes);
     applyConfig();
-    const present = [...new Set([...BRANDS, ...data.items.map(i => i.brand).filter(Boolean)])].filter(b => data.items.some(i => i.brand === b));
-    $('brand').innerHTML = `<option value="mine">Todas las marcas</option>` + present.map(b => `<option value="${esc(b)}">${esc(BRAND_LABEL[b] || b)}</option>`).join('');
-    $('brand').hidden = present.length < 2;
-    const sb = store.get('brand', 'mine'); if ([...$('brand').options].some(o => o.value === sb)) $('brand').value = sb;
-    $('format').value = store.get('format', 'all');
+    // La marca guardada (también la del selector de antes) y el formato (el selector de antes pasa a sus botones).
+    const pa = store.get('perfilActual', store.get('brand', 'all'));
+    perfilActual = marcas().length > 1 && marcas().includes(pa) ? pa : 'all';
+    cuentasApagadas = store.get('cuentasApagadas', {}) || {};
+    const fs = store.get('formatosSel', null), viejo = store.get('format', 'all');
+    formatosElegidos = Array.isArray(fs) && fs.length ? new Set(fs) : viejo === 'reel' ? new Set(['reel', 'trial']) : viejo === 'carrusel' ? new Set(['carrusel']) : null;
     if (pruneChanges()) queueSave();
     render();
     setInterval(renderSync, 60000);
@@ -1212,7 +1380,7 @@ function applyConfig() {
 // Todavía no hay config: la app explica qué falta en vez de mostrar un tablero vacío.
 function showSetup(e) {
   document.querySelectorAll('main').forEach(m => m.hidden = true);
-  document.querySelector('.filters').hidden = true; document.querySelector('.actions').hidden = true; document.querySelector('.tabs').hidden = true;
+  document.querySelector('.actions').hidden = true; $('navMenu').hidden = true; document.querySelector('.appside-filtros').hidden = true;
   const box = document.createElement('main'); box.className = 'setup';
   box.innerHTML = `<h1>Falta terminar la instalación</h1><p>${esc(e.message)}</p><p>Abrí Claude Code en la carpeta del planner y escribí:</p><pre>Instalá el planner de contenido siguiendo INSTALAR.md</pre><p class="muted">Archivo de configuración esperado: ${esc(e.config || 'planner.config.json')}</p><button class="primary" onclick="location.reload()">Ya está, recargar</button>`;
   document.body.insertBefore(box, $('alerts'));

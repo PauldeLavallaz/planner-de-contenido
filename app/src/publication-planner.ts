@@ -23,6 +23,13 @@ export function plannerMediaPath(value:string) {
     return p;
   } catch {return null;}
 }
+// «Abrir en el Finder» desde el detalle y Guiones: cualquier archivo o carpeta de la carpeta de contenido o de la cola.
+export function plannerRevealPath(value:string) {
+  try { if(!value)return null;
+    const p=realpathSync(resolve(ROOT(),value)), roots=[ROOT(),paths().publish].map(r=>{try{return realpathSync(r);}catch{return r;}});
+    return roots.some(r=>p===r||within(r,p))?p:null;
+  } catch {return null;}
+}
 // Feedback por pieza, escrito o grabado: persiste y se puede pasar a Claude Code tal cual.
 // Cada nota vive dentro de la carpeta de la pieza, en feedback/, con su audio al lado.
 const FEEDBACK_AUDIO:Record<string,string>={'audio/webm':'.webm','audio/ogg':'.ogg','audio/mp4':'.m4a','audio/mpeg':'.mp3','audio/wav':'.wav'};
@@ -343,6 +350,27 @@ export function registerPublicationPlanner(app:Hono) {
       return c.json({data:fresh,draft});
     }catch(e){return c.json({error:(e as Error).message},400);}
   });
+  // Un horario para TikTok y otro para Instagram: Instagram (con YouTube y LinkedIn) pasa a una tarjeta propia en la
+  // cola, sin fecha (`cola.py separar`). Es local: si la original está agendada, sacarle esas redes de Postiz va en la
+  // propuesta, como cualquier cambio de redes.
+  app.post('/api/planner/separar',async c=>{
+    try {
+      const body=await c.req.json();
+      if(!body||typeof body.id!=='string'||!body.id||body.id.length>500)throw new Error('Pieza inválida');
+      const data=await inventory(),item=data.items.find((i:any)=>i.id===body.id);
+      if(!item)return c.json({error:'Esta pieza ya no está en el tablero.'},400);
+      if(!String(item.id).startsWith('queue:')||!item.slug)return c.json({error:'Primero tiene que entrar a la cola (Lista para agendar).'},400);
+      if(item.fingerprint!==body.fingerprint)return c.json({error:'La pieza cambió desde que la abriste. Recargá antes de separarla.'},409);
+      let out:any;
+      try{const {stdout}=await exec(PYTHON,[resolve(ENGINE_DIR,'cola.py'),'separar',item.slug,'--json','--motivo',`Desde el planner, ${new Date().toISOString().slice(0,10)}: otro horario para Instagram`],{cwd:REPO_DIR,timeout:300000});out=JSON.parse(stdout.trim().split('\n').pop()||'{}');}
+      catch(e:any){return c.json({error:String(e?.stderr||'').replace(/^✗\s*/,'').trim()||'No se pudo separar la pieza.'},400);}
+      cache=null;
+      const fresh=await inventory(),now=fresh.items.find((i:any)=>i.id===item.id);
+      const draft=fileRead(resolve(STATE(),'draft.json'),{revision:0,changes:{}}),pending=draft.changes?.[item.id];
+      if(pending&&now&&pending.fingerprint===item.fingerprint&&now.fingerprint!==item.fingerprint){pending.fingerprint=now.fingerprint;draft.revision++;draft.saved_at=new Date().toISOString();write('draft.json',draft);}
+      return c.json({data:fresh,draft,created:'queue:'+out.slug,redes:out.redes,original_agendada:!!out.original_agendada});
+    }catch(e){return c.json({error:(e as Error).message},400);}
+  });
   app.get('/api/planner/feedback',async c=>{
     const data=await inventory(),item=data.items.find((i:any)=>i.id===c.req.query('id'));
     if(!item)return c.json({error:'Esta pieza ya no está en el tablero.'},404);
@@ -429,6 +457,15 @@ export function registerPublicationPlanner(app:Hono) {
     write('proposal-'+id+'.json',proposal);
     for(const f of feedback)markFeedbackSent(resolve(ROOT(),f.feedback_dir),f.notes.map((n:any)=>n.file),'propuesta '+id);
     return c.json({id,path:rel(resolve(STATE(),'proposal-'+id+'.json')),prompt:proposalPrompt(id,changes.length,feedback)});
+  });
+  // Un archivo se abre seleccionado en su carpeta; una carpeta, abierta.
+  app.post('/api/planner/reveal',async c=>{
+    const body=await c.req.json().catch(()=>null),p=typeof body?.path==='string'?plannerRevealPath(body.path):null;
+    if(!p)return c.json({error:'No encontré ese archivo en tu carpeta de contenido.'},404);
+    const dir=statSync(p).isDirectory();
+    const [cmd,args]=process.platform==='darwin'?['open',dir?[p]:['-R',p]]:process.platform==='win32'?['explorer',[dir?p:'/select,'+p]]:['xdg-open',[dir?p:resolve(p,'..')]];
+    try{await exec(cmd,args,{timeout:10000});}catch(e:any){if(process.platform!=='win32')return c.json({error:'No se pudo abrir la carpeta.'},500);}
+    return c.json({ok:true,path:rel(p)});
   });
   app.get('/api/planner/media',c=>{
     const p=plannerMediaPath(c.req.query('path')||'');if(!p)return c.text('No disponible',404);
