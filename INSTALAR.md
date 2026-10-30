@@ -45,7 +45,7 @@ Preguntá y completá en `planner.config.json`:
 - **Ciudad o país** → `timezone` (zona IANA: `America/Argentina/Buenos_Aires`, `America/Mexico_City`, `Europe/Madrid`, `America/Bogota`…).
 - **Marcas o cuentas** que maneja → `brands` (la primera es la principal). Si es una sola, dejá una.
 - **Carpeta de contenido** → `content.root`. Si el planner está adentro de esa carpeta, queda `".."`. Si no, la ruta absoluta.
-- **Horarios habituales** de publicación → `slots` (la grilla del día, por ejemplo tres horarios) y `suggested_times` (los botones de hora del planner). Si no sabe, dejá los de ejemplo y decile que se cambian cuando quiera.
+- **Horarios habituales** de publicación → `slots` (la grilla del día; el planner los corre 15 o 30 minutos cada día para que no salga siempre a la misma hora). Si quiere botones de hora fijos, `suggested_times`. Si no sabe, dejá los de ejemplo y decile que se cambian cuando quiera.
 
 ## 3. Postiz
 

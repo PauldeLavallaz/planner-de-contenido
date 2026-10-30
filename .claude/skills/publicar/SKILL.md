@@ -23,6 +23,15 @@ El mensaje empieza con «Confirmo la propuesta <id>» y trae la ruta del archivo
 
 Si `aplicar` falla en una pieza, el resto sigue y la propuesta queda `partial` con el motivo en `results`. Resolvé la causa (ver Errores) y corré los pasos de esa pieza a mano con los comandos de abajo.
 
+## «Publicar ahora» desde el planner
+
+El mensaje empieza con «Publicá ahora esta pieza del planner» y trae el título, la ficha o el archivo y las cuentas. Pegarlo **es** la aprobación del usuario para publicar esa pieza ya, en esas cuentas.
+
+1. Si no está en la cola (no trae ficha de `publicar/`): `python3 engine/cola.py listo <carpeta> --redes …` con las redes del mensaje (y `--cuenta red=usuario` si nombra otra cuenta).
+2. Si no está agendada: `python3 engine/cola.py agendar <slug> --fecha <hoy> --hora <dentro de 5 minutos> --redes …`. Si ya estaba agendada, no la dupliques: seguí con el paso 3.
+3. `python3 engine/cola.py ahora <slug> [--redes …]` la manda ya.
+4. En unos minutos, `python3 engine/cola.py reconciliar` y pasale al usuario el link de cada red (o el error tal cual).
+
 ## Pedidos directos
 
 Cada uno requiere que el usuario lo pida para esa pieza.
@@ -33,6 +42,7 @@ python3 engine/cola.py agendar <slug> --fecha 2026-10-20 --hora 18:30 [--redes �
 python3 engine/cola.py agendar <slug>                 # próximo horario libre de la grilla (slots)
 python3 engine/cola.py mover <slug> --fecha … --hora …
 python3 engine/cola.py quitar <slug>                  # sale de Postiz, vuelve a inbox/ sin fecha
+python3 engine/cola.py separar <slug> [--redes instagram]  # Instagram (con YouTube y LinkedIn) pasa a otra tarjeta, para otro horario
 python3 engine/cola.py pausar <slug> [--motivo …]     # sale de Postiz y queda retenida
 python3 engine/cola.py reanudar <slug>
 python3 engine/cola.py reemplazar <slug> <archivo>    # otra versión del video (sólo sin fecha: si está agendada, quitar → reemplazar → agendar)

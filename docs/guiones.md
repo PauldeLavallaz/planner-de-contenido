@@ -8,7 +8,9 @@ La pestaña **Guiones** es donde revisás el contenido de la semana mientras se 
 - editás el **copy** del post;
 - elegís, en el **editor de producción**, el look del avatar, el estilo del B-roll y el tipo de título;
 - pausás una pieza que va más adelante o descartás la que no va (se pueden recuperar);
-- filtrás por estado (guion y audio, rough cut, final, con feedback, aprobado, pausado, descartado) y mirás una semana, varias o todas;
+- filtrás por estado (guion y audio, rough cut, final, con feedback, aprobado, pausado, descartado) y, con el formato de la barra lateral, reels o carruseles;
+- elegís la semana en un calendario (se abre tocando el título): tocar un día abre su semana, la casilla de cada semana la suma a las que se ven, y están «Hoy» y «Todas las semanas». Cada semana con guiones dice cuántas piezas tiene, y lo elegido queda al recargar;
+- abrís en el Finder la carpeta de una pieza, con su video o su audio seleccionado (el ícono de carpeta al lado del archivo);
 - tocás **Copiar feedback para Claude Code** y pegás el mensaje en el chat: trae cada nota con su pieza y cómo aplicarla.
 
 El planner sólo lee tus carpetas. Lo único que escribe es lo que elegís acá: el estado (en `<publicar>/.planner/`), las notas (en `feedback/` de cada pieza) y el estilo, look o título en el `plan.json`.
