@@ -9,6 +9,7 @@ Subcomandos:
   semana [--dias N] [--json]                     muestra la grilla, no toca nada
   mover <slug> --fecha AAAA-MM-DD [--slot|--hora]
   quitar <slug>                                  saca de Postiz y devuelve a inbox/
+  separar <slug> [--redes instagram,youtube]     esas redes pasan a una tarjeta propia en inbox/, para otro horario
   reemplazar <slug> <archivo>                    otra versión del video para una pieza sin agendar
   pausar <slug> [--motivo]                       saca de Postiz y la retiene: cronograma no la toma
   reanudar <slug>                                levanta la pausa: vuelve a inbox/ lista
@@ -1037,6 +1038,82 @@ def cmd_ahora(a):
     print(f"✓ {meta['slug']} · publicando ya en {', '.join(sent)}; confirmá con `reconciliar` en unos minutos" if sent else f"✓ {meta['slug']} · nada para mandar")
 
 
+# YouTube y LinkedIn van con Instagram: sin --redes se separan juntos y el resto (TikTok) queda en la original.
+SEPARABLES = ('instagram', 'youtube', 'linkedin')
+NET_NAME = {'tiktok': 'TikTok', 'instagram': 'Instagram', 'youtube': 'YouTube', 'linkedin': 'LinkedIn', 'facebook': 'Facebook', 'x': 'X', 'threads': 'Threads'}
+
+
+def cmd_separar(a):
+    """Pasa redes de una pieza a una tarjeta propia para agendarlas en otro horario (por ejemplo, el TikTok a una hora y
+    el Instagram a otra). La tarjeta nueva entra a inbox como <slug>-<red> con el mismo Trial, captions, collab y portada,
+    y `version_de`. Como `listo` frena el mismo contenido, sale de un remux -c copy con otra metadata en
+    .assets/<slug-nuevo>/. En inbox, a la original se le sacan esas redes; si está agendada queda como está y sacarlas de
+    Postiz va por la propuesta del planner, con tu OK."""
+    with queue_lock():
+        media = find_piece(a.slug)
+        meta = load_meta(media)
+        redes = list(meta.get('redes') or [])
+        pedidas = [r.strip() for r in a.redes.split(',') if r.strip()] if a.redes else [r for r in SEPARABLES if r in redes]
+        if not pedidas or any(r not in redes for r in pedidas):
+            die(f"«{meta['slug']}» sale en {', '.join(redes) or 'ninguna red'}: no hay {', '.join(pedidas) or 'redes'} para separar")
+        quedan = [r for r in redes if r not in pedidas]
+        if not quedan:
+            die('la pieza se quedaría sin redes: cambiale la fecha en lugar de separarla')
+        if format_for(meta) not in {'reel', 'video'} or len(meta.get('media_files') or []) > 1 or media.suffix.lower() not in {'.mp4', '.mov'}:
+            die('separar admite reels o videos de un solo archivo')
+        if any(p.get('red') in pedidas and p.get('estado') == 'publicado' for p in (meta.get('postiz') or {}).get('posts') or []):
+            die(f"«{meta['slug']}» ya salió en {', '.join(pedidas)}")
+        slug = kebab(f"{meta['slug']}-{pedidas[0]}")
+        if any(m.get('slug') == slug for _, m in inbox_pieces() + agendado_pieces() + archived_pieces()):
+            die(f'«{slug}» ya está en la cola')
+        final = Path(meta.get('source_final') or '')
+        if not final.is_file():
+            die(f'no encuentro el final de origen: {final}')
+        base = PUBLISH / '.assets' / slug
+        base.mkdir(parents=True, exist_ok=True)
+        copia = base / f'{final.stem}_{pedidas[0]}{final.suffix.lower()}'
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(final), '-map', '0', '-c', 'copy',
+                        '-metadata', f"comment=version de {meta['slug']} para {', '.join(pedidas)}", str(copia)], check=True)
+        dst = INBOX / f'{slug}{copia.suffix}'
+        shutil.copy2(copia, dst)
+        t = (meta.get('portada') or {}).get('t')
+        portada = aplicar_portada(dst, copia, float(t), slug) if t is not None else None
+        viejos = {'slot', 'reconciled_at', 'pausa', 'pausas', 'nota', 'publicado_at'}
+        nueva = {k: v for k, v in meta.items() if k not in viejos}
+        titulo = meta.get('titulo') or humanize(meta['slug'])
+        nueva.update({
+            'slug': slug, 'titulo': f"{titulo} · {NET_NAME.get(pedidas[0], pedidas[0])}",
+            'source_final': str(copia), 'content_sha256': ordered_media_digest([copia]), 'media_files': [str(dst)],
+            'created_at': now_local().isoformat(timespec='seconds'), 'redes': pedidas,
+            # El título de la tarjeta lleva la red; el de YouTube sigue siendo el de la pieza.
+            'captions': {**(meta.get('captions') or {}), 'youtube_title': (meta.get('captions') or {}).get('youtube_title') or titulo[:100]},
+            'cuentas': {k: v for k, v in (meta.get('cuentas') or {}).items() if k in pedidas},
+            'comentario_fijado_manual': pinned_comment_step(meta.get('comentario_fijado', ''), format_for(meta), pedidas),
+            'portada': portada, 'estado': 'inbox', 'postiz': {'media_path': None, 'posts': []}, 'publicado_at': None,
+            'version_de': {'slug': meta['slug'], 'motivo': a.motivo or f"Otro horario para {', '.join(NET_NAME.get(r, r) for r in pedidas)}"},
+        })
+        if 'instagram' not in pedidas:
+            nueva.update(trial=False, instagram_collaborators=[])
+            nueva.pop('trial_integration_id', None)
+        save_meta(dst, nueva)
+        agendada = media.parent != INBOX
+        if not agendada:
+            meta['redes'] = quedan
+            meta['cuentas'] = {k: v for k, v in (meta.get('cuentas') or {}).items() if k in quedan}
+            if 'instagram' not in quedan:
+                meta.update(trial=False, instagram_collaborators=[])
+                meta.pop('trial_integration_id', None)
+            if meta.get('comentario_fijado_manual'):
+                meta['comentario_fijado_manual'] = pinned_comment_step(meta.get('comentario_fijado', ''), format_for(meta), quedan)
+            save_meta(media, meta)
+    if a.json:
+        print(json.dumps({'slug': slug, 'redes': pedidas, 'original': meta['slug'], 'quedan': quedan, 'original_agendada': agendada}, ensure_ascii=False))
+        return
+    print(f'✓ {slug} en inbox con {", ".join(pedidas)}; agendala aparte')
+    print(f"  {meta['slug']}: " + (f"sigue agendada con {', '.join(redes)}; sacale {', '.join(pedidas)} de Postiz desde el planner (Revisar cambios)"
+                                    if agendada else f"queda con {', '.join(quedan)}"))
+
+
 def cmd_modo_ig(a):
     trial = a.modo == 'trial'
     with queue_lock():
@@ -1332,6 +1409,9 @@ def main():
             p.add_argument('--dias', type=int, default=14)
         p.set_defaults(fn=fn)
     p = sp.add_parser('quitar'); p.add_argument('slug'); p.set_defaults(fn=cmd_quitar)
+    p = sp.add_parser('separar'); p.add_argument('slug')
+    p.add_argument('--redes', help='instagram,youtube,…; por defecto Instagram, YouTube y LinkedIn de la pieza')
+    p.add_argument('--motivo'); p.add_argument('--json', action='store_true'); p.set_defaults(fn=cmd_separar)
     p = sp.add_parser('reemplazar'); p.add_argument('slug'); p.add_argument('archivo'); p.add_argument('--portada', type=float); p.add_argument('--motivo'); p.set_defaults(fn=cmd_reemplazar)
     p = sp.add_parser('pausar'); p.add_argument('slug'); p.add_argument('--motivo'); p.set_defaults(fn=cmd_pausar)
     p = sp.add_parser('reanudar'); p.add_argument('slug'); p.set_defaults(fn=cmd_reanudar)

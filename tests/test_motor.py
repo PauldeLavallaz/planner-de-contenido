@@ -190,6 +190,30 @@ class Motor(unittest.TestCase):
         self.assertNotEqual(self.run_py('cola.py', 'aplicar', 'test1', '--ejecutar', ok=False).returncode, 0)
         self.run_py('cola.py', 'quitar', 'reel-propuesta')
 
+    @unittest.skipUnless(shutil.which('ffmpeg'), 'separar necesita ffmpeg')
+    def test_separar_instagram(self):
+        self.run_py('conectar.py')
+        folder = self.content / '3-listo/reel-separar'
+        folder.mkdir(parents=True)
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=red:s=64x112:d=1', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+                        str(folder / 'final.mp4')], check=True)
+        self.run_py('cola.py', 'listo', str(folder), '--redes', 'instagram,tiktok,youtube')
+        out = json.loads(self.run_py('cola.py', 'separar', 'reel-separar', '--json').stdout)
+        self.assertEqual((out['slug'], out['redes'], out['quedan'], out['original_agendada']), ('reel-separar-instagram', ['instagram', 'youtube'], ['tiktok'], False))
+        orig = json.loads((self.content / 'publicar/inbox/reel-separar.json').read_text())
+        nueva = json.loads((self.content / 'publicar/inbox/reel-separar-instagram.json').read_text())
+        self.assertEqual(orig['redes'], ['tiktok'])
+        self.assertEqual((nueva['redes'], nueva['version_de']['slug']), (['instagram', 'youtube'], 'reel-separar'))
+        self.assertNotEqual(nueva['content_sha256'], orig['content_sha256'])
+        # Ya no queda nada para separar en la original, y las dos se agendan por su lado.
+        self.assertNotEqual(self.run_py('cola.py', 'separar', 'reel-separar', ok=False).returncode, 0)
+        inv = self.inventory()
+        self.assertEqual(self.item(inv, 'queue:reel-separar-instagram')['networks'], ['instagram', 'youtube'])
+        for slug in ('reel-separar', 'reel-separar-instagram'):
+            shutil.rmtree(self.content / 'publicar/.assets' / slug, ignore_errors=True)
+            for f in (self.content / 'publicar/inbox').glob(slug + '.*'):
+                f.unlink()
+
     def test_historias(self):
         # Propuesta de la pestaña Historias: tres historias en orden desde la cuenta alternativa; la de la encuesta va a mano.
         self.run_py('conectar.py')
