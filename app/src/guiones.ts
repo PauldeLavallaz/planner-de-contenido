@@ -24,6 +24,17 @@ const UNAPPLIED = (e: any) => e.estado !== 'aplicado' && e.estado !== 'en_curso'
 const marcas = (st: any) => Object.fromEntries(['descartado', 'pausado'].filter(k => st?.[k]).map(k => [k, st[k]]));
 const BY = 'el planner';
 
+// El día y la hora en que empezó a producirse una pieza: los del nombre de su carpeta si termina en AAAAMMDD-HHMMSS o, si
+// no, cuándo se creó la carpeta. «YYYY-MM-DDTHH:MM»; null si no hay carpeta.
+function inicioDe(run: unknown, dir: string | null) {
+  const m = typeof run === 'string' ? /(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})\d{2}\/?$/.exec(run) : null;
+  if (m) return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`;
+  if (!dir) return null;
+  const t = statSync(dir).birthtimeMs || statSync(dir).mtimeMs;
+  const hora = new Intl.DateTimeFormat('sv-SE', { timeZone: paths().timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  return t ? hora.format(t).replace(' ', 'T') : null;
+}
+
 // La carpeta de una pieza vale si está dentro de la carpeta de contenido, existe y no es oculta.
 export function runDir(run: unknown) {
   if (typeof run !== 'string' || !run || run.includes('..')) return null;
@@ -202,7 +213,7 @@ async function pieza(p: any, estados: Record<string, any>, estilos: Record<strin
   const ov = estilos[p.run];
   if (ov && p.estilo?.id === ov.de?.id) p = { ...p, estilo: ov.a, muestras: ov.muestras };
   const dir = runDir(p.run), st = estados[p.run];
-  const out: any = { ...p, run_ok: !!dir, guion: null, audio: null, feedback: [], estado: p.tipo === 'carrusel' ? 'sin_laminas' : 'sin_audio', muestras: muestras(p.muestras),
+  const out: any = { ...p, run_ok: !!dir, inicio: inicioDe(p.run, dir), guion: null, audio: null, feedback: [], estado: p.tipo === 'carrusel' ? 'sin_laminas' : 'sin_audio', muestras: muestras(p.muestras),
     estilo_antes: ov && p.estilo?.id === ov.a?.id ? { id: ov.de?.id || null, nombre: ov.de?.nombre || ov.de?.id || '' } : null,
     descartado: st?.descartado || null, pausado: st?.descartado ? null : st?.pausado || null };
   if (!dir) { if (p.guion_texto) out.guion = { texto: p.guion_texto, palabras: 0 }; return out; }
@@ -455,7 +466,9 @@ export function registerGuiones(app: Hono) {
     if (!pick) return c.json({ error: 'No encuentro ese plan.' }, 404);
     const { conProduccion } = await import('./produccion.ts');
     const estados = fileRead(ESTADO(), {}), estilos = fileRead(ESTILOS(), {});
-    const piezas = (await Promise.all(pick.data.piezas.map((p: any) => pieza(conProduccion(p), estados, estilos)))).filter(p => !p.descartado && !p.pausado);
+    // `runs` limita el pedido a las piezas que se ven en el planner (el formato de la barra).
+    const runs = Array.isArray(body.runs) ? new Set(body.runs) : null;
+    const piezas = (await Promise.all(pick.data.piezas.map((p: any) => pieza(conProduccion(p), estados, estilos)))).filter(p => !p.descartado && !p.pausado && (!runs || runs.has(p.run)));
     if (!piezas.some(p => p.feedback.some((e: any) => UNAPPLIED(e) && e.estado !== 'en_curso'))) return c.json({ error: 'No hay feedback sin corregir.' }, 400);
     const prompt = guionesPrompt({ ...pick.data, path: pick.path, week: pick.week }, piezas);
     if (body.marcar !== false) for (const p of piezas) { const dir = runDir(p.run); if (dir) markFeedbackSent(resolve(dir, 'feedback'), p.feedback.filter(OPEN).map((e: any) => e.file), 'guiones'); }

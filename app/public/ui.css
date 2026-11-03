@@ -1,0 +1,74 @@
+/* Patrones de interfaz: esqueletos de carga, paleta ⌘K, etiquetas de la barra plegada y movimiento (lo que entra se
+   condensa con fundido, escala y un desenfoque chico; 150 ms los menús, 200 ms las etiquetas, 300 ms los diálogos).
+   El `prefers-reduced-motion` de planner.css apaga estas animaciones. Ver ui.js. */
+
+/* ---------- movimiento ---------- */
+@keyframes ui-entra { from { opacity: 0; transform: scale(.97); filter: blur(2px); } }
+@keyframes ui-entra-modal { from { opacity: 0; transform: scale(.96); filter: blur(3px); } }
+@keyframes ui-fundido { from { opacity: 0; } }
+.popover:not([hidden]) { animation: ui-entra .15s ease-out; transform-origin: top left; }
+.modal[open], .story-box[open] { animation: ui-entra-modal .3s cubic-bezier(.32, .72, 0, 1); }
+dialog[open]::backdrop { animation: ui-fundido .3s ease-out; }
+
+/* ---------- esqueletos ---------- */
+.skel-wrap { grid-column: 1 / -1; width: 100%; padding: 4px 0 24px; }
+.skel { display: block; position: relative; overflow: hidden; background: var(--sunk); border-radius: 8px; }
+.skel::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 55%, transparent), transparent); animation: ui-brillo 1.4s ease-in-out infinite; }
+@keyframes ui-brillo { to { transform: translateX(100%); } }
+.skel-posters { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.skel.poster { aspect-ratio: 9 / 16; border-radius: 12px; }
+.skel-list, .skel-col { display: flex; flex-direction: column; gap: 14px; }
+.skel-row { display: flex; align-items: center; gap: 12px; }
+.skel.sq { width: 40px; height: 40px; flex: none; border-radius: 10px; }
+.skel-lines { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.skel.l1 { height: 12px; width: 72%; }
+.skel.l2 { height: 10px; width: 44%; }
+.skel-row:nth-child(3n + 2) .l1 { width: 58%; }
+.skel-row:nth-child(3n) .l1 { width: 84%; }
+.skel-split { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 20px; }
+.skel.panel { min-height: 420px; border-radius: 16px; }
+.skel-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.skel.card { height: 300px; border-radius: 16px; }
+@media (max-width: 760px) { .skel-split { grid-template-columns: 1fr; } .skel.panel { display: none; } }
+
+/* Arranque: mientras llegan las piezas se ve el esqueleto de la sección que se abre, no la grilla vacía. */
+body.arrancando main { display: none !important; }
+.arranque { padding: 22px 28px; }
+
+/* ---------- botón Buscar de la barra ---------- */
+.cmdk-btn { display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; margin-top: 6px; padding: 0 8px 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--muted); font-size: 13.5px; text-align: left; transition: border-color .15s ease, color .15s ease; }
+.cmdk-btn .ti { width: 16px; height: 16px; stroke-width: 1.9; }
+.cmdk-btn span { flex: 1; }
+.cmdk-btn:hover { border-color: var(--line-2); color: var(--ink); }
+.cmdk-btn kbd, .cmdk kbd { font: 500 10.5px/1 var(--mono); color: var(--muted); border: 1px solid var(--line-2); border-radius: 4px; padding: 3px 5px; background: var(--surface); }
+body.side-plegada .cmdk-btn { justify-content: center; padding: 0; }
+body.side-plegada .cmdk-btn span, body.side-plegada .cmdk-btn kbd { display: none; }
+
+/* ---------- paleta ⌘K ---------- */
+.cmdk { width: min(620px, calc(100vw - 32px)); margin: 12vh auto auto; padding: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-lift); overflow: hidden; }
+.cmdk[open] { display: flex; flex-direction: column; max-height: min(560px, 76vh); animation: ui-entra .15s ease-out; transform-origin: top center; }
+.cmdk::backdrop { background: #1d1b1838; }
+.cmdk-in { display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+.cmdk-in .ti { width: 18px; height: 18px; color: var(--muted); }
+.cmdk-in input { flex: 1; min-width: 0; height: 52px; border: 0; background: none; outline: none; font-size: 15px; }
+.cmdk-in input::placeholder { color: var(--muted); }
+.cmdk-list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; flex: 1; }
+.cmdk-g { padding: 10px 10px 4px; font: 600 10.5px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.cmdk-it { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 6px 10px; border-radius: 10px; cursor: pointer; }
+.cmdk-it[aria-selected="true"] { background: var(--sunk); }
+.cmdk-it > .ti { width: 17px; height: 17px; stroke-width: 1.9; color: var(--ink-2); }
+.cmdk-t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.cmdk-t b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmdk-t small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmdk-ini { width: 22px; height: 22px; flex: none; display: grid; place-items: center; margin: 0 -2px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); font: 600 11.5px/1 var(--sans); font-style: normal; }
+.cmdk-thumb { width: 28px; height: 40px; flex: none; margin: -2px -4px -2px -5px; border-radius: 5px; object-fit: cover; background: var(--sunk); }
+.cmdk-now { font-size: 11.5px; color: var(--muted); }
+.cmdk-vacio { padding: 28px 12px; text-align: center; color: var(--muted); }
+.cmdk-pie { display: flex; gap: 16px; padding: 9px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.cmdk-pie span { display: flex; align-items: center; gap: 4px; }
+@media (max-width: 760px) { .cmdk-pie { display: none; } }
+
+/* ---------- etiquetas de la barra plegada ---------- */
+.side-tip { position: fixed; z-index: 70; transform: translateY(-50%); padding: 6px 9px; border-radius: 8px; background: var(--ink); color: var(--surface); font-size: 12.5px; font-weight: 500; white-space: nowrap; pointer-events: none; opacity: 0; box-shadow: var(--shadow-lift); transition: opacity .12s ease-in; }
+.side-tip.on { opacity: 1; animation: ui-etiqueta .2s ease-out; }
+@keyframes ui-etiqueta { from { opacity: 0; transform: translateY(-50%) scale(.9); filter: blur(4px); } }

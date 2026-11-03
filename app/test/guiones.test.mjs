@@ -55,6 +55,8 @@ test('guiones: plan, aprobar, feedback, estilos, looks y títulos', async () => 
     assert.equal(d.plan.titulo, 'Semana de prueba');
     const r1 = d.piezas.find(p => p.id === 'R01'), c1 = d.piezas.find(p => p.id === 'C01');
     assert.equal(r1.run, reel);
+    // El día en que empezó: sin fecha en el nombre de la carpeta, cuándo se creó.
+    assert.match(r1.inicio, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
     assert.deepEqual(r1.muestras.map(m => m.path), [reel + '/muestra.jpg']);
     assert.equal(r1.estado, 'por_escuchar');
     assert.equal(r1.audio.path, reel + '/audio.mp3');
@@ -72,6 +74,8 @@ test('guiones: plan, aprobar, feedback, estilos, looks y títulos', async () => 
     // Una nota de copy no pone la pieza «Con feedback».
     await post('guiones/feedback', { run: car, pieza: 'C01', copy: 'Copy nuevo del post' });
     assert.equal((await pz('C01')).estado, 'borrador_por_revisar');
+    // Con `runs`, sólo las piezas que se ven en el planner: una pieza sin notas no alcanza para copiar.
+    assert.equal((await post('guiones/copiar', { perfil: '', week: W, runs: ['nada'], marcar: false })).status, 400);
     const cp = await (await post('guiones/copiar', { perfil: '', week: W })).json();
     assert.match(cp.prompt, /Más corto el cierre/);
     assert.match(cp.prompt, /Copy nuevo del post/);

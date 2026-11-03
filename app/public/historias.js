@@ -151,14 +151,14 @@ function renderStories() {
   const end = dateAdd(week, 6);
   $('sWeekTitle').textContent = week.slice(5, 7) === end.slice(5, 7) ? `${Number(week.slice(8))} – ${Number(end.slice(8))} ${fmt(end, { month: 'long' })}` : `${Number(week.slice(8))} ${fmt(week, { month: 'short' })} – ${Number(end.slice(8))} ${fmt(end, { month: 'short' })}`;
   $('sJumpDate').value = week;
-  if (stories.week !== week || stories.cuenta !== (sCuenta || '')) { $('sGrid').innerHTML = '<div class="s-empty">Cargando…</div>'; $('sSummary').innerHTML = ''; $('sActions').hidden = true; loadStories(); return; }
+  if (stories.week !== week || stories.cuenta !== (sCuenta || '')) { $('sGrid').innerHTML = skeleton('posters'); $('sSummary').innerHTML = ''; $('sActions').hidden = true; loadStories(); return; }
   if (stories.error) { $('sGrid').innerHTML = `<div class="s-empty">${esc(stories.error)}</div>`; $('sActions').hidden = true; $('sCuenta').hidden = true; return; }
   // Las cuentas salen de la marca y de las cuentas de Instagram encendidas en la barra lateral. Si la cuenta abierta quedó
   // afuera, se pasa a la primera que sí está.
   const sel = cuentasSel(), igs = cuentasVisibles().filter(a => a.profile), permitidas = new Set(igs.filter(a => sel.has(a.key)).map(a => a.profile));
   const cuentas = (stories.data?.cuentas || []).filter(a => !igs.length || permitidas.has(a.profile));
   if (!cuentas.length) { $('sCuenta').hidden = true; $('sActions').hidden = true; $('sSummary').innerHTML = ''; $('sGrid').innerHTML = '<div class="s-empty">No hay una cuenta de Instagram encendida. Encendela en la barra lateral.</div>'; return; }
-  if (!cuentas.some(a => a.profile === stories.data.cuenta) && sCuenta !== cuentas[0].profile) { sCuenta = cuentas[0].profile; store.set('sCuenta', sCuenta); $('sGrid').innerHTML = '<div class="s-empty">Cargando…</div>'; loadStories(); return; }
+  if (!cuentas.some(a => a.profile === stories.data.cuenta) && sCuenta !== cuentas[0].profile) { sCuenta = cuentas[0].profile; store.set('sCuenta', sCuenta); $('sGrid').innerHTML = skeleton('posters'); loadStories(); return; }
   $('sCuenta').hidden = cuentas.length < 2;
   $('sCuenta').innerHTML = cuentas.map(a => `<option value="${esc(a.profile)}" ${a.profile === stories.data.cuenta ? 'selected' : ''}>${esc(acctName(a.profile))} · @${esc(a.profile)}${a.semanas.length ? '' : ' (sin historias)'}</option>`).join('');
   const sem = stories.data.semana, today = todayStr();

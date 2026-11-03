@@ -8,8 +8,8 @@ La pestaña **Guiones** es donde revisás el contenido de la semana mientras se 
 - editás el **copy** del post;
 - elegís, en el **editor de producción**, el look del avatar, el estilo del B-roll y el tipo de título;
 - pausás una pieza que va más adelante o descartás la que no va (se pueden recuperar);
-- filtrás por estado (guion y audio, rough cut, final, con feedback, aprobado, pausado, descartado) y, con el formato de la barra lateral, reels o carruseles;
-- elegís la semana en un calendario (se abre tocando el título): tocar un día abre su semana, la casilla de cada semana la suma a las que se ven, y están «Hoy» y «Todas las semanas». Cada semana con guiones dice cuántas piezas tiene, y lo elegido queda al recargar;
+- ves cada pieza en el día en que empezó a producirse: el del nombre de su carpeta si termina en `AAAAMMDD-HHMMSS` o, si no, el día en que se creó la carpeta. El período va arriba (Día, Semana, 15 días, Mes o Todo) y el título abre un calendario que dice cuántas piezas empezaron cada día, con un punto si alguna te toca. Lo elegido queda al recargar;
+- filtrás por etapa, con su contador: **Te toca** (lo que espera tu feedback o tu aprobación, de cualquier etapa), Guion, Audio, Por revisar, Aprobado, Publicado, Pausado y Descartado; con el formato de la barra lateral, reels o carruseles. Lo que aprobás o comentás se queda en su lugar hasta que cambies un filtro o recargues;
 - abrís en el Finder la carpeta de una pieza, con su video o su audio seleccionado (el ícono de carpeta al lado del archivo);
 - tocás **Copiar feedback para Claude Code** y pegás el mensaje en el chat: trae cada nota con su pieza y cómo aplicarla.
 
@@ -104,7 +104,7 @@ Los que el planner sabe dibujar: condensada en caja, condensada, negrita en caja
 
 ## Copiar feedback para Claude Code
 
-El botón junta las notas sin corregir de las semanas que estás viendo y las marca como enviadas. El mensaje dice, por pieza, la carpeta, el guion, el audio o el corte que revisaste y cada nota (los audios se transcriben antes de actuar), con las reglas para aplicarlas: corregir el guion o el corte sin pisar la versión anterior (`rough_cut_v2.mp4`), el copy textual en `publish_kit.md`, avisar antes de gastar en generaciones pagas y no agendar nada. Al terminar, cada nota queda `aplicado` con una línea de qué cambió.
+El botón junta las notas sin corregir de todas las fechas y etapas, de los formatos prendidos en la barra, y las marca como enviadas. El mensaje dice, por pieza, la carpeta, el guion, el audio o el corte que revisaste y cada nota (los audios se transcriben antes de actuar), con las reglas para aplicarlas: corregir el guion o el corte sin pisar la versión anterior (`rough_cut_v2.mp4`), el copy textual en `publish_kit.md`, avisar antes de gastar en generaciones pagas y no agendar nada. Al terminar, cada nota queda `aplicado` con una línea de qué cambió.
 
 ## Estado y archivos del planner
 
@@ -112,4 +112,4 @@ En `<publicar>/.planner/`: `guiones-estado.json` (aprobaciones, pausas y descart
 
 ## API
 
-`GET guiones?week=&perfil=`, `POST guiones/estado` (`run`, `estado`: `aprobado` o `por_escuchar`), `POST guiones/descartar` (`run`, `accion`: `descartar`, `recuperar`, `pausar` o `reanudar`), `POST guiones/feedback` (`run`, `text` o `copy`, o `audio` en base64 con `mime`), `POST guiones/feedback/remove`, `POST guiones/copiar` (`perfil`, `week`), `POST guiones/portada` (`run`, `id`), `GET guiones/estilos`, `GET guiones/estilos/cuadro?f=`, `POST guiones/estilo` (`plan`, `run`, `estilo`, `deshacer`), `POST guiones/estilos/preferencia`, `POST guiones/estilos/portada`, `GET guiones/produccion`, `GET guiones/looks/img?id=` y `POST guiones/produccion` (`plan`, `run`, `campo`: `look` o `titulo_tipo`, `valor`; `null` vuelve a lo del plan). `perfil` es la subcarpeta del plan (vacío si el plan está en la carpeta de la semana).
+`GET guiones?week=&perfil=`, `POST guiones/estado` (`run`, `estado`: `aprobado` o `por_escuchar`), `POST guiones/descartar` (`run`, `accion`: `descartar`, `recuperar`, `pausar` o `reanudar`), `POST guiones/feedback` (`run`, `text` o `copy`, o `audio` en base64 con `mime`), `POST guiones/feedback/remove`, `POST guiones/copiar` (`perfil`, `week`; `runs` limita el pedido a esas piezas), `POST guiones/portada` (`run`, `id`), `GET guiones/estilos`, `GET guiones/estilos/cuadro?f=`, `POST guiones/estilo` (`plan`, `run`, `estilo`, `deshacer`), `POST guiones/estilos/preferencia`, `POST guiones/estilos/portada`, `GET guiones/produccion`, `GET guiones/looks/img?id=` y `POST guiones/produccion` (`plan`, `run`, `campo`: `look` o `titulo_tipo`, `valor`; `null` vuelve a lo del plan). `perfil` es la subcarpeta del plan (vacío si el plan está en la carpeta de la semana).

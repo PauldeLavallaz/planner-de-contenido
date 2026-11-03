@@ -7,9 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<script>try { if (JSON.parse(localStorage.getItem('planner.tema')) === 'oscuro') document.documentElement.dataset.theme = 'dark'; } catch {}</script>
 <link rel="stylesheet" href="/planner.css">
 <link rel="stylesheet" href="/historias.css">
 <link rel="stylesheet" href="/guiones.css">
+<link rel="stylesheet" href="/ui.css">
 </head>
 <body>
 <!-- La barra lateral: arriba la marca (si hay más de una), que vale para todas las secciones; después las secciones en dos
@@ -18,6 +20,7 @@
 <aside id="appSide" class="appside" aria-label="Secciones y filtros">
   <div class="appside-h"><span class="brandmark">Publicaciones</span><button id="sideToggle" class="icon" title="Plegar la barra" aria-label="Plegar la barra"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg></button></div>
   <button id="perfilBtn" class="perfil-sw" aria-haspopup="true" hidden></button>
+  <button id="cmdkBtn" class="cmdk-btn" title="Ir a una sección, una marca o una pieza por su título" aria-keyshortcuts="Meta+K"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Buscar</span><kbd>⌘K</kbd></button>
   <nav id="navMenu" class="appside-nav" aria-label="Secciones">
     <button data-view="week" title="El calendario y lo que falta agendar"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v3m8-3v3"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01M16 17h.01"/></svg><span>Semana</span></button>
     <button data-view="stories" title="Las historias de cada día"><svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.1 2.182a10 10 0 0 1 3.8 0m0 19.636a10 10 0 0 1-3.8 0m7.509-18.097a10 10 0 0 1 2.69 2.7M2.182 13.9a10 10 0 0 1 0-3.8m18.097 7.509a10 10 0 0 1-2.7 2.69M21.818 10.1a10 10 0 0 1 0 3.8M3.721 6.391a10 10 0 0 1 2.7-2.69m-.03 16.578a10 10 0 0 1-2.69-2.7"/></svg><span>Historias</span></button>
@@ -28,10 +31,13 @@
   </nav>
   <div class="appside-filtros">
     <div id="formatoGrupo"><h5>Formato</h5>
-    <div id="formatoBar" class="segmented fmt-seg" role="group" aria-label="Formato"></div></div>
+    <div id="formatoBar" class="segmented fmt-seg" role="group" aria-label="Formato"></div>
+    <!-- Lo que sale en collab con una cuenta de la marca elegida también se ve en ella; se apaga acá. -->
+    <button id="collabsTg" class="cuenta-tg collabs-tg" aria-pressed="true"></button></div>
     <h5>Cuentas</h5>
     <div id="cuentasLista" class="cuentas-lista"></div>
   </div>
+  <button id="themeToggle" class="theme-btn" title="Tema oscuro" aria-label="Tema oscuro" aria-pressed="false"><svg class="ti ic-luna" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg><svg class="ti ic-sol" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><span>Tema oscuro</span></button>
 </aside>
 <header class="topbar">
   <h1 id="viewName" class="view-title"></h1>
@@ -97,18 +103,19 @@
 </main>
 
 <!-- Guiones, audios, rough cuts, finales y carruseles de la semana para revisar, aprobar y pasar feedback. Va por la
-     semana en que se planificó; la fecha se asigna en Semana. Lógica en guiones.js y formato en docs/guiones.md. -->
+     día en que empezó a producirse; la fecha se asigna en Semana. Lógica en guiones.js y formato en docs/guiones.md. -->
 <main id="guionesView" class="gv" hidden>
   <div class="calendar-head">
-    <button id="gvWeekTitle" class="week-title gv-week-btn" title="Elegir semanas: una, varias o todas" aria-haspopup="true"></button>
+    <button id="gvWeekTitle" class="week-title gv-week-btn" title="Elegir un día en el calendario" aria-haspopup="true"></button>
     <div class="week-nav">
-      <button id="gvPrev" class="icon" title="Semana anterior (←)" aria-label="Semana anterior"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+      <button id="gvPrev" class="icon" title="Anterior (←)" aria-label="Período anterior"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
       <button id="gvToday" class="ghost">Hoy</button>
-      <button id="gvNext" class="icon" title="Semana siguiente (→)" aria-label="Semana siguiente"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button>
+      <button id="gvNext" class="icon" title="Siguiente (→)" aria-label="Período siguiente"><svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></button>
     </div>
-    <button id="gvEstado" class="gv-tipo gv-filtro" aria-haspopup="true" title="Filtrar por estado">Todos los estados</button>
-    <div class="gv-head-actions"><button id="gvCopy" class="primary" disabled hidden><span>Copiar feedback para Claude Code</span><span id="gvCopyCount" class="count">0</span></button></div>
+    <div id="gvPeriodo" class="segmented gv-periodo" role="group" aria-label="Período"></div>
+    <div class="gv-head-actions"><button id="gvCopy" class="primary" disabled hidden title="Junta las notas sin enviar de todas las fechas y etapas"><span>Copiar feedback para Claude Code</span><span id="gvCopyCount" class="count">0</span></button></div>
   </div>
+  <div id="gvFases" class="segmented gv-fases" role="group" aria-label="Etapa"></div>
   <div id="gvGrid"></div>
 </main>
 
@@ -246,6 +253,7 @@
 
 <div id="timePop" class="popover" hidden></div>
 <div id="toast" class="toast" role="status"><span id="toastText"></span><button id="toastAction" hidden></button></div>
+<script src="/ui.js"></script>
 <script src="/planner.js"></script>
 <script src="/historias.js"></script>
 <script src="/guiones.js"></script>

@@ -7,17 +7,21 @@ tus carpetas ──► planner (navegador) ──► propuesta ──► Claude 
 
 ## La barra lateral
 
-A la izquierda, de arriba abajo (se pliega a sólo íconos con el botón de arriba):
+A la izquierda, de arriba abajo (se pliega a sólo íconos con el botón de arriba; plegada, cada ícono dice su nombre al pasar el mouse):
 
 - la **marca**, si tenés más de una en `brands`: vale para todas las secciones. Cada marca muestra cuántas cuentas tiene y sus redes; una cuenta con `marca` en `channels` es de esa marca y una sin marca, de todas;
+- **Buscar** (o ⌘K / Ctrl+K, desde cualquier lado): ir a una sección, cambiar de marca o de tema, consultar Postiz o abrir una pieza escribiendo parte de su título;
 - las **secciones**: Semana e Historias; después Guiones, Tablero y Publicadas;
-- abajo de todo, el **formato** (Reels, Trial y Carruseles, que se prenden y se apagan) y las **cuentas** conectadas, cada una con su casilla (siempre queda una prendida).
+- abajo de todo, el **formato** (Reels, Trial y Carruseles, que se prenden y se apagan), el interruptor **Collabs** y las **cuentas** conectadas, cada una con su casilla (siempre queda una prendida);
+- al pie, el **tema oscuro**, que queda guardado en el navegador.
+
+Con una marca elegida y **Collabs** prendido, lo que tiene fecha y sale al feed de Instagram con collab de una cuenta prendida de esa marca también se ve en ella, con la marca «Collab», para ver su horario. No ocupa sus horarios ni entra en *Por agendar*.
 
 Lo agendado se ve en la cuenta por la que sale; lo que todavía no tiene fecha se ve con cualquier cuenta prendida en sus redes, porque la cuenta se elige al agendar. Trial es cómo sale un reel a Instagram: con sólo «Reels» prendido, un reel en Trial igual se ve en el TikTok o el YouTube por el que sale. Historias usa las cuentas de Instagram prendidas (en esa sección la barra lista sólo ésas). Todo lo elegido se guarda en el navegador. El buscador aparece donde filtra una lista: Tablero y Publicadas.
 
 ## Las vistas
 
-- **Semana.** El calendario. A la izquierda, *Por agendar*: lo Listo sin fecha y lo que falta revisar (con un botón para aprobar). Arrastrás una pieza a un día y toma el primer horario libre; tocando la hora la cambiás. Los horarios salen de `slots` (por defecto 11:00, 13:00, 17:00 y 20:00) y cada día se corren todos para un mismo lado 15 o 30 minutos, así no sale siempre a la misma hora; el mismo día da siempre los mismos. Con `suggested_times` en la config, los botones de hora muestran ésos tal cual. *Distribuir* reparte las piezas listas en tus horarios, separando temas parecidos e intercalando carruseles. La semana que mirás queda en la dirección (`#semana=<lunes>`), así un refresh vuelve a ella.
+- **Semana.** El calendario. A la izquierda, *Por agendar*: lo Listo sin fecha y lo que falta revisar (con un botón para aprobar). Arrastrás una pieza a un día y toma el primer horario libre; tocando la hora la cambiás. Los horarios salen de `slots` (en la config de ejemplo, 11:00, 13:00, 15:00, 17:00, 19:00 y 21:00) y cada día se corren todos para un mismo lado 15 o 30 minutos, así no sale siempre a la misma hora; el mismo día da siempre los mismos, en el planner y en `cola.py agendar --slot`. Con `suggested_times` en la config, los botones de hora muestran ésos tal cual y `--slot` no corre nada. *Distribuir* reparte las piezas listas en tus horarios, separando temas parecidos e intercalando carruseles. La semana que mirás queda en la dirección (`#semana=<lunes>`), así un refresh vuelve a ella.
 - **Tablero.** Columnas por estado, tipo Trello: En desarrollo, Por revisar, Listo, En Postiz, Pausadas y Descartadas, lado a lado y cada una con su scroll. Cada tarjeta tiene la portada chica, el título, la fecha y las redes; en desarrollo muestra hasta dónde llegó la pieza (guion, audio, corte; en un carrusel, texto y láminas). Arrastrar entre las tres primeras cambia el estado; soltar en Listo es aprobar. Descartar oculta la pieza sin borrar nada.
 - **Publicadas.** Todo tu contenido en dos grupos que se pliegan: arriba lo agendado en Postiz, de lo más próximo a lo más lejano, y abajo lo publicado por mes.
 

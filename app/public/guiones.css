@@ -12,8 +12,8 @@
 .gv-empty { padding: 40px 0; color: var(--ink-2); }
 .gv-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr)); gap: 14px; }
 .gv-card { display: grid; grid-template-columns: 132px 1fr; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); }
-.gv-card.st-aprobado { border-color: #b9d3c2; }
-.gv-card.st-cambios { border-color: #f0c2ad; }
+.gv-card.st-aprobado { border-color: color-mix(in srgb, var(--ok) 40%, var(--surface)); }
+.gv-card.st-cambios { border-color: color-mix(in srgb, var(--accent) 35%, var(--surface)); }
 .gv-card.has-video { grid-template-columns: 250px 1fr; }
 .gv-video { display: flex; flex-direction: column; gap: 4px; align-self: start; }
 .gv-video video { width: 100%; aspect-ratio: 9 / 16; border-radius: 8px; background: #000; display: block; }
@@ -63,7 +63,7 @@
 .gv-noaudio { margin: 0; }
 .gv-acts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .gv-acts .secondary svg { width: 14px; height: 14px; }
-.gv-acts .on-ok { background: var(--ok-soft); border-color: #9cc2aa; color: var(--ok); }
+.gv-acts .on-ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 50%, var(--surface)); color: var(--ok); }
 .gv-acts .ghost.on { background: var(--sunk); color: var(--ink); }
 .gv-acts .n { font: 500 11px var(--mono); background: var(--accent); color: #fff; border-radius: 5px; padding: 0 5px; }
 .gv-panel { border-top: 1px solid var(--line); padding-top: 8px; font-size: 13px; }
@@ -126,7 +126,7 @@
 .gv-port-head { display: flex; gap: 8px; align-items: baseline; font-size: 13px; margin-bottom: 6px; }
 .gv-port-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .gv-port-row figure { margin: 0; display: flex; flex-direction: column; gap: 5px; padding: 5px; border-radius: 10px; border: 1px solid transparent; }
-.gv-port-row figure.on { border-color: #9cc2aa; background: var(--ok-soft); }
+.gv-port-row figure.on { border-color: color-mix(in srgb, var(--ok) 50%, var(--surface)); background: var(--ok-soft); }
 .gv-port-img { position: relative; padding: 0; border: 0; background: none; cursor: zoom-in; }
 .gv-port-img img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 7px; display: block; box-shadow: var(--shadow); }
 .gv-port-id { position: absolute; left: 6px; top: 6px; font: 600 11px var(--mono); background: #000000b0; color: #fff; padding: 1px 6px; border-radius: 5px; }
@@ -148,7 +148,7 @@
 .gv-est-sub { margin: 22px 0 10px; font: 600 13px var(--sans); color: var(--ink-2); }
 .gv-est-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .gv-est-card { margin: 0; display: flex; flex-direction: column; gap: 7px; padding: 6px; border-radius: 12px; border: 1px solid transparent; }
-.gv-est-card.on { border-color: #9cc2aa; background: var(--ok-soft); }
+.gv-est-card.on { border-color: color-mix(in srgb, var(--ok) 50%, var(--surface)); background: var(--ok-soft); }
 .gv-est-pick { display: block; width: 100%; border-radius: 8px; position: relative; }
 .gv-est-pick > .gv-poster, .gv-est-img { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; display: block; border-radius: 8px; background: #111; transition: transform .15s ease, box-shadow .15s ease; box-shadow: var(--shadow); }
 .gv-est-pick:hover:not(:disabled) > .gv-poster, .gv-est-pick:hover:not(:disabled) > .gv-est-img { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
@@ -306,3 +306,35 @@
 .gv-cal-d.hoy { font-weight: 700; color: var(--accent-ink); box-shadow: inset 0 0 0 1.5px var(--accent); }
 .gv-cal-n { font: 500 10.5px var(--mono); color: var(--ink-2); text-align: center; }
 .gv-cal-pie { margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); border-bottom: 0; }
+
+/* Por día y por etapa. Arriba el período; debajo, las etapas con su contador y «Te toca» primero; un bloque por día. */
+.gv-periodo { margin: 0; flex: none; }
+.gv-periodo button { flex: none; padding: 5px 11px; font-size: 12.5px; }
+.gv-fases { margin: 0 0 18px; max-width: max-content; overflow-x: auto; scrollbar-width: none; }
+.gv-fases button { flex: none; padding: 5px 11px; gap: 6px; font-size: 12.5px; }
+.gv-fases .gv-f-toca { font-weight: 600; color: var(--ink); }
+.gv-fases .gv-f-toca i { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.gv-fases button:nth-child(2) { margin-left: 8px; }
+.gv-fases button:last-child { margin-left: 8px; }
+.gv-dia { margin-bottom: 30px; }
+.gv-dia-h { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; font: 600 18px var(--sans); letter-spacing: -.2px; }
+.gv-dia-h .muted { font: 400 12.5px var(--sans); }
+.gv-dia-h b { color: var(--warn); font-weight: 600; }
+.gv-fuera { margin: -6px 0 16px; font-size: 13px; color: var(--ink-2); }
+.gv-fuera .link { font-size: 13px; }
+.gv-top .gv-time:first-child { color: var(--ink-2); font-weight: 500; }
+.gv-de { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11.5px; }
+/* Calendario por día: el número y, debajo, cuántas piezas empezaron (con un punto si alguna te toca). */
+.gv-cal-x .gv-cal-dias, .gv-cal-x .gv-cal-sem { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.gv-cal-x .gv-cal-d { height: 38px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; line-height: 1; }
+.gv-cal-x .gv-cal-d small { display: inline-flex; align-items: center; gap: 2px; min-height: 10px; font: 500 9.5px var(--mono); color: var(--muted); }
+.gv-cal-x .gv-cal-d small i { width: 5px; height: 5px; border-radius: 50%; background: var(--warn); }
+.gv-cal-x .gv-cal-d.dentro { background: var(--accent-soft); }
+.gv-cal-x .gv-cal-d.on { background: var(--ink); color: var(--surface); }
+.gv-cal-x .gv-cal-d.on small { color: var(--surface); }
+.gv-cal-x .gv-cal-sem:hover { background: none; }
+@media (max-width: 760px) {
+  .gv-periodo { order: 5; width: 100%; }
+  .gv-periodo button { flex: 1; }
+  .gv-fases { max-width: 100%; }
+}

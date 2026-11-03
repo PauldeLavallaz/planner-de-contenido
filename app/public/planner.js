@@ -33,6 +33,7 @@ const ICON = {
   check: '<svg viewBox="0 0 16 16"><path d="m3.5 8.5 3 3 6-7"/></svg>',
   send: '<svg viewBox="0 0 16 16"><path d="M14 2 7.5 8.5M14 2l-4 12-2.5-5.5L2 6z"/></svg>',
   folder: '<svg viewBox="0 0 16 16"><path d="M2.5 4.5a1 1 0 0 1 1-1h2.8l1.4 1.5h4.8a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z"/></svg>',
+  collab: '<svg viewBox="0 0 16 16"><circle cx="6" cy="5.5" r="2.2"/><path d="M2 13c.4-2.2 2-3.5 4-3.5s3.6 1.3 4 3.5"/><circle cx="11" cy="6" r="1.8"/><path d="M10.6 9.6c1.7.1 3 1.3 3.4 3.4"/></svg>',
   trash: '<svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>',
   restore: '<svg viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.5-3.6M3 2.5v2.8h2.8"/></svg>',
   left: '<svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg>',
@@ -95,7 +96,7 @@ const pager = (key, total, size) => { if (total <= size) return ''; const p = Ma
 const pageSlice = (key, list, size) => { const p = Math.max(0, Math.min(pages[key] || 0, Math.ceil(list.length / size) - 1)); pages[key] = p; return list.slice(p * size, (p + 1) * size); };
 const undoStack = [];
 const cfg = () => data.config || {};
-const slotsCfg = () => cfg().slots || ['11:00', '13:00', '17:00', '20:00'];
+const slotsCfg = () => cfg().slots || ['11:00', '13:00', '15:00', '17:00', '19:00', '21:00'];
 // Los horarios de cada día: los de `slots`, corridos todos para un mismo lado 15 o 30 minutos cada uno, así no sale
 // siempre a la misma hora. El sorteo sale de la fecha: el mismo día da los mismos horarios entre un arrastre y otro, y
 // cada día da otros. Con `suggested_times` en la config, los botones muestran ésos tal cual.
@@ -187,11 +188,25 @@ function formatoPasaPieza(i) {
   const redes = redesQueSale(i);
   return (formatosSel().has('trial') && redes.includes('instagram')) || (formatosSel().has('reel') && redes.some(n => n !== 'instagram'));
 }
+// Si la pieza es de la marca elegida y sale por una cuenta prendida.
+const enPerfil = i => (perfilActual === 'all' || i.brand === perfilActual) && cuentaScope(i);
+// Collabs: con el interruptor prendido, lo que tiene fecha y sale al feed de Instagram con collab de una cuenta prendida de
+// la marca también se ve en ella, para ver su horario. No ocupa sus horarios ni entra en «Por agendar».
+let verCollabs = true;
+const sinArroba = h => String(h || '').replace(/^@/, '').toLowerCase();
+const collabsDelPerfil = i => perfilActual === 'all' || !verCollabs || !calendarDay(i) || !nets(i).includes('instagram') || i.trial ? []
+  : cuentasDelPerfil().filter(a => a.net === 'instagram' && a.profile && cuentasSel().has(a.key) && collab(i).some(v => sinArroba(v) === sinArroba(a.profile)));
+const soloCollab = i => !enPerfil(i) && collabsDelPerfil(i).length > 0;
+function collabTag(i) {
+  if (!soloCollab(i)) return '';
+  const k = pieceKeys(i).find(x => x.startsWith('instagram:')), ig = k && acctOpts('instagram').find(a => 'instagram:' + a.id === k);
+  return `<span class="mini" title="${esc(`Sale por ${ig ? cuentaNombre(ig) : 'otra cuenta'} con collab de ${collabsDelPerfil(i).map(cuentaNombre).join(', ')}`)}">Collab</span>`;
+}
 function inScope(i) {
   // Borradores sueltos de Postiz (p. ej. historias que nunca salieron): no son piezas para planificar.
   if (i.id.startsWith('remote:') && (i.channels || []).every(c => c.state === 'DRAFT')) return false;
-  if (perfilActual !== 'all' && i.brand !== perfilActual) return false;
-  if (!cuentaScope(i) || !formatoPasaPieza(i)) return false;
+  if (!enPerfil(i) && !collabsDelPerfil(i).length) return false;
+  if (!formatoPasaPieza(i)) return false;
   const q = $('search').value.toLowerCase().trim();
   return !q || (i.title + ' ' + i.slug + ' ' + i.brand).toLowerCase().includes(q);
 }
@@ -305,7 +320,7 @@ function tile(i, mode) {
   const brand = BRANDS.length > 1 && i.brand !== defaultBrand() ? `<span class="chip-ov brand">${esc(BRAND_LABEL[i.brand] || i.brand)}</span>` : '';
   const decided = done || i.id.startsWith('queue:') || i.id.startsWith('remote:') || ch(i)?.networks || w;
   const shownNets = done ? sortNets((i.channels || []).map(x => normNet(x.network))) : decided ? nets(i) : [];
-  const extras = [i.newer_final && !version(i) ? '<span class="mini warn" title="La carpeta de la pieza tiene un final más nuevo que el de la cola">Versión nueva</span>' : '', isCarousel(i) ? '<span class="mini">Carrusel</span>' : '', i.trial && shownNets.includes('instagram') ? '<span class="mini" title="Reel de prueba en Instagram">Prueba</span>' : '', done || !decided ? '' : collabText(i)].join('');
+  const extras = [i.newer_final && !version(i) ? '<span class="mini warn" title="La carpeta de la pieza tiene un final más nuevo que el de la cola">Versión nueva</span>' : '', collabTag(i), isCarousel(i) ? '<span class="mini">Carrusel</span>' : '', i.trial && shownNets.includes('instagram') ? '<span class="mini" title="Reel de prueba en Instagram">Prueba</span>' : '', done || !decided ? '' : collabText(i)].join('');
   const acts = [];
   // Aprobar desde la semana = pasar a Listo (stages.json), con deshacer; no agenda nada en Postiz.
   // Con Aprobar no se muestra el estado al pie: repetiría el grupo «Por revisar».
@@ -360,7 +375,7 @@ function boardCard(i) {
   const decided = i.id.startsWith('queue:') || i.id.startsWith('remote:') || ch(i)?.networks || w;
   const brand = BRANDS.length > 1 && i.brand !== defaultBrand() ? BRAND_LABEL[i.brand] || i.brand : '';
   const meta = [brand, isCarousel(i) ? 'Carrusel' : '', w ? `${dayShort(w.slice(0, 10))} ${Number(w.slice(8, 10))} · ${w.slice(11, 16)}` : relDays(i.created)].filter(Boolean).map(esc).join(' · ');
-  const extras = [i.newer_final && !version(i) ? '<span class="mini warn" title="La carpeta de la pieza tiene un final más nuevo que el de la cola">Versión nueva</span>' : '', i.trial && nets(i).includes('instagram') ? '<span class="mini" title="Reel de prueba en Instagram">Prueba</span>' : '', i.feedback_pending ? `<span class="mini">${i.feedback_pending} ${i.feedback_pending === 1 ? 'nota' : 'notas'}</span>` : ''].join('');
+  const extras = [i.newer_final && !version(i) ? '<span class="mini warn" title="La carpeta de la pieza tiene un final más nuevo que el de la cola">Versión nueva</span>' : '', collabTag(i), i.trial && nets(i).includes('instagram') ? '<span class="mini" title="Reel de prueba en Instagram">Prueba</span>' : '', i.feedback_pending ? `<span class="mini">${i.feedback_pending} ${i.feedback_pending === 1 ? 'nota' : 'notas'}</span>` : ''].join('');
   const acts = [];
   if (i.status === 'review') acts.push(`<button class="approve" data-approve="${esc(i.id)}" title="Aprobar: pasa a Listos" aria-label="Aprobar pieza">Aprobar</button>`);
   if (canDiscard(i)) acts.push(`<button data-discard="${esc(i.id)}" title="Descartar: deja de aparecer" aria-label="Descartar pieza">${ICON.trash}</button>`);
@@ -1229,8 +1244,11 @@ document.addEventListener('keydown', e => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.tile')) { e.preventDefault(); openItem(e.target.dataset.id); return; }
   if ($('drawer').open && ed?.slides?.length > 1 && !typing && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); showSlide(ed.slide + (e.key === 'ArrowRight' ? 1 : -1)); return; }
   if (typing || document.querySelector('dialog[open]') || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (['week', 'stories', 'guiones'].includes(view) && e.key === 'ArrowLeft') { week = dateAdd(week, -7); render(); }
-  else if (['week', 'stories', 'guiones'].includes(view) && e.key === 'ArrowRight') { week = dateAdd(week, 7); render(); }
+  // En Guiones corren el período (un día, la semana, 15 días o el mes; ver gvMover en guiones.js) y «h» vuelve a hoy.
+  if (view === 'guiones' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { if (typeof gvMover === 'function') gvMover(e.key === 'ArrowRight' ? 1 : -1); }
+  else if (view === 'guiones' && e.key === 'h') $('gvToday').click();
+  else if (['week', 'stories'].includes(view) && e.key === 'ArrowLeft') { week = dateAdd(week, -7); render(); }
+  else if (['week', 'stories'].includes(view) && e.key === 'ArrowRight') { week = dateAdd(week, 7); render(); }
   else if (e.key === 'h') { week = monday(todayStr()); render(); }
   else if (e.key === '/' && !$('searchWrap').hidden) { e.preventDefault(); $('search').focus(); }
 });
@@ -1245,6 +1263,9 @@ const VISTAS = { week: 'Semana', stories: 'Historias', guiones: 'Guiones', piece
 const plegar = si => { document.body.classList.toggle('side-plegada', si); store.set('sidePlegada', si); $('sideToggle').title = si ? 'Desplegar la barra' : 'Plegar la barra'; };
 $('sideToggle').onclick = () => plegar(!document.body.classList.contains('side-plegada'));
 plegar(store.get('sidePlegada', false));
+const tema = oscuro => { document.documentElement.dataset.theme = oscuro ? 'dark' : 'light'; store.set('tema', oscuro ? 'oscuro' : 'claro'); const t = oscuro ? 'Tema claro' : 'Tema oscuro'; Object.assign($('themeToggle'), { title: t, ariaLabel: t, ariaPressed: String(oscuro) }); $('themeToggle').querySelector('span').textContent = t; };
+$('themeToggle').onclick = () => tema(document.documentElement.dataset.theme !== 'dark');
+tema(store.get('tema', 'claro') === 'oscuro');
 // Con una sola marca no hay selector arriba; con «Todas las marcas», las cuentas van agrupadas por marca.
 function renderCuentas() {
   const ms = marcas(), m = perfilActual === 'all' ? null : perfilActual, nombre = m ? BRAND_LABEL[m] || m : 'Todas las marcas', sel = cuentasSel();
@@ -1257,7 +1278,13 @@ function renderCuentas() {
   $('cuentasLista').innerHTML = grupos.map(([g, xs]) => `${g ? `<button class="cuentas-marca" data-cmarca="${esc(g)}" title="Prender o apagar todas las de ${esc(BRAND_LABEL[g] || g)}">${esc(BRAND_LABEL[g] || g)}</button>` : conMarca ? '<span class="cuentas-marca">Todas</span>' : ''}${[...xs].sort((a, b) => NET_ORDER.indexOf(a.net) - NET_ORDER.indexOf(b.net)).map(a => { const on = sel.has(a.key);
       return `<button class="cuenta-tg${on ? ' on' : ''}" data-cuenta="${esc(a.key)}" aria-pressed="${on}" title="${esc(`${netName(a.net)} ${cuentaNombre(a)}${on ? '' : ' (apagada)'}`)}"><span class="caja">${on ? ICON.check : ''}</span><span class="net">${netIcon(a.net)}</span><span class="t">${esc(cuentaNombre(a))}</span></button>`; }).join('')}`).join('') || '<p class="hint" style="margin:0 8px">Todavía no hay cuentas conectadas.</p>';
   $('formatoBar').innerHTML = FORMATOS.map(([k, l, tip]) => { const on = formatosSel().has(k); return `<button class="${on ? 'on' : ''}" data-fmt="${k}" aria-pressed="${on}" title="${esc(tip + (on ? '' : ' (ocultos)'))}">${esc(l)}</button>`; }).join('');
+  // Con todas las marcas ya se ve todo: el interruptor de Collabs no cambiaría nada.
+  const tg = $('collabsTg'); tg.hidden = perfilActual === 'all';
+  Object.assign(tg, { className: 'cuenta-tg collabs-tg' + (verCollabs ? ' on' : ''), title: verCollabs ? 'Se ven también las piezas de otras marcas en collab con estas cuentas. Tocá para ocultarlas.' : 'Mostrar también las piezas de otras marcas en collab con estas cuentas' });
+  tg.setAttribute('aria-pressed', String(verCollabs));
+  tg.innerHTML = `<span class="caja">${verCollabs ? ICON.check : ''}</span><span class="ic">${ICON.collab}</span><span class="t">Collabs</span>`;
 }
+$('collabsTg').onclick = () => { verCollabs = !verCollabs; store.set('verCollabs', verCollabs); render(); };
 function setPerfil(id) { perfilActual = id; store.set('perfilActual', id); render(); }
 function setApagadas(keys) { cuentasApagadas = { ...cuentasApagadas, [perfilActual]: keys }; store.set('cuentasApagadas', cuentasApagadas); render(); }
 // Cada marca con su inicial, cuántas cuentas tiene y los íconos de sus redes.
@@ -1357,13 +1384,15 @@ window.addEventListener('beforeunload', e => { if (saveError || $('saveStatus').
     cuentasApagadas = store.get('cuentasApagadas', {}) || {};
     const fs = store.get('formatosSel', null), viejo = store.get('format', 'all');
     formatosElegidos = Array.isArray(fs) && fs.length ? new Set(fs) : viejo === 'reel' ? new Set(['reel', 'trial']) : viejo === 'carrusel' ? new Set(['carrusel']) : null;
+    verCollabs = store.get('verCollabs', true) !== false;
     if (pruneChanges()) queueSave();
-    render();
+    render(); arranqueListo();
     setInterval(renderSync, 60000);
     // Una consulta vieja muestra como «En Postiz» lo que ya salió: si tiene más de 30 min, se renueva sola.
     const age = Date.now() - Date.parse(data.postiz_fetched_at || 0);
     if (!(age < 30 * 60000)) refreshPostiz(true);
   } catch (e) {
+    arranqueListo();
     if (e.needsSetup) return showSetup(e);
     setSave('No se pudo cargar', true); $('backlogList').innerHTML = `<div class="empty">${esc(e.message)}<br>Recargá para reintentar.</div>`;
   }

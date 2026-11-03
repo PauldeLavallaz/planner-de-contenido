@@ -23,7 +23,7 @@ registerStories(app);
 registerGuiones(app);
 registerProduccion(app);
 // Serve only the planner's public files. No dashboard, watchers or generation jobs are loaded.
-for (const [file, type] of [['planner.html', 'text/html'], ['planner.js', 'text/javascript'], ['planner.css', 'text/css'], ['historias.js', 'text/javascript'], ['historias.css', 'text/css'], ['guiones.js', 'text/javascript'], ['guiones.css', 'text/css']]) {
+for (const [file, type] of [['planner.html', 'text/html'], ['planner.js', 'text/javascript'], ['planner.css', 'text/css'], ['historias.js', 'text/javascript'], ['historias.css', 'text/css'], ['guiones.js', 'text/javascript'], ['guiones.css', 'text/css'], ['ui.js', 'text/javascript'], ['ui.css', 'text/css']]) {
   const contents = readFileSync(resolve(PUBLIC_DIR, file));
   const handler = () => new Response(contents, { headers: { 'Content-Type': type + '; charset=utf-8', 'Cache-Control': 'no-store' } });
   app.get('/' + file, handler);
