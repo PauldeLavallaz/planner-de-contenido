@@ -249,9 +249,9 @@ class Motor(unittest.TestCase):
         self.assertEqual([p['integration']['id'] for p in posts], ['ig-alt', 'ig-alt', 'ig-alt'])
         sidecar = json.loads(next(p for p in (self.content / 'publicar').rglob('*.json') if '4-venta' in p.name and '.planner' not in p.parts).read_text())
         self.assertTrue(sidecar['source_final'].endswith('_4_venta.mp4'))
-        # Una historia con feedback sin corregir no se agenda: queda «espera_feedback».
+        # Una historia con feedback sin corregir queda «espera_feedback» (sin hora, no hay lugar que retener).
         (state / 'proposal-historias-h2.json').write_text(json.dumps({'id': 'h2', 'status': 'awaiting_chat_confirmation', 'run': 'historias/semana-x',
-            'acciones': [{**accion(1, 'espera_feedback'), 'fecha': self.future(6)[0]}]}))
+            'acciones': [{**accion(1, 'espera_feedback'), 'fecha': self.future(6)[0], 'hora': None}]}))
         out = self.run_py('historias.py', 'aplicar', 'h2', '--ejecutar').stdout
         self.assertIn('Esperan el feedback', out)
         self.assertEqual(json.loads((state / 'proposal-historias-h2.json').read_text())['resultados'][0]['resultado'], 'espera_feedback')
@@ -328,6 +328,58 @@ class Motor(unittest.TestCase):
         fichas = {json.loads(f.read_text())['slug']: f for f in (self.content / 'publicar/agendado').glob('*.json') if nombre in f.name}
         slugs = [next(s for s in fichas if s.endswith(f'{k}-venta')) for k in range(1, n + 1)]
         return state, acciones, slugs, fichas
+
+    def test_historias_retenidas(self):
+        # Una historia con feedback queda de borrador a su hora con la marca: la cadena no la publica ni sigue con las que
+        # vienen después, y se libera cuando una propuesta confirmada la vuelve a traer.
+        day, _ = self.future(12)
+        state, acciones, slugs, fichas = self.historias_agendadas('semana-retenida', day, 3)
+        db = self.tmp / 'postiz.json'
+        del_dia = lambda: [p for p in json.loads(db.read_text())['posts'] if p['publishDate'].startswith(day) and p['settings'].get('post_type') == 'story' and p['integration']['id'] == 'ig-main']
+        cola = lambda k: {'slug': slugs[k], 'sidecar': fichas[slugs[k]].relative_to(self.content).as_posix(), 'estado': json.loads(fichas[slugs[k]].read_text()).get('estado')}
+        propuesta = lambda pid, a: (state / f'proposal-historias-{pid}.json').write_text(json.dumps({'id': pid, 'status': 'awaiting_chat_confirmation', 'run': 'historias/semana-retenida', 'acciones': a}))
+        # La 2 ya era borrador de la cadena; la 1 está programada y pasa a borrador para que Postiz no la publique sola.
+        propuesta('ret-1', [{**acciones[1], 'accion': 'espera_feedback', 'cola': cola(1)}])
+        self.assertIn('Esperan el feedback', self.run_py('historias.py', 'aplicar', 'ret-1', '--ejecutar').stdout)
+        ficha2 = json.loads(fichas[slugs[1]].read_text())
+        self.assertEqual(ficha2['espera_feedback']['propuesta'], 'ret-1')
+        self.assertEqual(sorted(p['state'] for p in del_dia()), ['DRAFT', 'DRAFT', 'QUEUE'])
+        # Postiz publica la primera; llegada la hora de la 2, la cadena frena y avisa.
+        d = json.loads(db.read_text())
+        for p in d['posts']:
+            if p['publishDate'].startswith(day) and p['state'] == 'QUEUE' and p['integration']['id'] == 'ig-main' and p['settings'].get('post_type') == 'story':
+                p['state'], p['releaseId'] = 'PUBLISHED', '17999999999999998'
+        db.write_text(json.dumps(d))
+        cadena = lambda hora: self.run_py('historias.py', 'cadena', '--ahora', f'{day}T{hora}').stdout
+        out = cadena('15:10')
+        self.assertNotIn('→ ahora', out)
+        self.assertIn('feedback sin aprobar', out)
+        self.assertIn('Frené las 1 que siguen', out)
+        # Confirmada la versión corregida, se libera y sigue en orden.
+        ficha_f = next(f for f in (self.content / 'publicar/agendado').glob('*.json') if json.loads(f.read_text())['slug'] == slugs[1])
+        propuesta('ret-2', [{**acciones[1], 'accion': 'mover', 'hora': acciones[1]['hora'], 'cola': {**cola(1), 'sidecar': ficha_f.relative_to(self.content).as_posix()}}])
+        self.run_py('historias.py', 'aplicar', 'ret-2', '--ejecutar')
+        ficha_f = next(f for f in (self.content / 'publicar/agendado').glob('*.json') if json.loads(f.read_text())['slug'] == slugs[1])
+        self.assertNotIn('espera_feedback', json.loads(ficha_f.read_text()))
+
+    def test_historia_programada_retenida_pasa_a_borrador(self):
+        day, _ = self.future(14)
+        state, acciones, slugs, fichas = self.historias_agendadas('semana-retenida-1', day, 1)
+        db = self.tmp / 'postiz.json'
+        del_dia = lambda: [p for p in json.loads(db.read_text())['posts'] if p['publishDate'].startswith(day) and p['settings'].get('post_type') == 'story' and p['integration']['id'] == 'ig-main']
+        self.assertEqual([p['state'] for p in del_dia()], ['QUEUE'])
+        cola = {'slug': slugs[0], 'sidecar': fichas[slugs[0]].relative_to(self.content).as_posix(), 'estado': 'programado'}
+        (state / 'proposal-historias-ret-3.json').write_text(json.dumps({'id': 'ret-3', 'status': 'awaiting_chat_confirmation', 'run': 'historias/semana-retenida-1', 'acciones': [{**acciones[0], 'accion': 'espera_feedback', 'cola': cola}]}))
+        self.run_py('historias.py', 'aplicar', 'ret-3', '--ejecutar')
+        self.assertEqual([p['state'] for p in del_dia()], ['DRAFT'])
+        ficha = next(f for f in (self.content / 'publicar/agendado').glob('*.json') if json.loads(f.read_text())['slug'] == slugs[0])
+        self.assertEqual(json.loads(ficha.read_text())['espera_feedback']['propuesta'], 'ret-3')
+
+    def test_corrimientos_como_el_planner(self):
+        # Los valores que da corrimientosDelDia de app/public/planner.js para esas fechas.
+        cp = subprocess.run([sys.executable, '-c', "import json, cola; print(json.dumps([cola.corrimientos_del_dia(d, 6) for d in ('2026-11-03', '2026-11-04', '2026-12-25')]))"],
+                            capture_output=True, text=True, env={**self.env, 'PYTHONPATH': str(ENGINE)}, encoding='utf-8')
+        self.assertEqual(json.loads(cp.stdout), [[15, 30, 15, 15, 15, 30], [-15, -15, -15, -15, -15, -15], [30, 30, 30, 30, 30, 15]], cp.stderr)
 
     def test_historias_descartadas(self):
         # Una secuencia descartada en el planner sale de Postiz y queda en pausa; la segunda vez no se toca.

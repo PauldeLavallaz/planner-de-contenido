@@ -39,7 +39,7 @@ Cada uno requiere que el usuario lo pida para esa pieza.
 ```bash
 python3 engine/cola.py listo <carpeta-o-archivo> [--redes instagram,tiktok] [--cuenta instagram=usuario] [--portada 2.5] [--trial] [--sin-colab]
 python3 engine/cola.py agendar <slug> --fecha 2026-10-20 --hora 18:30 [--redes …] [--cuenta red=usuario] [--colab a,b] [--draft]
-python3 engine/cola.py agendar <slug>                 # próximo horario libre de la grilla (slots)
+python3 engine/cola.py agendar <slug>                 # próximo horario libre de la grilla (slots, con el mismo corrimiento del día que muestra el planner)
 python3 engine/cola.py mover <slug> --fecha … --hora …
 python3 engine/cola.py quitar <slug>                  # sale de Postiz, vuelve a inbox/ sin fecha
 python3 engine/cola.py separar <slug> [--redes instagram]  # Instagram (con YouTube y LinkedIn) pasa a otra tarjeta, para otro horario

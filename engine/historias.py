@@ -9,7 +9,8 @@ La propuesta la arma el planner (Historias → Programar → Preparar confirmaci
 <publicar>/.planner/proposal-historias-<id>.json. Las historias de una secuencia tienen su hora cada 2 minutos desde la
 hora del día, en orden. Todas salen por Postiz: ninguna va a mano (si una propuesta vieja trae «a_mano», se lista).
 Una historia con video de fondo o voz en off se publica como su MP4. Las que tienen feedback sin corregir
-(«espera_feedback») no se agendan: se programan cuando el usuario apruebe la versión corregida. Las de una secuencia
+(«espera_feedback») quedan retenidas en su lugar: borrador en Postiz a su hora con la marca `espera_feedback`, y `cadena`
+no la publica ni sigue con las que vienen después hasta que el usuario confirme la versión corregida. Las de una secuencia
 que el usuario descartó en el planner («descartar») salen de Postiz con `cola.py pausar`, así nadie las vuelve a
 agendar; una ya publicada o en pausa no se toca. Todo pasa por engine/cola.py.
 
@@ -75,7 +76,8 @@ def aplicar(pid, ejecutar):
     # La primera historia de cada día y cuenta queda programada; las siguientes, borrador hasta que salga la anterior.
     primeras = {}
     for a in prop['acciones']:
-        if a['accion'] not in {'a_mano', 'quitar', 'descartar', 'nada', 'ya_publicada', 'espera_feedback'}:
+        # Una retenida cuenta: si es la primera, las que siguen van como borrador y no salen antes que ella.
+        if a['accion'] not in {'a_mano', 'quitar', 'descartar', 'nada', 'ya_publicada'}:
             k = (a['fecha'], a.get('cuenta_id') or a.get('cuenta'))
             primeras[k] = min(primeras.get(k, a['orden']), a['orden'])
     for a in prop['acciones']:
@@ -93,8 +95,10 @@ def aplicar(pid, ejecutar):
         if a['accion'] in {'nada', 'ya_publicada'}:
             continue
         if a['accion'] == 'espera_feedback':
-            esperan.append(f"{etiqueta} · tiene feedback sin corregir: se agenda cuando apruebes la versión nueva")
-            resultados.append({**a, 'resultado': 'espera_feedback'})
+            esperan.append(f"{etiqueta} · tiene feedback sin corregir: queda retenida hasta que apruebes la versión nueva")
+            ok = retener(a, run, img, cuenta, pid, ejecutar)
+            resultados.append({**a, 'resultado': 'espera_feedback' if ok else 'error'})
+            ok_total = ok_total and ok
             continue
         # También una de hoy cuya hora ya pasó: no se agenda en el pasado.
         pasada = a['fecha'] < hoy or (a['fecha'] == hoy and hora is not None and hora <= ya)
@@ -103,6 +107,7 @@ def aplicar(pid, ejecutar):
             resultados.append({**a, 'resultado': 'fecha_pasada'})
             ok_total = False
             continue
+        slug = None
         cadena = ['--draft'] if en_cadena() and a['orden'] > primeras.get((a['fecha'], cuenta_val), a['orden']) else []
         print(f"→ {a['accion']} {etiqueta}" + (f" · @{a['cuenta']}" if a.get('cuenta') else '') + (' · en cadena' if cadena else ''))
         if a['accion'] == 'agendar':
@@ -148,6 +153,10 @@ def aplicar(pid, ejecutar):
             ok, out = correr(COLA + ['pausar', slug, '--motivo', 'descartada en el planner'], ejecutar)
         else:
             ok, out = False, f"acción desconocida {a['accion']}"
+        if ok:
+            # El usuario confirmó esta historia en una propuesta: si quedó retenida por feedback, la cadena ya la puede publicar.
+            for s in {(a.get('cola') or {}).get('slug'), slug} - {None}:
+                marcar_espera(s, None, ejecutar)
         resultados.append({**a, 'hora_programada': hora, 'resultado': 'ok' if ok else 'error', 'salida': out})
         ok_total = ok_total and ok
     if manuales:
@@ -155,7 +164,7 @@ def aplicar(pid, ejecutar):
         for m in manuales:
             print('  ·', m)
     if esperan:
-        print('\nEsperan el feedback (no se agendan todavía):')
+        print('\nEsperan el feedback (retenidas, no salen todavía):')
         for m in esperan:
             print('  ·', m)
     if ejecutar:
@@ -167,6 +176,59 @@ def aplicar(pid, ejecutar):
     else:
         print('\nCorrida en seco: no se tocó la cola ni Postiz. Para aplicarla: --ejecutar')
     return 0 if ok_total else 2
+
+
+def retener(a, run, img, cuenta, pid, ejecutar):
+    """Deja retenida en su lugar de la secuencia una historia que espera feedback: borrador en Postiz a su hora, con la marca
+    `espera_feedback`, así `cadena` no la publica ni sigue con las que vienen después. Dejarla como estaba no alcanza: si
+    ya estaba en Postiz con la imagen vieja saldría igual, y si no estaba la cadena saltaría de la anterior a la siguiente.
+    La marca se saca cuando una propuesta confirmada vuelve a traer esa historia con otra acción (ver aplicar)."""
+    cola = a.get('cola') or {}
+    slug = cola.get('slug') or slug_de(run, a['imagen'])
+    if not a.get('hora') or not en_cadena():
+        return True
+    hora = hora_de(a['hora'], a['orden'])
+    ahora = now_local()
+    if a['fecha'] < ahora.date().isoformat() or (a['fecha'] == ahora.date().isoformat() and hora <= ahora.strftime('%H:%M')):
+        return True
+    sidecar = '/' + str(cola.get('sidecar') or '').replace('\\', '/')
+    agendar = COLA + ['agendar', slug, '--fecha', a['fecha'], '--hora', hora, '--draft'] + cuenta
+    ok = True
+    if '/agendado/' in sidecar and cola.get('estado') == 'en_revision':
+        pass  # ya es borrador de la cadena: alcanza con la marca
+    elif '/agendado/' in sidecar:
+        # Programada en Postiz (la primera del día): Postiz la publicaría sola. Pasa a borrador a la misma hora.
+        ok, _ = correr(COLA + ['quitar', slug], ejecutar)
+        if ok:
+            ok, _ = correr(agendar, ejecutar)
+    else:
+        if not cola.get('sidecar'):
+            ok, _ = correr(COLA + ['listo', str(img), '--formato', 'story', '--redes', 'instagram', '--slug', slug,
+                                   '--titulo', f"Historia {a['fecha']} · {a['orden']}"] + cuenta, ejecutar)
+        if ok:
+            ok, _ = correr(agendar, ejecutar)
+    if ok:
+        marcar_espera(slug, {'propuesta': pid, 'desde': ahora.isoformat(timespec='seconds'), 'imagen': a['imagen']}, ejecutar)
+        print(f'  retenida como borrador a las {hora}: la cadena no la publica ni sigue con las que vienen después hasta que apruebes la versión nueva.')
+    return ok
+
+
+def marcar_espera(slug, espera, ejecutar):
+    """Pone (o saca, con None) la marca `espera_feedback` en la ficha de la historia en la cola."""
+    if not ejecutar:
+        return
+    import cola as q
+    with q.queue_lock():
+        for d in (q.INBOX, q.AGENDADO):
+            for media, meta in q.queue_pieces(d):
+                if meta.get('slug') != slug:
+                    continue
+                if espera:
+                    meta['espera_feedback'] = espera
+                elif meta.pop('espera_feedback', None) is None:
+                    return
+                q.save_meta(media, meta)
+                return
 
 
 def estado_en_cola(slug):
@@ -265,6 +327,14 @@ def avanzar(q, cadena, ahora, dry):
         estado, nominal, base = post.get('estado'), utc(meta['slot']['utc']), f"cadena-{meta['slug']}"
         if estado in LISTO:
             continue
+        if meta.get('espera_feedback'):
+            # Retenida por `aplicar`: tiene feedback sin aprobar y su imagen en Postiz es la vieja. No sale, y las que siguen
+            # tampoco, para no desordenar la secuencia.
+            if ahora >= nominal:
+                siguen = f' Frené las {total - i} que siguen.' if total > i else ''
+                avisar(f'{base}-espera-feedback', f'Historias frenadas · {dia}',
+                       f"La {nombre(i, meta)} tiene feedback sin aprobar: no la publico con la imagen vieja.{siguen} Aprobá la versión nueva con Programar en el planner y salen en orden.", dry)
+            return
         if estado == 'fallido':
             if avisado(f'{base}-frenada'):
                 # Ya se frenó y el aviso trae el archivo para subirla a mano: reintentarla después la duplicaría.

@@ -136,19 +136,30 @@ def integrations():
 
 
 # ---------------------------------------------------------------- tiempo
-def jitter(seed, minutes):
-    if not minutes:
-        return 0
-    h = int(hashlib.sha1(seed.encode()).hexdigest(), 16)
-    return h % (2 * minutes + 1) - minutes
+def corrimientos_del_dia(day, n):
+    """Mismo sorteo que corrimientosDelDia de app/public/planner.js: cada día corre sus n horarios para un mismo lado, 15 o
+    30 minutos cada uno. Así `agendar --slot` da la hora que muestra el planner."""
+    s = 7
+    for c in str(day):
+        s = (s * 31 + ord(c)) % 2**32
+
+    def azar():
+        nonlocal s
+        s = (s * 1103515245 + 12345) % 2**32
+        return s / 2**32
+
+    lado = -1 if azar() < .5 else 1
+    return [lado * (15 if azar() < .5 else 30) for _ in range(n)]
 
 
 def slot_times(day):
+    """[(n, base, dt_local)] con el corrimiento del día del planner; con `suggested_times` en la config, sin correr."""
     out = []
+    corr = [0] * len(CFG['slots']) if CFG.get('suggested_times') else corrimientos_del_dia(day, len(CFG['slots']))
     for n, base in enumerate(CFG['slots'], start=1):
         hh, mm = map(int, base.split(':'))
         dt = datetime(day.year, day.month, day.day, hh, mm, tzinfo=tz())
-        dt += timedelta(minutes=jitter(f'{day}:{base}', CFG.get('jitter_minutes') or 0))
+        dt += timedelta(minutes=corr[n - 1])
         out.append((n, base, dt))
     return out
 
