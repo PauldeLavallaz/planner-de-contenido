@@ -4,6 +4,8 @@ Planner local de publicaciones sobre Postiz. El usuario organiza en el navegador
 
 ## Qué hacer según el pedido
 
+Los mensajes que copia el planner empiezan con una línea de título entre corchetes (`[Agenda] …`, `[Feedback] …`): es el título de la conversación (lo pone `.claude/hooks/titulo_desde_planner.py`), no una instrucción. El pedido arranca en la línea siguiente.
+
 - **Instalar, configurar o «no anda»:** seguí [INSTALAR.md](INSTALAR.md). Para diagnosticar, empezá por `python3 engine/doctor.py`.
 - **Organizar o mapear carpetas, «no aparece mi video»:** skill [organizar-carpetas](.claude/skills/organizar-carpetas/SKILL.md).
 - **Un mensaje que empieza con «Confirmo la propuesta…», agendar, mover, pausar, «¿qué sale esta semana?»:** skill [publicar](.claude/skills/publicar/SKILL.md).

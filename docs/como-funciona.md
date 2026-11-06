@@ -7,7 +7,7 @@ tus carpetas ──► planner (navegador) ──► propuesta ──► Claude 
 
 ## La barra lateral
 
-A la izquierda, de arriba abajo (se pliega a sólo íconos con el botón de arriba; plegada, cada ícono dice su nombre al pasar el mouse):
+A la izquierda, de arriba abajo (se pliega a sólo íconos con el botón de arriba; plegada, cada ícono dice su nombre al pasar el mouse; en una ventana angosta arranca plegada):
 
 - la **marca**, si tenés más de una en `brands`: vale para todas las secciones. Cada marca muestra cuántas cuentas tiene y sus redes; una cuenta con `marca` en `channels` es de esa marca y una sin marca, de todas;
 - **Buscar** (o ⌘K / Ctrl+K, desde cualquier lado): ir a una sección, cambiar de marca o de tema, consultar Postiz o abrir una pieza escribiendo parte de su título;
@@ -44,6 +44,12 @@ Al tocar una portada se abre el video (o las láminas; si todavía no hay ningun
 3. *Preparar confirmación* congela la propuesta (`proposal-<id>.json`) y te da un mensaje.
 4. Pegás el mensaje en Claude Code. Corre `engine/cola.py aplicar <id>`: pone en la cola lo que falte, agenda, mueve, pausa o quita en Postiz, y anota el resultado.
 5. El planner relee Postiz al abrirlo (si la última consulta tiene más de 30 minutos) y con el botón de Postiz arriba a la derecha.
+
+Todo mensaje que copia el planner para Claude Code (la propuesta, el feedback, *Publicar ahora*) empieza con una línea como `[Agenda] Cambio de horario de «Mi reel»` o `[Feedback] Cambiar el copy de «Mi reel»`. Si abre una conversación nueva, el hook `.claude/hooks/titulo_desde_planner.py` la usa de título, así la lista de conversaciones dice qué se hizo en cada una en vez de un id; pegado en una conversación que ya existe, no la renombra. El id de la propuesta sigue en el cuerpo del mensaje.
+
+### Si algo está mal armado
+
+Una ficha de la cola o una pieza con datos que el inventario no entiende no vacía el calendario: se saltea y arriba aparece un aviso con el archivo y el error, para corregirlo. Si el inventario entero no se puede armar (por ejemplo, justo después de tocar la config), el planner muestra la última versión que cargó bien (`publicar/.planner/inventario-ok.json`) con un aviso de desde cuándo es y por qué falló; mientras tanto se puede mirar, pero no aprobar, mover ni proponer.
 
 ## Estados
 

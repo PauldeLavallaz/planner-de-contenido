@@ -75,6 +75,7 @@ Claude Code analiza tus carpetas durante la instalación y te recomienda una. Ve
 | `engine/` | El motor en Python: inventario de tus carpetas, cola de publicación y conexión con Postiz. |
 | `motor-historias/` | El motor de historias: plantilla, estilos y render a imagen. |
 | `.claude/skills/` | Instrucciones para Claude Code: instalar, organizar carpetas, publicar, historias y guiones. |
+| `.claude/hooks/` | El hook que titula cada conversación con la primera línea del mensaje que copia el planner (se activa en `.claude/settings.json`). |
 | `docs/` | Cómo funciona, carpetas, historias, guiones y particularidades de cada red. |
 | `tests/` | Pruebas del motor contra un Postiz simulado. |
 

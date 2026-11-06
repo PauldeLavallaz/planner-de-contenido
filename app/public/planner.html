@@ -115,7 +115,7 @@
     <div id="gvPeriodo" class="segmented gv-periodo" role="group" aria-label="Período"></div>
     <div class="gv-head-actions"><button id="gvCopy" class="primary" disabled hidden title="Junta las notas sin enviar de todas las fechas y etapas"><span>Copiar feedback para Claude Code</span><span id="gvCopyCount" class="count">0</span></button></div>
   </div>
-  <div id="gvFases" class="segmented gv-fases" role="group" aria-label="Etapa"></div>
+  <div class="gv-fila-filtros"><div id="gvFases" class="segmented gv-fases" role="group" aria-label="Etapa"></div><div id="gvFiltros" class="gv-filtros"></div></div>
   <div id="gvGrid"></div>
 </main>
 
@@ -174,6 +174,8 @@
 <dialog id="storyBox" class="story-box" aria-labelledby="sbTitle">
   <div class="sb-head"><h2 id="sbTitle"></h2><span id="sbChip" class="sb-chip" hidden></span><button class="icon close" aria-label="Cerrar"><svg viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></svg></button></div>
   <div class="sb-main">
+    <!-- Historial de versiones: la actual y las anteriores, para volver a una sin pedírselo a Claude Code. -->
+    <aside id="sbVers" class="sb-vers" hidden aria-label="Versiones de esta historia"></aside>
     <div class="sb-col">
       <div class="sb-body">
         <button id="sbPrev" class="icon sb-nav" aria-label="Historia anterior"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
@@ -184,6 +186,8 @@
       <div class="sb-actions">
         <button id="sbEdit" class="sb-act">✏️ Editar</button>
         <button id="sbFbBtn" class="sb-act">💬 Feedback<span id="sbFbN" class="sb-n" hidden></span></button>
+        <button id="sbRestore" class="sb-act primary-act" hidden>↩︎ Volver a esta versión</button>
+        <button id="sbActual" class="sb-act" hidden>Ver la actual</button>
       </div>
     </div>
     <aside id="sbFeedback" class="sb-fb" hidden aria-label="Feedback de esta historia"></aside>

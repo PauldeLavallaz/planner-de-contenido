@@ -25,6 +25,23 @@ function skeleton(kind = 'list', n) {
 }
 function arranqueListo() { document.getElementById('arranque')?.remove(); document.body.classList.remove('arrancando'); }
 
+// ---------- título de la conversación ----------
+// La primera línea de cada mensaje para Claude Code es «[Etiqueta] qué se está haciendo», y .claude/hooks/titulo_desde_planner.py
+// la vuelve el título de la conversación. Misma versión que src/titulo-mensaje.ts, que tiene el porqué.
+const msgCortar = (t, max) => { const c = [...t]; if (c.length <= max) return t; const s = c.slice(0, max - 1).join(''), e = s.lastIndexOf(' '); return (e > max * 0.6 ? s.slice(0, e) : s).trimEnd() + '…'; };
+const msgLimpio = t => String(t ?? '').split('\n')[0].replace(/@/g, '').replace(/\s+/g, ' ').trim();
+const tituloMensaje = (etiqueta, descripcion) => `[${etiqueta}] ${msgCortar(msgLimpio(descripcion), 90)}`;
+const sinTituloMensaje = mensaje => String(mensaje).replace(/^\[[^\]\n]+\] [^\n]*\n\n/, '');
+const nombreMensaje = (t, max = 48) => { const x = msgLimpio(t); return x ? `«${msgCortar(x, max)}»` : ''; };
+const msgDia = fecha => new Intl.DateTimeFormat('es-AR', { timeZone: 'UTC', day: 'numeric', month: 'short' }).format(new Date(String(fecha).slice(0, 10) + 'T12:00:00Z')).replace(/[.,]/g, '').replace(/\s+de\s+/, ' ');
+function diasMensaje(fechas) {
+  const dias = [...new Set(fechas.map(f => String(f).slice(0, 10)))].sort();
+  if (!dias.length) return '';
+  const a = msgDia(dias[0]), b = msgDia(dias[dias.length - 1]);
+  if (a === b) return `del ${a}`;
+  return a.split(' ')[1] === b.split(' ')[1] ? `del ${a.split(' ')[0]} al ${b}` : `del ${a} al ${b}`;
+}
+
 // ---------- paleta ⌘K ----------
 // Ir a una sección, cambiar de marca o abrir una pieza por su título desde cualquier lado, sin pasar por la barra.
 const CMDK_NORM = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();

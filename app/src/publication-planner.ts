@@ -6,6 +6,7 @@ import { resolve, extname, relative, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { ENGINE_DIR, PYTHON, REPO_DIR, CONFIG_PATH, paths } from './config.ts';
+import { cantidad, capitalizar, conTitulo, editarDesc, listaNatural, nombreMensaje, tituloMensaje } from './titulo-mensaje.ts';
 export const exec = promisify(execFile);
 export const ROOT=()=>paths().root, STATE=()=>paths().state;
 // Una ruta dentro de la carpeta de contenido (o de la cola, si vive afuera), siempre con barras /.
@@ -114,6 +115,8 @@ export function feedbackPrompt(item:any, dir:string, entries:any[]) {
     return [head,...parts,`   Nota: ${rel(dir)}/${e.file}`].join('\n');
   });
   return [
+    tituloMensaje('Feedback',editarDesc(item.title,copies.length>0,others.length>0||!copies.length,['carrusel','carousel'].includes(item.format)?'el carrusel':item.primary?.kind==='video'?'el video':'la pieza')),
+    '',
     `Feedback desde el planner sobre «${item.title}».`,
     '',
     `Carpeta de contenido: ${ROOT()}`,
@@ -144,6 +147,24 @@ export function copyRules(item:any,soloFeedback=true){
   ];
 }
 let cache:any=null, cacheAt=0, inFlight:Promise<any>|null=null;
+// Si el inventario no se puede armar, el calendario muestra el último bueno y lo avisa, en vez de quedar vacío. También en
+// disco: el servicio se reinicia justo después de editar el código o la config, que es cuando más puede fallar. Sólo para
+// mirar: aprobar, mover o proponer siguen dando error hasta que el inventario vuelva.
+const ultimoBuenoPath=()=>resolve(STATE(),'inventario-ok.json');
+let ultimoBueno:any=null, ultimoGuardado=0;
+function guardarUltimoBueno(data:any,json:string){
+  ultimoBueno=data;
+  if(Date.now()-ultimoGuardado<60000)return;
+  ultimoGuardado=Date.now();
+  try{mkdirSync(STATE(),{recursive:true});const f=ultimoBuenoPath();writeFileSync(f+'.tmp',json);renameSync(f+'.tmp',f);}
+  catch(error){console.error(new Date().toISOString(),'No se pudo guardar el último inventario',error);}
+}
+function inventarioViejo(error:any){
+  const viejo=ultimoBueno||fileRead(ultimoBuenoPath(),null);
+  if(!Array.isArray(viejo?.items))return null;
+  const motivo=String(error?.message||error).trim().split('\n').pop()?.slice(0,300);
+  return withPublications({...viejo,inventario_viejo:{desde:viejo.generated_at||null,motivo}});
+}
 export const PLANNER_STAGES=['development','review','ready'];
 export function applyPlannerPublications(data:any, records:Record<string,any>, discards:Record<string,any>={}, stages:Record<string,any>={}) {
   return {...data,items:data.items.map((raw:any)=>{
@@ -193,7 +214,7 @@ async function inventory(refresh=false) {
     catch(e:any){let msg:any={};try{msg=JSON.parse(e?.stdout||'{}');}catch{}
       if(e?.code==='ENOENT')throw new PlannerError(`No encuentro ${PYTHON}. Instalá Python 3.10+ o definí PLANNER_PYTHON.`,503);
       throw new PlannerError(msg.error||'No se pudo leer el inventario. Corré python3 engine/doctor.py para ver qué falta.',msg.needs_setup?503:502,!!msg.needs_setup);}
-    cache=JSON.parse(stdout);cacheAt=Date.now();return cache;})().finally(()=>{inFlight=null;});
+    cache=JSON.parse(stdout);cacheAt=Date.now();guardarUltimoBueno(cache,stdout);return cache;})().finally(()=>{inFlight=null;});
   return withPublications(await inFlight);
 }
 export class PlannerError extends Error { status:number; needsSetup:boolean; constructor(message:string, status=502, needsSetup=false){super(message);this.status=status;this.needsSetup=needsSetup;} }
@@ -233,6 +254,17 @@ export function plannerAction(item:any,change:any) {
   if(change.resume)return 'resume';
   return item.scheduled?'unschedule':'update';
 }
+const AGENDA_DESC:Record<string,string>={schedule:'Agendar',move:'Cambio de horario de',unschedule:'Sacar de la agenda',pause:'Pausar',resume:'Retomar',update:'Ajustar'};
+// Lo que hace de verdad la propuesta: «Cambio de horario de «X»», «Agendar 3 piezas», «Agendar 2 piezas y corregir 1 pieza».
+export function proposalTitle(cambios:{accion:string,title:string}[], feedback:any[]) {
+  const tipos=[...new Set(cambios.map(c=>c.accion))],de=(k:string)=>cambios.filter(c=>c.accion===k).length;
+  const agenda=!cambios.length?'':tipos.length>2?`Cambios de agenda en ${cantidad(cambios.length,'pieza')}`
+    :tipos.length===2?`${AGENDA_DESC[tipos[0]]} ${cantidad(de(tipos[0]),'pieza')} y ${AGENDA_DESC[tipos[1]].toLowerCase()} ${de(tipos[1])}`
+    :`${AGENDA_DESC[tipos[0]]} ${cambios.length===1?nombreMensaje(cambios[0].title):cantidad(cambios.length,'pieza')}`;
+  const unaNota=feedback.length===1?feedback[0]:null,copy=!!unaNota?.notes.some((n:any)=>n.tipo==='copy'),otras=!!unaNota?.notes.some((n:any)=>n.tipo!=='copy');
+  const contenido=!feedback.length?'':cambios.length?`corregir ${cantidad(feedback.length,'pieza')}`:unaNota?editarDesc(unaNota.title,copy,otras,/\.(mp4|mov|webm)$/i.test(unaNota.video||'')?'el video':'la pieza'):`Corregir ${cantidad(feedback.length,'pieza')}`;
+  return tituloMensaje(cambios.length?'Agenda':'Feedback',capitalizar(listaNatural([agenda,contenido].filter(Boolean))));
+}
 export function proposalPrompt(id:string, agenda:number, feedback:any[]) {
   const file=resolve(STATE(),'proposal-'+id+'.json');
   const lines=['Confirmo la propuesta '+id+' del planner de contenido.','',
@@ -266,7 +298,10 @@ export function registerPublicationPlanner(app:Hono) {
     }
     await next();
   });
-  app.get('/api/planner/data',async c=>{try{return c.json(await inventory());}catch(e:any){return c.json({error:e.message,needs_setup:!!e.needsSetup,config:CONFIG_PATH},e.status||502);}});
+  app.get('/api/planner/data',async c=>{try{return c.json(await inventory());}catch(e:any){
+    const viejo=e.needsSetup?null:inventarioViejo(e);
+    if(viejo){console.error(new Date().toISOString(),'GET /api/planner/data muestra el último inventario bueno',e);return c.json(viejo);}
+    return c.json({error:e.message,needs_setup:!!e.needsSetup,config:CONFIG_PATH},e.status||502);}});
   app.post('/api/planner/refresh',async c=>{try{await c.req.json();return c.json(await inventory(true));}catch(e:any){return c.json({error:e instanceof PlannerError&&e.needsSetup?e.message:'No se pudo consultar Postiz. Conservamos el último estado verificado.'},502);}});
   app.get('/api/planner/draft',c=>c.json(fileRead(resolve(STATE(),'draft.json'),{revision:0,changes:{}})));
   // Confirmación local de algo que ya salió; nunca llama a Postiz.
@@ -456,7 +491,7 @@ export function registerPublicationPlanner(app:Hono) {
     const proposal={id,status:'awaiting_chat_confirmation',created_at:new Date().toISOString(),timezone:data.timezone,postiz_fetched_at:data.postiz_fetched_at,revision:draft.revision,changes:changes.map(({item,change})=>({id:item.id,title:item.title,source:item.source,sidecar:item.sidecar,slug:item.slug,primary:item.primary,fingerprint:item.fingerprint,original:item.scheduled,requested:change.when,requested_action:plannerAction(item,change),paused:item.status==='paused',pause:item.pause||null,note:change.note||'',networks:item.networks,requested_networks:change.networks??(item.networks?.length?item.networks:data.config?.default_networks||[]),collaborators:item.collaborators||[],requested_version:change.version||null,accounts:item.accounts||{},requested_accounts:change.accounts??(item.accounts||{}),requested_collaborators:change.collaborators??(Array.isArray(item.collaborators)?item.collaborators:String(item.id).startsWith('queue:')?[]:data.config?.default_collaborators||[]),channels:item.channels,instagram_trial:item.trial===true,production_status:item.status,missing_final:!item.primary,approved_by_calendar:!item.approved&&!!change.when&&!!item.primary,requires_final_approval:!item.approved&&!(change.when&&item.primary)})),feedback};
     write('proposal-'+id+'.json',proposal);
     for(const f of feedback)markFeedbackSent(resolve(ROOT(),f.feedback_dir),f.notes.map((n:any)=>n.file),'propuesta '+id);
-    return c.json({id,path:rel(resolve(STATE(),'proposal-'+id+'.json')),prompt:proposalPrompt(id,changes.length,feedback)});
+    return c.json({id,path:rel(resolve(STATE(),'proposal-'+id+'.json')),prompt:conTitulo(proposalTitle(changes.map(({item,change})=>({accion:plannerAction(item,change),title:item.title})),feedback),proposalPrompt(id,changes.length,feedback))});
   });
   // Un archivo se abre seleccionado en su carpeta; una carpeta, abierta.
   app.post('/api/planner/reveal',async c=>{

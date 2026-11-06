@@ -274,7 +274,13 @@ function renderSync() {
 
 function renderAlerts() {
   const pending = data.items.filter(i => i.pending_channels?.length);
-  $('alerts').innerHTML = pending.map(i => `<div class="alert"><span><b>Ya publicada, con envíos en cola en Postiz:</b> ${esc(i.title)}</span><button class="ghost" data-open="${esc(i.id)}">Ver canales</button></div>`).join('');
+  // Lo mal armado no vacía el calendario: se saltea y se dice cuál es. Si el inventario no se pudo armar, se ve el último bueno.
+  const viejo = data.inventario_viejo, avisos = data.avisos || [];
+  const desde = viejo?.desde ? ` de ${new Date(viejo.desde).toLocaleString(LOCALE, { timeZone: TZ, hourCycle: 'h23' })}` : '';
+  $('alerts').innerHTML = (viejo ? `<div class="alert"><span><b>Estás viendo la última versión que cargó${esc(desde)}.</b> El inventario no se pudo actualizar: hasta que vuelva, no se puede aprobar, mover ni proponer. ${esc(viejo.motivo || '')}</span></div>` : '')
+    + avisos.slice(0, 5).map(a => `<div class="alert"><span><b>${a.oculta ? 'Pieza sin mostrar, datos mal armados' : 'Revisar pieza'}:</b> ${esc(a.origen)} · ${esc(a.detalle)}</span></div>`).join('')
+    + (avisos.length > 5 ? `<div class="alert"><span>Y ${avisos.length - 5} avisos más.</span></div>` : '')
+    + pending.map(i => `<div class="alert"><span><b>Ya publicada, con envíos en cola en Postiz:</b> ${esc(i.title)}</span><button class="ghost" data-open="${esc(i.id)}">Ver canales</button></div>`).join('');
 }
 
 function renderBacklog() {
@@ -473,6 +479,8 @@ async function rebase() {
 // Quita lo que ya no cambia nada: la pieza ya está así en Postiz, o se publicó y dejó de ser editable.
 function pruneChanges() {
   let n = 0;
+  // Una copia vieja del inventario no tiene las piezas nuevas: sus cambios en el borrador no se tocan.
+  if (data.inventario_viejo) return n;
   for (const [id, c] of Object.entries(draft.changes)) {
     // Cuando una pieza de tus carpetas entra a la cola cambia de id: el cambio viejo queda huérfano y el servidor lo rechaza.
     const i = byId(id); if (!i) { if (id.startsWith('piece:') && data.items.some(j => j.id.startsWith('queue:') && j.source === id.slice(6))) { delete draft.changes[id]; n++; } continue; }
@@ -747,7 +755,9 @@ function publicarAhoraPrompt(i) {
   const donde = ed.nets.map(n => { const a = acctOf(n, ed.accounts); return `${netName(n)} ${a ? cuentaNombre({ ...a, net: n }) : ''}`.trim() + (n === 'instagram' ? (i.trial ? ' (Trial)' : ' (feed)') : ''); });
   const co = ed.nets.includes('instagram') && !i.trial && collab(i).length ? `\n- Colaboradora en Instagram: ${collab(i).map(v => '@' + String(v).replace(/^@/, '')).join(', ')}` : '';
   const ya = i.status === 'scheduled' && i.scheduled ? `\nYa está agendada en Postiz para el ${whenLabel(i.scheduled)}: publicala ya sin duplicarla.` : '';
-  return `Publicá ahora esta pieza del planner, sin agendarla para después (toqué «Publicar ahora»):
+  return `${tituloMensaje('Agenda', `Publicar ahora ${nombreMensaje(i.title)}`)}
+
+Publicá ahora esta pieza del planner, sin agendarla para después (toqué «Publicar ahora»):
 - «${i.title}»${i.slug && i.id.startsWith('queue:') ? `\n- En la cola: ${i.slug}` : ''}${i.sidecar ? `\n- Ficha: ${i.sidecar}` : ''}${i.source ? `\n- Carpeta: ${i.source}` : ''}
 - Dónde: ${donde.join(', ') || 'las redes por defecto'}${co}${ya}
 Usá la skill publicar (sección «Publicar ahora»). Cuando salga, pasame el link de cada red.`;
@@ -1262,7 +1272,7 @@ $('jumpDate').onchange = () => { if ($('jumpDate').value) { week = monday($('jum
 const VISTAS = { week: 'Semana', stories: 'Historias', guiones: 'Guiones', pieces: 'Tablero', history: 'Publicadas' };
 const plegar = si => { document.body.classList.toggle('side-plegada', si); store.set('sidePlegada', si); $('sideToggle').title = si ? 'Desplegar la barra' : 'Plegar la barra'; };
 $('sideToggle').onclick = () => plegar(!document.body.classList.contains('side-plegada'));
-plegar(store.get('sidePlegada', false));
+plegar(store.get('sidePlegada', innerWidth <= 820));  // En una ventana angosta arranca plegada: si no, la barra se come la pantalla.
 const tema = oscuro => { document.documentElement.dataset.theme = oscuro ? 'dark' : 'light'; store.set('tema', oscuro ? 'oscuro' : 'claro'); const t = oscuro ? 'Tema claro' : 'Tema oscuro'; Object.assign($('themeToggle'), { title: t, ariaLabel: t, ariaPressed: String(oscuro) }); $('themeToggle').querySelector('span').textContent = t; };
 $('themeToggle').onclick = () => tema(document.documentElement.dataset.theme !== 'dark');
 tema(store.get('tema', 'claro') === 'oscuro');

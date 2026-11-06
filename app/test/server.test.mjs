@@ -121,6 +121,8 @@ test('standalone HTTP, media cancellation and durable draft across process exit'
       const proposalResponse = await request('/api/planner/proposals', 'POST', { revision: 8 });
       assert.equal(proposalResponse.status, 200);
       const proposal = await proposalResponse.json();
+      assert.equal(proposal.prompt.split('\n')[0], '[Agenda] Agendar «Final de prueba»', 'the first line becomes the conversation title');
+      assert.ok(!proposal.prompt.split('\n')[0].includes(proposal.id), 'the proposal id stays out of the title');
       const stored = JSON.parse(readFileSync(resolve(state, `proposal-${proposal.id}.json`)));
       assert.equal(stored.status, 'awaiting_chat_confirmation');
       assert.equal(stored.changes[0].requested_action, 'schedule');
@@ -134,6 +136,7 @@ test('standalone HTTP, media cancellation and durable draft across process exit'
       assert.equal(entry.estado, 'pendiente');
       assert.equal(readFileSync(resolve(root, entry.audio)).length, 4096);
       assert.ok(entry.audio.startsWith('piezas/test/feedback/'));
+      assert.match(saved.prompt, /^\[Feedback\] Editar el video «Final de prueba»\n\n/);
       assert.match(saved.prompt, /Alargá el plano del segundo 16/);
       assert.match(saved.prompt, /en el 0:16 del video/);
       assert.ok(saved.prompt.includes(entry.audio));
@@ -143,6 +146,7 @@ test('standalone HTTP, media cancellation and durable draft across process exit'
       assert.equal((await (await fetch(base + '/api/planner/data')).json()).items[0].feedback_pending, 1);
       const draftNow = await (await fetch(base + '/api/planner/draft')).json();
       const prop = await (await request('/api/planner/proposals', 'POST', { revision: draftNow.revision })).json();
+      assert.equal(prop.prompt.split('\n')[0], '[Agenda] Agendar «Final de prueba» y corregir 1 pieza');
       assert.match(prop.prompt, /Contenido: aplicá el feedback/);
       assert.match(prop.prompt, /skills\/publicar\/SKILL\.md/);
       const storedProp = JSON.parse(readFileSync(resolve(state, `proposal-${prop.id}.json`)));
@@ -164,6 +168,7 @@ test('standalone HTTP, media cancellation and durable draft across process exit'
       assert.equal(one.entries.length, 1);
       assert.equal(one.entries[0].tipo, 'copy');
       assert.equal(one.entries[0].copy_anterior, 'Copy original');
+      assert.match(one.prompt, /^\[Feedback\] Cambiar el copy de «Final de prueba»\n\n/);
       assert.match(one.prompt, /Copy nuevo, textual/);
       assert.match(one.prompt, /cola\.py mover/);
       assert.doesNotMatch(one.prompt, /transcribilos/, 'a copy-only note has no audio rules');
