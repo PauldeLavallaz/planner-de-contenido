@@ -1,0 +1,43 @@
+/* Lámina de un post de LinkedIn, 1080×1350: arriba un bloque con la frase (y, si querés, una figura recortada apoyada en el
+   borde), abajo la lista y un pie. Es una plantilla neutra: cambiá los colores y las fuentes acá, en `linkedin.lamina.css`
+   (un CSS tuyo que se carga después de éste) o con un <style> dentro del cuerpo de cada post.
+   lamina.py fija --arriba según las filas y achica la frase hasta que entre sin tocar la figura. */
+:root {
+  --m: 72px;                    /* un solo margen para la frase, la lista y el pie */
+  --fondo: #0f172a;             /* fondo de la lámina */
+  --bloque: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); /* fondo del bloque de arriba (color, degradé o url(...)) */
+  --texto: #ffffff;
+  --suave: rgba(255, 255, 255, .72);
+  --raya: rgba(255, 255, 255, .18);
+  --acento: #38bdf8;            /* la palabra clave del título y la fila clave */
+  --negativo: #f87171;          /* sólo para lo malo: <s> en una fila */
+  --fuente: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fuente-titulo: "Arial Black", "Helvetica Neue", Impact, sans-serif;
+  --col-num: 68px; --col-txt: 330px;
+  --arriba: 560px; --figura-ancho: 480px; --figura-der: 28px; --figura-hunde: 18%;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1080px; height: 1350px; }
+body { position: relative; overflow: hidden; font-family: var(--fuente); color: var(--texto); background: var(--fondo); -webkit-font-smoothing: antialiased; }
+
+.arriba { position: absolute; left: 0; right: 0; top: 0; height: var(--arriba); overflow: hidden; background: var(--bloque); background-size: cover; background-position: center; }
+/* la figura (opcional) apoyada en el borde y hundida un porcentaje de su alto, como detrás de un mostrador */
+.figura { position: absolute; right: var(--figura-der); bottom: 0; width: var(--figura-ancho); transform: translateY(var(--figura-hunde)); filter: drop-shadow(0 14px 22px rgba(0, 0, 0, .35)); }
+h1 { position: absolute; left: var(--m); top: 74px; font: 900 96px/1.05 var(--fuente-titulo); letter-spacing: -.01em; text-transform: uppercase; white-space: nowrap; }
+h1 em { font-style: normal; color: var(--acento); }
+
+/* la lista: mismas columnas y misma altura en todas las filas (número, qué, detalle) */
+ol { position: absolute; left: var(--m); right: var(--m); top: var(--arriba); height: calc(1230px - var(--arriba)); list-style: none; padding: 0; display: grid; grid-auto-rows: 1fr; }
+li { display: grid; grid-template-columns: var(--col-num) var(--col-txt) 1fr; align-items: baseline; align-content: center; border-top: 1.5px solid var(--raya); }
+li:first-child { border-top: 0; }
+li i { font: 900 38px/1 var(--fuente-titulo); font-style: normal; color: var(--acento); }
+li b { font-size: 40px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
+li span { font-size: 32px; color: var(--suave); white-space: nowrap; }
+li.clave b, li.clave span { color: var(--acento); }
+li s { text-decoration: none; color: var(--negativo); }
+/* una cantidad sobre un total: --v es el porcentaje */
+li .barra { align-self: center; height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--suave) var(--v), var(--raya) var(--v)); }
+li.clave .barra { background: linear-gradient(90deg, var(--acento) var(--v), var(--raya) var(--v)); }
+
+.pie { position: absolute; left: var(--m); right: var(--m); top: 1230px; height: 120px; padding-bottom: 28px; border-top: 1.5px solid var(--raya); display: flex; justify-content: space-between; align-items: center; font-size: 28px; font-weight: 500; color: var(--suave); }
+.pie img.logo { height: 34px; width: auto; }

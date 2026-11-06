@@ -1,0 +1,83 @@
+{
+  "_leeme": "Copiá este archivo a <publicar>/linkedin/busquedas.json y completá oferta, muestra y firma. Las búsquedas de posteos usan la sintaxis de la barra de LinkedIn: como mucho 5 operadores OR/AND por búsqueda (con más, LinkedIn devuelve vacío). Ajustalas con lo que descartes en el planner.",
+  "oferta": "Qué vendés, en una o dos frases. Por ejemplo: hacemos el contenido de redes de una empresa con IA, cada semana, y el dueño lo aprueba desde el celular.",
+  "muestra": "Lo que ofrecés como primer paso, sin precio. Por ejemplo: una semana de contenido de muestra hecha con su marca, que le mostramos en una llamada corta.",
+  "firma": "Tu nombre · Tu marca",
+  "paises": [
+    "ar",
+    "cl"
+  ],
+  "paises_posteos": [
+    "ar",
+    "bo",
+    "br",
+    "cl",
+    "co",
+    "cr",
+    "cu",
+    "do",
+    "ec",
+    "gt",
+    "hn",
+    "mx",
+    "ni",
+    "pa",
+    "pe",
+    "pr",
+    "py",
+    "sv",
+    "uy",
+    "ve"
+  ],
+  "rubros_preferidos": "inmobili|construc|salud|retail|moda|alimento|educa|turismo",
+  "modelo_clasificar": "gemini-3.5-flash-lite",
+  "modelo_textos": "gemini-3.8-flash",
+  "posteos": [
+    "\"busco agencia de marketing\" OR \"busco una agencia de marketing\" OR \"buscamos agencia de marketing\"",
+    "\"busco agencia de contenido\" OR \"busco agencia de redes\" OR \"busco agencia de redes sociales\" OR \"busco agencia digital\"",
+    "\"recomienden una agencia\" OR \"me recomiendan una agencia\" OR \"recomiendan alguna agencia\" OR \"recomendación de agencia\"",
+    "\"me recomiendan un community manager\" OR \"recomienden un community manager\" OR \"busco community manager freelance\"",
+    "\"alguien que maneje las redes\" OR \"alguien que me maneje las redes\" OR \"quien me maneje las redes\" OR \"alguien que lleve las redes\"",
+    "\"buscamos community manager\" OR \"busco community manager\" OR \"estamos buscando community manager\"",
+    "\"busco creador de contenido\" OR \"buscamos creador de contenido\" OR \"busco quien haga contenido\"",
+    "\"busco editor de video\" OR \"buscamos editor de video\" OR \"busco editor de reels\"",
+    "\"automatizar el marketing de mi empresa\" OR \"automatizar las redes de mi empresa\" OR \"automatizar el contenido de mi empresa\""
+  ],
+  "posteos_ia": [
+    "\"recomendaciones de agencia\" OR \"recomendaciones de agencias\" OR \"recomendación de agencia\" OR \"buscando recomendaciones de agencia\" OR \"recomienden agencia\"",
+    "\"se busca agencia\" OR \"buscando agencia\" OR \"estamos buscando una agencia\" OR \"estoy buscando una agencia\" OR \"buscamos una agencia\" OR \"busco una agencia\"",
+    "\"busco agencia de contenidos\" OR \"buscamos agencia de contenidos\" OR \"agencia de contenidos para\" OR \"busco agencia de marketing digital\"",
+    "\"con IA\" AND (\"busco agencia\" OR \"buscamos agencia\" OR \"buscando agencia\" OR \"una agencia que\")",
+    "\"busco consultor de IA\" OR \"busco consultor en IA\" OR \"buscamos consultor de IA\" OR \"busco experto en IA\" OR \"busco especialista en IA\" OR \"recomienden un experto en IA\"",
+    "\"agencia con IA\" OR \"agencia que use IA\" OR \"agencia que trabaje con IA\" OR \"agencia que ya tenga\"",
+    "\"agencia de marketing con IA\" OR \"agencia de contenido con IA\" OR \"agencia de contenidos con IA\" OR \"agencia de IA\"",
+    "\"me ayude a automatizar\" OR \"nos ayude a automatizar\" OR \"ayudarme a automatizar\" OR \"quién me ayuda a automatizar\" OR \"alguien que automatice\"",
+    "\"contenido con IA\" AND (recomiendan OR recomienden OR \"me ayude\" OR \"nos ayude\")",
+    "\"contenido con IA\" AND (\"busco agencia\" OR \"buscamos agencia\" OR \"busco alguien\" OR \"buscamos alguien\")",
+    "\"marketing con IA\" AND (recomiendan OR recomienden OR \"me ayude\" OR \"nos ayude\")",
+    "\"marketing con IA\" AND (\"busco agencia\" OR \"buscamos agencia\" OR \"busco alguien\" OR \"buscamos alguien\")",
+    "\"automatización de marketing\" AND (recomiendan OR recomienden OR \"me ayude\" OR \"nos ayude\")",
+    "\"automatización de marketing\" AND (\"busco agencia\" OR \"buscamos agencia\" OR \"busco alguien\" OR \"buscamos alguien\")",
+    "\"automatización de contenido\" AND (recomiendan OR busco OR buscamos OR \"me ayude\")"
+  ],
+  "google_jobs": [
+    "community manager",
+    "social media manager",
+    "creador de contenido"
+  ],
+  "computrabajo": [
+    "community-manager",
+    "social-media",
+    "redes-sociales",
+    "creador-de-contenido",
+    "editor-de-video",
+    "marketing-digital",
+    "content-manager"
+  ],
+  "getonbrd": [
+    "community manager",
+    "social media",
+    "content",
+    "marketing"
+  ]
+}
