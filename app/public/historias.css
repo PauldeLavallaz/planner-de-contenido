@@ -340,6 +340,17 @@
 .sb-act.on { background: var(--ink); color: var(--surface); box-shadow: none; }
 .sb-act[hidden] { display: none; }
 .sb-n { font: 700 11px var(--mono); background: var(--accent); color: #fff; border-radius: 9px; padding: 1px 6px; }
+/* Historial de versiones a la izquierda de la historia grande. */
+.sb-vers { width: 132px; display: flex; flex-direction: column; gap: 8px; padding: 2px 4px; overflow-y: auto; max-height: min(82vh, 880px); }
+.sb-vers[hidden] { display: none; }
+.sb-vers h3 { margin: 2px 2px 2px; font: 600 11px var(--sans); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); }
+.sb-ver { display: flex; flex-direction: column; gap: 4px; padding: 5px; border-radius: 10px; background: none; border: 0; cursor: pointer; text-align: left; box-shadow: 0 0 0 1px var(--line); }
+.sb-ver:hover { box-shadow: 0 0 0 1px var(--ink); }
+.sb-ver.on { box-shadow: 0 0 0 2px var(--accent); }
+.sb-ver img { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 7px; background: #000; display: block; }
+.sb-ver span { font: 500 11px/1.25 var(--sans); color: var(--ink); }
+.sb-ver span b { font-weight: 700; }
+.sb-act.primary-act { background: var(--ink); color: var(--surface); box-shadow: none; }
 .sb-fb { width: 340px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); border-radius: 12px; padding: 14px; box-shadow: 0 0 0 1px var(--line); min-height: 0; }
 .sb-fb[hidden] { display: none; }
 .fb-top { display: flex; align-items: center; justify-content: space-between; }
@@ -351,7 +362,7 @@
 .fb-copy { width: 100%; justify-content: center; }
 #sqFeedback { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border-radius: 12px; padding: 14px; box-shadow: 0 0 0 1px var(--line); min-height: 220px; }
 #sqFeedback .fb-list { max-height: 320px; }
-@media (max-width: 860px) { .sb-main { flex-direction: column; } .sb-fb { width: auto; } .sb-body img, .sb-body video { height: min(58vh, 620px); } }
+@media (max-width: 860px) { .sb-vers { width: auto; flex-direction: row; max-height: none; } .sb-ver { width: 84px; flex: none; } .sb-main { flex-direction: column; } .sb-fb { width: auto; } .sb-body img, .sb-body video { height: min(58vh, 620px); } }
 .s-libre { margin-left: auto; font-size: 11px; line-height: 18px; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; cursor: pointer; white-space: nowrap; }
 .s-libre:hover { color: var(--ink); background: var(--sunk); }
 .s-aviso { flex-basis: 100%; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 4px 8px; font-size: 12.5px; }

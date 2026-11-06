@@ -29,7 +29,7 @@ Cada semana es una carpeta adentro de `historias/` en tu carpeta de contenido (s
     originales/                 los videos y audios tal como los subiste al editor
     historias/                  las imágenes renderizadas (PNG), el MP4 de las que tienen video o voz, y su chequeo
     feedback/                   las notas que dejás desde el planner
-    tmp/ediciones/              el respaldo de cada edición hecha en el planner
+    tmp/ediciones/              las versiones anteriores de cada historia (el editor, Volver a una versión y Claude Code al rehacerla)
 ```
 
 Una semana puede empezar cualquier día: el planner muestra, en cada semana de calendario, los días que caen en ella. Si dos carpetas de la misma cuenta tienen el mismo día, manda la más reciente (una iteración nueva de ese día reemplaza a la anterior). Es por día, no por semana: una carpeta nueva con algunos días no tapa los otros días de una anterior, y la semana muestra los de las dos, cada uno con su carpeta.
@@ -68,12 +68,12 @@ Una semana puede empezar cualquier día: el planner muestra, en cada semana de c
 | `dias[].tipo` | `venta`, `recurso`, `conciencia` o `libre` (pinta el color de la fila). |
 | `dias[].formula`, `tema` | Etiquetas que se ven en la fila. |
 | `dias[].recurso` | `id` del recurso u oferta de ese día. |
-| `dias[].cierre` | Cómo cierra el día: `palabra` (Respondé PALABRA), `respuesta` (una pregunta con «Respondé…») o `ninguno`. |
+| `dias[].cierre` | Cómo cierra el día: `palabra` (Respondé PALABRA), `respuesta` (una pregunta con «Respondé…»), `perfil` (un CTA escrito al link del perfil, sin pedir respuesta; el planner lo muestra como «CTA al link del perfil») o `ninguno`. |
 | `historias[].imagen` | El PNG, relativo a la carpeta de la semana. Su HTML es `fuente/<mismo nombre>.html`. |
 | `historias[].sticker` | Opcional y viejo: Instagram no deja poner stickers interactivos (encuesta, link, mención, caja de preguntas, slider) por la API, así que las historias se diseñan sin ellos y el cierre va escrito. Si una historia todavía lo tiene anotado, sale igual por Postiz, sin el sticker. |
 | `recursos[]` | `nombre`, `palabra` (palabra clave para comentar) o `entrega`, `dm` (mensaje para copiar), `url`, `preview` o `archivo` (para verlo), `estado: "listo"`. |
 
-El planner escribe en `semana.json` sólo cuando editás una historia: marca `editado`, corrige `texto` (guarda el anterior en `texto_original`), el `fondo` y el `sticker`.
+El planner escribe en `semana.json` sólo cuando editás una historia o volvés a una versión anterior: marca `editado`, corrige `texto` (guarda el anterior en `texto_original`), el `fondo` y el `sticker`; al volver a una versión, también `version` (cuál y cuándo). Una historia con `editado` no la regenera ni la vuelve a renderizar ningún armador: el render pisaría lo que guardaste.
 
 ## Armar las historias (el motor)
 
@@ -99,6 +99,8 @@ Un video real de fondo (vos filmando la pantalla con el celular, una grabación 
 2. La voz en off va a `fuente/assets/audio/` y entra en la historia como `<audio class="voz" src="assets/audio/voz.wav" data-inicio="0.25">`.
 3. `render.py` saca esa historia en MP4, cuadro a cuadro y con la voz mezclada, y deja de imagen el cuadro del segundo 1. La historia termina con la voz.
 
+**Video de fondo sin voz.** Un tramo sin sonido de un reel propio o de una campaña también puede ir de fondo, con el texto arriba: el texto queda quieto y se mueve el fondo. Los cuadros salen igual (`fondo_video.py`, o `ffmpeg -ss <desde> -t <seg> -i reel.mp4 -vf fps=30,scale=1080:1920 -q:v 5 fuente/assets/videos/<id>/%03d.jpg`) y van como fondo: `<div class="fondo"><img src="assets/videos/<id>/001.jpg" data-secuencia="assets/videos/<id>/%03d.jpg" data-cuadros="N" data-fps="30" data-inicio="0" data-loop></div>` (lo mismo que deja el editor al elegir un video de fondo), con `data-duracion` de la historia igual al largo del tramo. `render.py` la saca en MP4 y su PNG es el cuadro del segundo 1; en `semana.json` suma `video` y `formato: "video"`. Si el reel trae subtítulos quemados, la caja de texto los tapa o el video se acerca y se corre para dejarlos afuera. Un reel de fondo va desde su gancho, que es lo mejor que tiene.
+
 Todo eso se hace también desde el editor (ver abajo). Criterio y guion de la voz: [video-con-voz.md](../.claude/skills/historias/references/video-con-voz.md).
 
 ### Recursos listos
@@ -112,7 +114,7 @@ Claude Code puede armar la semana entera: pedile «armá la semana de historias�
 **Editar** en la vista grande, o el ✏️ que aparece sobre cada miniatura de la semana, abre la historia en un editor del estilo de Canva:
 
 - tocás un texto, emoji o imagen y lo arrastrás (se mueve mientras tenés el botón apretado), cambiás su tamaño o lo girás, con imán al centro y a las zonas seguras;
-- arriba, la barra cambia según lo elegido: letra, tamaño, color, fondo del texto (caja o resaltado) y espaciado;
+- arriba, la barra cambia según lo elegido: letra, tamaño, color, fondo del texto (caja o resaltado) y espaciado. El selector de color sugiere primero los colores de esa historia y los de las otras historias del mismo día, para que la secuencia combine;
 - doble clic corrige el texto ahí mismo; lo que marcás toma color o resaltado desde la misma barra;
 - **agrupar y desagrupar:** un bloque con varias cajas se elige entero; **Desagrupar** (o Cmd+Shift+G) deja cada pieza suelta en su lugar. Con Shift+clic elegís varias, que se mueven juntas, y **Agrupar** (o Cmd+G) las une;
 - **recortar:** en una imagen, **✂️ Recortar** (o doble clic) y arrastrás los bordes como en Canva; adentro del recorte la imagen se encuadra arrastrándola. **🔒 Tapar** la desenfoca con un candado, para mostrar un recurso sin revelarlo;
@@ -125,6 +127,10 @@ Claude Code puede armar la semana entera: pedile «armá la semana de historias�
 
 **Guardar y renderizar** escribe el HTML, vuelve a sacar el PNG con el motor y muestra el chequeo. Con video de fondo o voz en off saca también el MP4, con la voz mezclada: esa historia se publica como video. La versión anterior queda en `tmp/ediciones/`. Para el video y la voz hace falta ffmpeg. Si la historia ya estaba en Postiz, el planner la marca «Imagen nueva» y se reemplaza con la próxima propuesta de **Programar**.
 
+### Versiones
+
+Cuando una historia se generó más de una vez, la vista grande muestra a la izquierda su **historial de versiones**: la actual y las anteriores, de la más nueva a la más vieja. Son las carpetas de `<semana>/tmp/ediciones/`: lo que guarda el editor antes de cada cambio y lo que deja Claude Code al rehacer una historia. Tocar una la muestra grande (con su video, si tenía) y **Volver a esta versión** la deja como la historia, con su HTML y su MP4; la que estaba queda guardada como una versión más, así que nada se pierde. Si ya estaba en Postiz, el planner la marca «Imagen nueva» y se reemplaza con la próxima propuesta de **Programar**.
+
 **Tus fotos:** poné en `planner.config.json` la carpeta donde tenés tus fotos (`historias.fotos`). El editor las lista por subcarpeta y las copia a la semana al usarlas. Sin esa carpeta, las subís desde el editor.
 
 ## Feedback
@@ -135,7 +141,7 @@ En la vista grande, **Feedback** abre al costado las notas de esa historia: deta
 
 1. Elegí **Postiz** en los días que querés agendar y la hora de la primera historia (15:00 si no la cambiás); las siguientes tienen su hora cada 2 minutos, en orden. Todas salen por Postiz: ninguna va a mano. («A mano» sólo aparece en un día que lo tenía en un borrador viejo.)
 2. **Programar** toma **todo lo pendiente** de una vez, no sólo la semana que estás mirando: las secuencias de hoy en adelante de todas las semanas y de todas las cuentas, las descartadas que siguen en la cola y las notas sin corregir de cualquier semana. El número del botón cuenta los días que van a Postiz o salen de Postiz y las notas. El panel lo muestra por semana y por día; un día ya agendado tal cual dice «ya en Postiz así» y no suma. Lo que ya pasó no lleva acción.
-3. **Preparar confirmación** guarda una sola propuesta en `<publicar>/.planner/proposal-historias-<id>.json` (con `semanas`, `cuentas` y `desde`, el día desde el que cuenta) y te da un solo mensaje, con la agenda por semana y el feedback de cada día.
+3. **Preparar confirmación** guarda una sola propuesta en `<publicar>/.planner/proposal-historias-<id>.json` (con `semanas`, `cuentas` y `desde`, el día desde el que cuenta) y te da un solo mensaje, con la agenda por semana y el feedback de cada día. Su primera línea dice lo que hace («[Agenda] Programar 5 historias del 9 al 11 nov en tucuenta», «[Feedback] Corregir una historia del 10 nov») y, si abrís una conversación nueva con él, queda como su título.
 4. Pegalo en Claude Code. Corre `python3 engine/historias.py aplicar <id> --ejecutar`: agenda, mueve, reemplaza, quita o pausa cada historia por `engine/cola.py`.
 
 Copiar el mensaje no agenda nada. El feedback sin corregir (notas pendientes, o copiadas que nadie tomó) va listado debajo de la agenda y el mensaje trae una parte de **Contenido** para que Claude Code lo corrija primero. Una historia con feedback, o todo el día si la nota es de la secuencia, queda retenida en su lugar: borrador en Postiz a su hora, marcado `espera_feedback`. La cadena no la publica con la imagen vieja ni sigue con las que vienen después (avisa arriba de la pestaña cuando llega su hora) hasta que confirmes la versión corregida con **Programar**. Si sólo hay feedback, la propuesta sale igual, sin cambios de agenda. Las notas de una secuencia descartada esperan a que la recuperes.

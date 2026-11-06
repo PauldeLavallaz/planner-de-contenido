@@ -98,6 +98,9 @@ piso de las cuentas grandes y ubicá las intermedias entre 10% y 5%.
 - **Un tema o una fórmula trae más respuestas que el resto dos semanas seguidas**: repetir la estructura con otro
   tema; el que no trae respuestas en dos intentos se cambia de estructura antes de abandonar el tema.
 - Sin números no declares ganadores; decí qué medir.
+- **Una semana sin pedido de respuesta** (cierre escrito al link del perfil, `cierre: perfil`): las respuestas no dicen
+  nada. Se mira cuántos vieron la primera, cuántos llegaron a la última y los envíos; las visitas al perfil, desde las
+  estadísticas de la app.
 
 **Tasas de referencia.** Salen del **análisis de paneles**: 61 secuencias de cuentas de referencia y, de dos de ellas,
 los paneles con las estadísticas de cada historia. Una es una cuenta de IA de referencia (unas 4.000 vistas por

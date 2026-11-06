@@ -4,7 +4,7 @@
 // si se publica y a qué hora van en un borrador propio (historias-draft.json); Postiz sólo cambia cuando confirmás la
 // propuesta en el chat. La métrica principal son las respuestas de cada día.
 const TIPO_NAME = { venta: 'Venta', recurso: 'Recurso', conciencia: 'Conciencia', libre: 'Libre' };
-const CIERRE_NAME = { encuesta: 'Sin pedido · encuesta', slider: 'Sin pedido · slider', caja: 'Caja de preguntas', ninguno: 'Sin pedido' };
+const CIERRE_NAME = { encuesta: 'Sin pedido · encuesta', slider: 'Sin pedido · slider', caja: 'Caja de preguntas', ninguno: 'Sin pedido', perfil: 'CTA al link del perfil' };
 const STORY_METRIC_KEYS = ['respuestas', 'vistas_primera', 'vistas_ultima'];
 const MODE_NAME = { postiz: 'Postiz', mano: 'A mano', no: 'No se publica' };
 const STORY_DEFAULT_HOUR = '15:00'; // la hora de la primera historia de un día que pasa a Postiz
@@ -1448,14 +1448,16 @@ function seUsedColors() {
   const set = new Set();
   for (const x of se.root.querySelectorAll('*')) { const cs = se.w.getComputedStyle(x); for (const v of [x.style.color, x.style.getPropertyValue('--caja'), x.matches('.caja, .resalte') ? cs.backgroundColor : '']) { const h = seHex(v); if (h && h !== '#000000' && h !== '#ffffff') set.add(h); } }
   if (se.root.style.backgroundColor) set.add(seHex(se.root.style.backgroundColor));
-  const ac = seAcentoHex(); return [...set].filter(h => h && h !== ac).slice(0, 10);
+  // Después, los de las otras historias del mismo día: si la 4 usó un verde, la 5 lo tiene sugerido y la secuencia combina.
+  for (const h of se.src?.colores_secuencia || []) set.add(seHex(h));
+  const ac = seAcentoHex(); return [...set].filter(h => h && h !== ac).slice(0, 14);
 }
 function seOpenPop(btn) {
   const kind = btn.dataset.pop, act = btn.dataset.act, el = se.sel, pop = $('sePop');
   let html = '';
   if (kind === 'color') {
     const cur = btn.dataset.cur, auto = btn.dataset.auto, sw = (h, n, extra = '') => `<button class="se-color ${cur === h || seHex(cur) === h ? 'on' : ''}" data-pick="${h}" title="${esc(n)}" style="background:${h === 'acento' ? seAcentoHex() : h}"${extra}></button>`;
-    html = `<h5>De esta historia</h5><div class="se-colors">${act === 'acento' ? sw(seAcentoHex(), 'El acento actual') : `<button class="se-color acento ${cur === 'acento' ? 'on' : ''}" data-pick="acento" title="El acento de la historia" style="background:${seAcentoHex()};color:${seOn(seAcentoHex())}">A</button>`}${seUsedColors().map(h => sw(h, h)).join('')}</div>
+    html = `<h5>${se.src?.colores_secuencia?.length ? 'De esta historia y las del día' : 'De esta historia'}</h5><div class="se-colors">${act === 'acento' ? sw(seAcentoHex(), 'El acento actual') : `<button class="se-color acento ${cur === 'acento' ? 'on' : ''}" data-pick="acento" title="El acento de la historia" style="background:${seAcentoHex()};color:${seOn(seAcentoHex())}">A</button>`}${seUsedColors().map(h => sw(h, h)).join('')}</div>
       <h5>Colores de Instagram</h5><div class="se-colors">${SE_PALETTE.map(([h, n]) => sw(h, n)).join('')}</div>
       <div class="se-pop-row"><label class="se-color custom" title="Elegir cualquier color"><input type="color" data-pick-input value="${seHex(cur) || '#ff3366'}"></label><span>Otro color</span>${auto ? `<button class="se-b" data-pick="">${esc(auto)}</button>` : ''}</div>`;
   } else if (kind === 'font') html = SE_FONTS.map(([v, n]) => `<button class="se-pop-item ${seFontValue(el) === v ? 'on' : ''}" data-pick="${v}" style="font-family:${v === 'serif' ? 'Georgia, serif' : v === 'maquina' ? '\'Courier New\', monospace' : 'var(--sans)'}">${n}</button>`).join('');
@@ -1769,8 +1771,9 @@ function openStory(key) {
   sbState = { s, i: Number(i) || 0, byImg: storyByImg() };
   showStory(); if (!$('storyBox').open) $('storyBox').showModal();
 }
-function showStory() {
+function showStory(mismaHistoria) {
   const { s, i, byImg } = sbState, img = s.historias[i], h = byImg[img] || {};
+  $('sbFbBtn').hidden = false; $('sbRestore').hidden = true; $('sbActual').hidden = true;
   $('sbTitle').textContent = `${dayLong(s.fecha)} · ${TIPO_NAME[s.dia.tipo] || s.dia.tipo} ${s.dia.formula || ''} · ${i + 1} de ${s.historias.length}`;
   $('sbImg').src = mediaUrl(img) + '&v=' + (h.mtime || 0); $('sbImg').alt = h.texto || '';
   // Historia con video y voz en off: se ve y se escucha el MP4 que se publica.
@@ -1784,12 +1787,62 @@ function showStory() {
   $('sbPrev').disabled = i === 0; $('sbNext').disabled = i === s.historias.length - 1;
   sbFbCount(stories.data?.feedback?.[s.orig]?.historias?.[img] || 0);
   if (!$('sbFeedback').hidden) loadStoryFeedback('sb', img);
+  if (mismaHistoria && sbVer?.img === img) { sbVer.sel = null; renderVersions(); } else loadVersions(img);
 }
 const sbFbCount = n => { $('sbFbN').hidden = !n; $('sbFbN').textContent = n || ''; };
 $('sbEdit').onclick = () => { $('sbVid').pause(); openEditor(); };
 $('sbFbBtn').onclick = () => {
   const open = $('sbFeedback').hidden; $('sbFeedback').hidden = !open; $('sbFbBtn').classList.toggle('on', open);
   if (open && sbState) { loadStoryFeedback('sb', sbState.s.historias[sbState.i]); setTimeout(() => $('sbFeedback').querySelector('[data-sfb="text"]')?.focus(), 60); }
+};
+// ---------- historial de versiones ----------
+// Cuando una historia se generó más de una vez, a la izquierda de la historia grande están la actual y las anteriores (lo
+// que guarda el editor y lo que deja Claude Code al rehacerla, en <semana>/tmp/ediciones/). Tocar una la muestra grande y
+// «Volver a esta versión» la deja como la historia; la que estaba queda guardada como una versión más.
+let sbVer = null; // { img, list, sel }
+async function loadVersions(img) {
+  sbVer = { img, list: sbVer?.img === img ? sbVer.list : [], sel: null };
+  renderVersions();
+  try { const r = await api('stories/versions?imagen=' + encodeURIComponent(img)); if (sbVer?.img === img) { sbVer.list = r.versiones || []; renderVersions(); } }
+  catch { if (sbVer?.img === img) { sbVer.list = []; renderVersions(); } }
+}
+const verFecha = at => new Date(at).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+function renderVersions() {
+  const box = $('sbVers'), v = sbVer;
+  if (!v || !v.list.length) { box.hidden = true; box.innerHTML = ''; return; }
+  const h = sbState?.byImg?.[v.img] || {}, thumb = p => '/api/planner/poster?path=' + encodeURIComponent(p);
+  box.hidden = false;
+  box.innerHTML = '<h3>Versiones</h3>'
+    + `<button class="sb-ver ${v.sel ? '' : 'on'}" data-sver="" title="La que está ahora"><img src="${thumb(v.img)}&v=${h.mtime || 0}" alt=""><span><b>Actual</b></span></button>`
+    + v.list.map(x => `<button class="sb-ver ${v.sel === x.id ? 'on' : ''}" data-sver="${esc(x.id)}" title="Guardada el ${esc(verFecha(x.at))}"><img src="${thumb(x.imagen)}" alt="" loading="lazy"><span>${esc(verFecha(x.at))}${x.video ? ' · ▶' : ''}</span></button>`).join('');
+  box.querySelectorAll('[data-sver]').forEach(b => b.onclick = () => selectVersion(b.dataset.sver || null));
+}
+function selectVersion(id) {
+  if (!sbVer) return;
+  if (!id) { showStory(true); return; }
+  const x = sbVer.list.find(y => y.id === id); if (!x) return;
+  sbVer.sel = id; renderVersions();
+  const sv = $('sbVid'), vid = x.video ? mediaUrl(x.video) : null;
+  $('sbImg').src = mediaUrl(x.imagen); $('sbImg').hidden = !!vid; sv.hidden = !vid;
+  if (vid) { sv.dataset.src = vid; sv.src = vid; sv.play().catch(() => {}); }
+  else if (sv.dataset.src) { sv.pause(); sv.removeAttribute('src'); delete sv.dataset.src; sv.load(); }
+  $('sbEdit').hidden = true; $('sbFbBtn').hidden = true; $('sbRestore').hidden = false; $('sbActual').hidden = false;
+}
+$('sbActual').onclick = () => selectVersion(null);
+$('sbRestore').onclick = async () => {
+  if (!sbVer?.sel) return;
+  const img = sbVer.img, id = sbVer.sel;
+  try {
+    $('sbRestore').disabled = true;
+    const r = await api('stories/versions/restore', post({ imagen: img, id }));
+    const queued = stories.data?.cola?.[img];
+    toast(queued && queued.estado !== 'publicada' ? 'Volviste a esa versión. Ya estaba en Postiz: tocá Programar para reemplazarla.' : 'Volviste a esa versión. La que estaba quedó en el historial.');
+    stories.week = null; await loadStories();
+    const s = allSeqs().find(x => x.orig === sbState?.s.orig); if (s) sbState = { ...sbState, s, byImg: storyByImg() };
+    sbVer = { img, list: r.versiones || [], sel: null };
+    if ($('storyBox').open) showStory(true);
+  } catch (e) { toast(e.message); }
+  finally { $('sbRestore').disabled = false; }
 };
 // ---------- feedback de historias ----------
 // Notas escritas o grabadas que persisten en la carpeta de la semana (feedback/) y se copian para Claude Code. Las de

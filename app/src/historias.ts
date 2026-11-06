@@ -8,6 +8,7 @@ import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:
 import { createHash, randomUUID } from 'node:crypto';
 import { CONFIG_PATH, ENGINE_DIR, MOTOR_DIR, PYTHON, REPO_DIR, paths } from './config.ts';
 import { exec, fileRead, markFeedbackSent, OPEN, posix, readFeedback, ROOT, STATE, TYPES, validatePlannerFeedback, within, write } from './publication-planner.ts';
+import { cantidad, capitalizar, conTitulo, diaCorto, diasMensaje, listaNatural, nombreMensaje, tituloMensaje } from './titulo-mensaje.ts';
 
 const STORIES = () => paths().stories;
 const relRoot = (p: string) => posix(relative(ROOT(), p));
@@ -204,6 +205,47 @@ function storyPaths(imagen: any) {
   if (extname(png).toLowerCase() !== '.png' || basename(dirname(png)) !== 'historias' || !(within(STORIES(), run) || run === STORIES()) || !existsSync(resolve(run, 'semana.json'))) throw new Error('Historia inválida');
   return { png, run, stem, html: resolve(run, 'fuente', stem + '.html') };
 }
+// Versiones anteriores de una historia: cada carpeta de <semana>/tmp/ediciones/ que guarde <archivo>.png. Ahí quedan las
+// que guarda el editor antes de cada cambio (<fecha UTC>-<archivo>/) y las que deja Claude Code al rehacer una historia.
+// Sin repetidas ni la igual a la actual, de la más nueva a la más vieja.
+export function storyVersions(run: string, stem: string, png: string) {
+  const dir = resolve(run, 'tmp/ediciones'); if (!existsSync(dir)) return [];
+  // Una historia de video se compara también por su MP4: dos videos distintos pueden tener el mismo cuadro fijo.
+  const huella = (f: string) => { const h = createHash('sha1').update(readFileSync(f)), mp4 = f.replace(/\.png$/, '.mp4'); if (existsSync(mp4)) h.update(readFileSync(mp4)); return h.digest('hex'); };
+  const vistas = new Set<string>(existsSync(png) ? [huella(png)] : []), out: any[] = [];
+  for (const id of readdirSync(dir)) {
+    if (id.startsWith('.') || !/^[A-Za-z0-9_.-]+$/.test(id)) continue;
+    const f = resolve(dir, id, stem + '.png'); if (!existsSync(f)) continue;
+    const h = huella(f); if (vistas.has(h)) continue; vistas.add(h);
+    const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})-/.exec(id);
+    const at = m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z` : statSync(f).mtime.toISOString();
+    const mp4 = resolve(dir, id, stem + '.mp4');
+    out.push({ id, at, imagen: relRoot(f), video: existsSync(mp4) ? relRoot(mp4) : null, editable: existsSync(resolve(dir, id, stem + '.html')) });
+  }
+  return out.sort((a, b) => b.at.localeCompare(a.at));
+}
+// Los colores de las otras historias de la misma secuencia (el día de semana.json), para sugerirlos en el editor: si la
+// historia 4 usó un verde, la 5 lo tiene a mano y la secuencia combina. Toma los acentos del día y los colores puestos a
+// mano en letras y cajas.
+const hexOf = (v: string) => {
+  v = v.trim(); let m = /^#([0-9a-f]{3}|[0-9a-f]{6})\b/i.exec(v);
+  if (m) return '#' + (m[1].length === 3 ? [...m[1]].map(x => x + x).join('') : m[1]).toLowerCase();
+  m = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i.exec(v); return m ? '#' + m.slice(1, 4).map(x => Math.min(255, +x).toString(16).padStart(2, '0')).join('') : '';
+};
+export function storySequenceColors(run: string, stem: string) {
+  const sem = fileRead(resolve(run, 'semana.json'), { dias: [] }) as any, stemOf = (h: any) => basename(String(h?.imagen || ''), '.png');
+  const dia = (sem.dias || []).find((d: any) => (d.historias || []).some((h: any) => stemOf(h) === stem));
+  const out = new Set<string>();
+  for (const h of dia?.historias || []) {
+    const s = stemOf(h), p = resolve(run, 'fuente', s + '.html'); if (!s || s === stem || !existsSync(p)) continue;
+    const html = readFileSync(p, 'utf8'), cuerpo = html.split(/<body\b/i)[1] || '';
+    const vals = [...html.matchAll(/--acento2?\s*:\s*([^;}"]+)/g)].map(m => m[1]);
+    for (const st of cuerpo.matchAll(/\bstyle\s*=\s*"([^"]*)"/gi))
+      for (const m of st[1].matchAll(/(?:^|;)\s*(?:color|background|background-color|--caja|--trazo|--acento2?)\s*:\s*([^;]+)/gi)) vals.push(m[1]);
+    for (const v of vals) { const x = hexOf(v.replace(/^var\([^)]*\)$/, '')); if (x && x !== '#000000' && x !== '#ffffff') out.add(x); }
+  }
+  return [...out].slice(0, 12);
+}
 // Lo que el editor no puede cambiar de una historia: sus scripts, manejadores ni archivos fuera de assets/.
 const scriptsOf = (h: string) => [...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].map(m => ((/\bsrc\s*=\s*["']?([^"'\s>]+)/i.exec(m[1]) || [])[1] || '') + '|' + m[2].trim()).join('\n');
 const refsOf = (h: string) => new Set([...h.matchAll(/\b(?:src|href)\s*=\s*["']([^"']+)["']/gi)].map(m => m[1]));
@@ -285,7 +327,15 @@ function storyFeedbackCounts(run: string) {
   }
   return out;
 }
-function storyFeedbackPrompt(run: string, dia: any, entries: any[]) {
+// La primera línea del mensaje: «[Feedback] Corregir 2 historias del 6 nov: «Tema»» o «Rehacer las historias del 6 nov».
+function storyFeedbackDesc(dia: any, entries: any[]) {
+  const pending = entries.filter(e => e.estado !== 'aplicado' && e.estado !== 'en_curso'), n = new Set(pending.map(e => e.imagen)).size, tema = dia.tema ? `: ${nombreMensaje(dia.tema, 36)}` : '';
+  return pending.some(e => e.alcance === 'secuencia') ? `Rehacer las historias del ${diaCorto(dia.fecha)}${tema}` : `Corregir ${n === 1 ? 'una historia' : n + ' historias'} del ${diaCorto(dia.fecha)}${tema}`;
+}
+export function storyFeedbackPrompt(run: string, dia: any, entries: any[]) {
+  return conTitulo(tituloMensaje('Feedback', storyFeedbackDesc(dia, entries)), storyFeedbackCuerpo(run, dia, entries));
+}
+function storyFeedbackCuerpo(run: string, dia: any, entries: any[]) {
   const pending = entries.filter(e => e.estado !== 'aplicado' && e.estado !== 'en_curso'), busy = entries.filter(e => e.estado === 'en_curso');
   const general = pending.filter(e => e.alcance === 'secuencia'), detalle = pending.filter(e => e.alcance !== 'secuencia').sort((a, b) => (a.n || 0) - (b.n || 0));
   let k = 0;
@@ -323,6 +373,22 @@ function storyFeedbackReply(ctx: any) { const entries = storyFeedbackOf(ctx.run,
 // esta semana y de la siguiente: las secuencias de hoy en adelante de todas las semanas y cuentas, las descartadas que
 // siguen en la cola y las notas sin corregir de cualquier semana. Lo que ya pasó no lleva acción.
 const AGENDA = ['agendar', 'mover', 'reemplazar'];
+// Lo que hace de verdad la propuesta de historias: «Programar 5 historias del 6 al 8 nov en micuenta», «Cambio de horario
+// de 2 historias del 7 nov». Es la primera línea del mensaje y el título de la conversación (ver titulo-mensaje.ts).
+export function storyProposalTitle(acciones: any[], fbDias: any[]) {
+  const de = (...k: string[]) => acciones.filter(a => k.includes(a.accion) && !a.sin_cambios), hist = (l: any[]) => cantidad(l.length, 'historia');
+  const nuevas = de('agendar', 'a_mano'), mueven = de('mover'), cambian = de('reemplazar'), salen = de('quitar'), descartan = de('descartar');
+  const partes = [nuevas.length && `programar ${hist(nuevas)} ${diasMensaje(nuevas.map(a => a.fecha))}`, mueven.length && `cambio de horario de ${hist(mueven)} ${diasMensaje(mueven.map(a => a.fecha))}`,
+    cambian.length && `cambiar la imagen de ${hist(cambian)}`, salen.length && `sacar ${hist(salen)} de la agenda`, descartan.length && `descartar ${hist(descartan)}`].filter(Boolean) as string[];
+  if (partes.length) {
+    const cuentas = [...new Set([...nuevas, ...mueven].map(a => a.cuenta))];
+    if (cuentas.length === 1 && cuentas[0]) partes[0] += ` en ${cuentas[0]}`;
+    if (fbDias.length) partes.push('corregir feedback');
+    return tituloMensaje('Agenda', capitalizar(listaNatural(partes)));
+  }
+  if (fbDias.length) return tituloMensaje('Feedback', fbDias.length === 1 ? storyFeedbackDesc(fbDias[0].d, fbDias[0].notas) : `Corregir historias de ${fbDias.length} días`);
+  return tituloMensaje('Agenda', `Confirmar ${hist(acciones.filter(a => a.sin_cambios))} ya agendadas`);
+}
 export function storyPlan(file: any, accts = igAccounts(), clock = storyClock()) {
   const { hoy, ahora } = clock, weeks = storyWeeks(), queue = storyQueue(), sems: Record<string, any> = {};
   const semOf = (e: any) => sems[storyKey(e.cuenta, e.week)] || (sems[storyKey(e.cuenta, e.week)] = storyWeekForPlanner(e));
@@ -552,8 +618,8 @@ export function registerStories(app: Hono) {
       const where = relRoot(resolve(STATE(), name)), esperan = contar('espera_feedback'), total = fbDias.reduce((k, x) => k + x.notas.length, 0);
       const partes = [agenda ? storyProposalPrompt(id, where, n, manual, destinos, { porSemana, quitar, descartar }) : `Propuesta de historias ${id} del planner (${where}): sólo feedback de contenido, sin cambios de agenda.`];
       if (fbDias.length) partes.push([`Contenido · feedback sin aplicar (${total} nota${total === 1 ? '' : 's'}). Corregilo primero${esperan ? `: ${esperan} historia${esperan === 1 ? '' : 's'} con feedback no se agenda${esperan === 1 ? '' : 'n'} ahora (quedan «espera_feedback» en la propuesta) y se programa${esperan === 1 ? '' : 'n'} cuando apruebes la versión nueva` : ''}.`,
-        ...fbDias.map(({ d, notas }) => storyFeedbackPrompt(d.run, d, notas))].join('\n\n'));
-      return c.json({ id, path: where, prompt: partes.join('\n\n'), feedback: total, esperan, semanas, cuentas });
+        ...fbDias.map(({ d, notas }) => storyFeedbackCuerpo(d.run, d, notas))].join('\n\n'));
+      return c.json({ id, path: where, prompt: conTitulo(storyProposalTitle(acciones, fbDias), partes.join('\n\n')), feedback: total, esperan, semanas, cuentas });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });
 
@@ -562,7 +628,7 @@ export function registerStories(app: Hono) {
     try {
       const { html, run, stem } = storyPaths(c.req.query('imagen'));
       if (!existsSync(html)) return c.json({ error: 'Esta historia no tiene su HTML en fuente/.' }, 404);
-      return c.json({ html: readFileSync(html, 'utf8'), mtime: Math.round(statSync(html).mtimeMs), base: '/api/planner/story-fuente/' + runId(run) + '/', stem });
+      return c.json({ html: readFileSync(html, 'utf8'), mtime: Math.round(statSync(html).mtimeMs), base: '/api/planner/story-fuente/' + runId(run) + '/', stem, colores_secuencia: storySequenceColors(run, stem) });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });
   app.get('/api/planner/story-fuente/*', c => {
@@ -766,6 +832,44 @@ export function registerStories(app: Hono) {
           const tmp = resolve(run, 'semana.json.' + randomUUID() + '.tmp'); writeFileSync(tmp, JSON.stringify(semana, null, 1) + '\n'); renameSync(tmp, resolve(run, 'semana.json'));
         }
         return c.json({ ok: true, avisos, mtime: Math.round(statSync(png).mtimeMs), html_mtime: Math.round(statSync(html).mtimeMs) });
+      } finally { storyBusy = false; }
+    } catch (e) { return c.json({ error: (e as Error).message }, 400); }
+  });
+
+  // Historial de versiones de una historia: la actual y las que quedaron en tmp/ediciones/, para volver a una desde el
+  // planner sin pedírselo a Claude Code.
+  app.get('/api/planner/stories/versions', c => {
+    try { const { png, run, stem } = storyPaths(c.req.query('imagen')); return c.json({ versiones: storyVersions(run, stem, png) }); }
+    catch (e) { return c.json({ error: (e as Error).message }, 400); }
+  });
+  // Volver a una versión: la actual queda guardada como una versión más (nada se pierde) y la elegida pasa a ser la
+  // historia, con su HTML y su MP4 si los tiene. semana.json la marca editada, así ningún armador la vuelve a pisar.
+  app.post('/api/planner/stories/versions/restore', async c => {
+    if (storyBusy) return c.json({ error: 'Hay otra historia renderizándose. Esperá unos segundos.' }, 409);
+    try {
+      const body = await c.req.json(), { png, run, stem, html } = storyPaths(body?.imagen);
+      if (typeof body?.id !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(body.id) || body.id.startsWith('.')) throw new Error('Versión inválida');
+      const vdir = resolve(run, 'tmp/ediciones', body.id), v = (ext: string) => resolve(vdir, stem + ext);
+      if (!existsSync(v('.png'))) throw new Error('No encuentro esa versión.');
+      storyBusy = true;
+      try {
+        const dir = resolve(run, 'historias'), cur = (ext: string) => ext === '.html' ? html : resolve(dir, stem + ext);
+        const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14), bak = resolve(run, 'tmp/ediciones', stamp + '-' + stem);
+        mkdirSync(bak, { recursive: true });
+        for (const ext of ['.png', '.html', '.chequeo.json', '.mp4']) if (existsSync(cur(ext))) writeFileSync(resolve(bak, stem + ext), readFileSync(cur(ext)));
+        // Se escribe (no se copia) para que cambie la fecha: el planner la detecta como imagen nueva si ya estaba en Postiz.
+        for (const ext of ['.png', '.html', '.chequeo.json']) if (existsSync(v(ext))) writeFileSync(cur(ext), readFileSync(v(ext)));
+        const conVideo = existsSync(v('.mp4'));
+        if (conVideo) writeFileSync(cur('.mp4'), readFileSync(v('.mp4'))); else if (existsSync(cur('.mp4'))) unlinkSync(cur('.mp4'));
+        const semana = fileRead(resolve(run, 'semana.json'), null);
+        if (semana) {
+          for (const d of semana.dias || []) for (const h of d.historias || []) if (h.imagen === 'historias/' + stem + '.png') {
+            const at = new Date().toISOString(); h.editado = { at, por: 'planner (volvió a una versión)' }; h.version = { id: body.id, restaurada_at: at };
+            if (conVideo) { h.video = 'historias/' + stem + '.mp4'; h.formato = 'video'; } else { delete h.video; delete h.voz; if (h.formato === 'video') delete h.formato; }
+          }
+          const tmp = resolve(run, 'semana.json.' + randomUUID() + '.tmp'); writeFileSync(tmp, JSON.stringify(semana, null, 1) + '\n'); renameSync(tmp, resolve(run, 'semana.json'));
+        }
+        return c.json({ ok: true, mtime: Math.round(statSync(png).mtimeMs), versiones: storyVersions(run, stem, png) });
       } finally { storyBusy = false; }
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
   });

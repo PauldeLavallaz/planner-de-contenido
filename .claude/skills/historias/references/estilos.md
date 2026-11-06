@@ -98,5 +98,14 @@ colores quedan con un solo uso:
   pedido.
 - Naranja, guardado: no se usa salvo que la marca lo pida.
 
+Otra forma de fijarla: **dos acentos por día, sacados de sus imágenes.** La base sigue siendo la del editor (cajas
+negras con letra blanca, cajas blancas con letra negra y los resaltados por renglón); cambia el color. Cada día lleva un
+par de acentos que salen de sus fotos o placas, más brillantes y saturados que en la imagen (la calabaza naranja y la
+luz violeta de un día de Halloween; el turquesa del agua y el verde del pasto de unas fotos de viaje). El primero pinta
+las palabras clave y la cifra; el segundo, el remate y la caja del link. La letra sobre cada acento se elige por
+contraste, y un color no se usa por costumbre: sólo si está en la imagen. En el HTML, el segundo acento se define junto
+al primero en `main.historia` (por ejemplo `--acento2` y `--sobre-acento2`). Lo que el usuario elige en el editor del
+planner manda y puede repetirse ese día: el selector de color sugiere los colores de las otras historias del día.
+
 Una restricción así se decide una vez y vale para todas las semanas de esa cuenta. Sin restricción, se usan los cuatro
 estilos como dice este archivo.

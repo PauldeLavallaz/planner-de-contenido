@@ -33,12 +33,14 @@ código (motor, plantilla, render y chequeo) está en [docs/historias.md](../../
      entera y el texto blanco encima.
    - **Afuera:** rótulos con el nombre de la marca, numeración «01 / 03», degradés y bandas oscuras,
      tarjetas con esquina de color, composiciones de carrusel, tipografía de marca, mascotas o
-     personajes de marca como sticker, fondos de color sólido.
+     personajes de marca como sticker, cuadros sacados de un video puestos como placa, fondos de color sólido. Una
+     imagen entera que mete a la persona en la idea de la historia sí va (ver «Lo que aprendimos diseñando»).
    - **Estilos con nombre:** Amarillo, Rojo, Verde y Naranja, con su receta en [estilos.md](estilos.md).
      Un estilo por día, alternados, salvo que la marca fije uno solo.
-   - **Imagen fija por defecto.** La historia es una imagen fija salvo que el movimiento sea
-     indispensable. El movimiento queda como recurso para cuando hace falta: un video adentro
-     ([video-con-voz.md](video-con-voz.md)), un recorrido largo que no entra en una imagen.
+   - **Texto quieto; el fondo puede ser video.** El texto y los elementos no se animan salvo que el movimiento sea
+     indispensable. Distinto es el video de contenido: si hay material propio que se mueve (un reel de la semana, una
+     campaña), va de fondo sin sonido, con el texto arriba («Video de fondo sin voz» en
+     [docs/historias.md](../../../../docs/historias.md)). Con voz en off: [video-con-voz.md](video-con-voz.md).
    - **No es el estilo de los carruseles de la marca:** las historias no copian su diseño.
 2. **Se intercalan historias con foto y historias de fondo blanco o negro.** No todas las historias van
    con foto: intercalar fondos lisos, sólo con tipografía, el mensaje y emojis, ayuda a hablar más claro.
@@ -130,6 +132,38 @@ Sale de vueltas de corrección sobre semanas reales. Si una marca tiene su propi
   con las fotos de ese día (mirá qué colores dominan en ellas): amarillo con una remera mostaza o un
   atardecer, verde con vegetación o una pantalla, naranja con madera y luz cálida, rojo con un recurso
   o un detalle rojo. No el mismo dos días seguidos. Nunca un color que no esté en la fila.
+
+**La imagen que juega con el tema**
+- Además de las fotos reales, una imagen hecha para la historia puede meter a la persona dentro de la idea, en el
+  gancho o en un momento puntual: para «tu carpeta de guardados es un cementerio», la persona como zombie en su living;
+  para «te presento a mi equipo», una foto de equipo donde todos los integrantes son ella. La idea del gancho le da el
+  tono a toda la secuencia del día.
+- Sale de fotos reales de la persona (una distinta por cada copia, si aparece varias veces: con las mismas fotos quedan
+  todas iguales) y del lugar real. Nunca de otra imagen generada. Las caras grandes: en una foto de grupo, de la cintura
+  para arriba y bien juntos.
+- Generar cuesta plata: proponela y esperá el OK del usuario antes de pedirla.
+
+**Lo que se mueve y lo que se muestra**
+- **Video donde se pueda:** tramos sin sonido de los reels de la semana o de una campaña como fondo. Una grilla que
+  intercala un video y una foto fija, o el cierre sobre el reel del que se habla con overlay negro.
+- **Un reel de fondo va desde su gancho:** el principio es lo mejor que tiene.
+- **Cuadros sacados de un video no son una placa.** Una captura del video puesta de fondo tal cual queda mal: si lo que
+  aparece en el video vale la pena, se hace una imagen pensada para la historia, con el espacio repartido para el texto;
+  si no, va una foto de la persona.
+- **Lo que se ve en el perfil, con sus vistas.** Para mostrar un reel propio, su portada como se ve en la grilla del
+  perfil, con el 👁 y las vistas abajo, recortada pareja y sin bordes.
+- **Anuncios, como anuncios:** si se muestran piezas de una campaña, van como se publicaron, con su texto encima.
+- **Una lámina de otro formato no entra entera.** Una lámina de carrusel puesta como tarjeta, con su título, su teléfono
+  y su grilla, queda cargada. Va el fondo de la marca a pantalla completa y en el medio una sola cosa: el personaje
+  haciendo la acción o el componente rehecho con lo mínimo.
+
+**El mensaje**
+- **Un gancho con cifra tiene que pegar:** la cifra arriba y grande (en video, un contador que sube hasta el número
+  real), no la frase. La frase pasa a la historia siguiente.
+- **El tema tiene que valer la historia:** un problema que el que mira vive, con la solución mostrada. Si el tema es
+  flojo, se rehace de cero en vez de pulir el diseño.
+- **Menos apilado y más corto.** Una secuencia de 4 rinde más que una de 5 si la quinta repite. El cierre no lleva una
+  frase extra arriba del pedido.
 
 **La entrega**
 - Después de cada vuelta, la semana entera a la vista (la pestaña Historias del planner la muestra
