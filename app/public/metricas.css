@@ -1,0 +1,233 @@
+/* Métricas del contenido propio: el período con su calendario, una tarjeta igual por cuenta con los seguidores
+   ganados semana a semana, lo que mejor funcionó con portadas, qué formato y tema rinden y de dónde sale cada número.
+   Tokens de planner.css; las barras son una serie, con la punta redondeada sobre la línea del cero. */
+.mt { padding: 14px 24px 40px; }
+.mt-head { flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 16px; }
+.mt .gv-empty { padding: 28px 12px; text-align: center; }
+.mt-sd { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.mt .net svg { width: 12px; height: 12px; }
+
+/* ---------- período ---------- */
+.mt-rango-btn { display: inline-flex; align-items: center; gap: 6px; }
+.mt-rango-btn .chev { width: 16px; height: 16px; fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.mt-rango-btn:hover .chev { stroke: var(--ink); }
+.mt-compara { margin: 0; font-size: 12.5px; color: var(--muted); }
+.mt-head .week-nav button:disabled { opacity: .35; cursor: default; }
+.gv-pop:has(.mt-cal) { width: 468px; padding: 10px; }
+.mt-cal { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; }
+.mt-cal-atajos { display: flex; flex-direction: column; gap: 1px; padding-right: 10px; border-right: 1px solid var(--line); }
+.mt-cal-atajos .gv-pop-opt { width: 100%; }
+.mt-cal-grilla { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); row-gap: 2px; }
+.mt-cal-grilla > span { font: 500 10.5px var(--mono); color: var(--muted); text-align: center; padding: 4px 0; }
+.mt-cal-d { height: 30px; font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; border-radius: 6px; }
+.mt-cal-d:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--line-2); }
+.mt-cal-d:disabled { color: var(--line-2); cursor: default; }
+.mt-cal-d.fuera { color: var(--muted); }
+.mt-cal-d.hoy { font-weight: 700; color: var(--accent-ink); }
+.mt-cal-d.en { background: var(--accent-soft); border-radius: 0; }
+.mt-cal-d.ini, .mt-cal-d.fin { background: var(--ink); color: var(--surface); font-weight: 600; }
+.mt-cal-d.ini { border-radius: 6px 0 0 6px; }
+.mt-cal-d.fin { border-radius: 0 6px 6px 0; }
+.mt-cal-d.ini.fin { border-radius: 6px; }
+.mt-cal-ayuda { margin: 6px 0 8px; font-size: 11.5px; color: var(--muted); }
+.mt-cal-fechas { display: flex; align-items: flex-end; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.mt-cal-fechas label { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; font-size: 11px; color: var(--muted); }
+.mt-cal-fechas input { width: 100%; min-width: 0; padding: 5px 6px; font: 12.5px var(--sans); color: var(--ink); background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px; }
+.mt-cal-fechas .ghost { padding: 6px 10px; font-size: 12.5px; }
+
+/* ---------- tarjetas por cuenta: todas con las mismas filas ---------- */
+.mt-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.mt-card { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px 14px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.mt-card header { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 13px; }
+.mt-card header b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-fuente { margin-left: auto; flex: none; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.mt-fuente.vieja { color: var(--warn); }
+.mt-fuente.sin { color: var(--muted); background: var(--sunk); border-radius: 5px; padding: 1px 6px; }
+.mt-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mt-kpi { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mt-kpi > span { font-size: 11.5px; color: var(--muted); }
+.mt-kpi b { font: 600 22px/26px var(--sans); letter-spacing: -.3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mt-kpi b.mt-sd-n { font: 500 14px/26px var(--sans); letter-spacing: 0; color: var(--muted); }
+.mt-kpi small { display: flex; align-items: center; gap: 5px; min-height: 16px; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mt-kpi small .mt-delta { margin: 0; }
+.mt-delta { font: 500 11px var(--mono); margin-left: 5px; color: var(--muted); }
+.mt-delta.sube { color: var(--ok); }
+.mt-delta.baja { color: var(--accent-ink); }
+
+/* Instagram y TikTok, en grande y a lo ancho; las cuentas sin seguidores conectados, chicas y abajo. */
+.mt-cards.grandes { grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 14px; }
+.mt-cards.chicas { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.mt-card.grande { gap: 16px; padding: 18px 20px 16px; container-type: inline-size; }
+.mt-card.grande header { font-size: 14px; }
+.mt-resumen { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1fr) minmax(0, 1.5fr); gap: 18px; align-items: start; }
+.mt-card.grande .mt-kpi b { font-size: 30px; line-height: 34px; }
+.mt-card.grande .mt-kpi b.mt-sd-n { font-size: 15px; line-height: 34px; }
+.mt-card.grande .mt-semana { padding: 0 0 0 18px; border-top: 0; border-left: 1px solid var(--line); }
+.mt-card.grande .mt-bars { height: 190px; margin-top: 20px; column-gap: 6px; }
+.mt-card.chica .mt-semana { padding-top: 0; border-top: 0; }
+@container (max-width: 620px) {
+  .mt-resumen { grid-template-columns: 1fr 1fr; }
+  .mt-card.grande .mt-semana { grid-column: 1 / -1; padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* seguidores ganados por semana */
+.mt-crece { margin: 0; }
+.mt-crece figcaption { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 11.5px; color: var(--muted); }
+.mt-crece-max { font-size: 11px; color: var(--muted); }
+.mt-bars { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: 2px; height: 76px; }
+.mt-bars::after { content: ''; position: absolute; left: 0; right: 0; top: var(--cero); border-top: 1px solid var(--line-2); pointer-events: none; }
+.mt-bar { position: relative; height: 100%; }
+.mt-bar::before { content: ''; position: absolute; left: 14%; right: 14%; bottom: calc(100% - var(--cero)); height: var(--alto); border-radius: 4px 4px 0 0; background: color-mix(in srgb, var(--accent) 30%, var(--surface)); }
+.mt-bar.en::before { background: var(--accent); }
+.mt-bar.neg::before { bottom: auto; top: var(--cero); border-radius: 0 0 4px 4px; }
+.mt-bar.nada::before { left: 38%; right: 38%; height: 2px; bottom: calc(100% - var(--cero) - 1px); border-radius: 1px; background: var(--line-2); }
+.mt-bar:hover::before { filter: brightness(.88); }
+.mt-bar-v { position: absolute; left: 50%; bottom: calc(100% - var(--cero) + var(--alto) + 3px); transform: translateX(-50%); font: 600 11px var(--mono); color: var(--ink-2); white-space: nowrap; pointer-events: none; }
+.mt-bar.neg .mt-bar-v { bottom: auto; top: calc(var(--cero) + var(--alto) + 3px); }
+.mt-bars-x { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: 2px; margin-top: 6px; font: 400 10.5px var(--mono); color: var(--muted); text-align: center; white-space: nowrap; }
+.mt-card.grande .mt-bars-x { column-gap: 6px; }
+.mt-bars.vacio { display: grid; place-items: center; border-radius: 8px; background: var(--bg); font-size: 11.5px; color: var(--muted); text-align: center; padding: 0 12px; }
+.mt-bars.vacio::after { content: none; }
+.mt-tip { position: fixed; z-index: 60; padding: 4px 8px; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: 11.5px; white-space: nowrap; pointer-events: none; }
+
+.mt-semana { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin: 0; padding-top: 10px; border-top: 1px solid var(--line); }
+.mt-semana div { min-width: 0; }
+.mt-semana dt { font-size: 11px; color: var(--muted); }
+.mt-semana dd { margin: 2px 0 0; font: 600 14px var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mt-card.vieja .mt-semana dd { color: var(--ink-2); }
+
+/* ---------- paneles ---------- */
+.mt-panel { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; }
+.mt-panel-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 12px; }
+.mt-panel-h h3 { margin: 0; font: 600 14px var(--sans); }
+.mt-panel-sub { font-size: 12px; color: var(--muted); }
+.mt-panel-h .segmented { margin: 0 0 0 auto; }
+.mt-panel-ctl { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.mt-panel-ctl .segmented { margin: 0; }
+.mt-panel .hint { margin: 10px 0 0; }
+
+/* lo que mejor funcionó: portadas grandes */
+.mt-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px 14px; }
+.mt-tile { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: inherit; text-decoration: none; }
+.mt-tile-img { position: relative; aspect-ratio: 9 / 14; border-radius: 10px; overflow: hidden; background: var(--sunk); display: grid; place-items: center; }
+.mt-tile-img img { width: 100%; height: 100%; object-fit: cover; transition: transform .2s; }
+.mt-tile:hover .mt-tile-img img { transform: scale(1.03); }
+.mt-tile-img .net svg { width: 26px; height: 26px; color: var(--muted); }
+.mt-rank { position: absolute; top: 6px; left: 6px; min-width: 22px; height: 22px; padding: 0 6px; display: grid; place-items: center; border-radius: 6px; background: var(--ink); color: var(--surface); font: 600 11.5px var(--mono); font-style: normal; }
+.mt-tile-img .rf-x { position: absolute; top: 6px; right: 6px; font-style: normal; padding: 2px 6px; border-radius: 5px; background: var(--surface); }
+.mt-tile b { font-weight: 500; font-size: 12.5px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mt-tile:hover b { text-decoration: underline; }
+.mt-tile small { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mt-otras { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.mt-tile-n { font-size: 11.5px; color: var(--ink-2); }
+.mt-tile-n b { font-weight: 600; font-size: 12.5px; color: var(--ink); }
+.mt-tile-n i { font-style: normal; color: var(--ok); }
+.mt-tile-c { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mt-tile-c .ti { width: 13px; height: 13px; flex: none; }
+
+/* mapa de tu contenido: la diana y la grilla de Referencias con las piezas propias */
+.mt-mapa { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 22px; align-items: start; }
+.mt-mapa .rfm-diana { position: static; }
+.mt-mapa-g { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.mt-mapa-ejes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mt-mapa-girar.on { background: var(--sunk); color: var(--ink); }
+.mt-mapa-eje { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.mt-mapa-eje .segmented { margin: 0; }
+.mt-mapa-sel { margin: 16px 0 0; }
+.mt-mapa-sel .link { font-size: inherit; }
+@media (max-width: 1180px) { .mt-mapa { grid-template-columns: minmax(0, 1fr); } .mt-mapa .rfm-diana { max-width: 460px; } }
+
+/* qué te funciona: el ranking por formato, tema o anillo, las piezas con portada y los mejores cruces */
+.mt-como { margin: -4px 0 12px; font-size: 12.5px; color: var(--ink-2); }
+.mt-pocas { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; background: var(--bg); font-size: 12.5px; color: var(--ink-2); }
+.mt-pocas .link { font-size: inherit; }
+.mt-rks { display: flex; flex-direction: column; }
+.mt-rk { display: grid; grid-template-columns: 30px minmax(180px, 1fr) minmax(160px, 1.2fr) 64px; align-items: center; gap: 14px; width: 100%; padding: 9px 8px; border-top: 1px solid var(--line); border-radius: 8px; text-align: left; }
+.mt-rk:first-child { border-top: 0; }
+.mt-rk:hover { background: var(--bg); }
+.mt-rk.on { background: var(--sunk); }
+.mt-rk.poca { opacity: .55; }
+.mt-rk-ic { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; background: var(--sunk); color: var(--ink-2); }
+.mt-rk.on .mt-rk-ic { background: var(--surface); }
+.mt-rk-ic .ti { width: 17px; height: 17px; }
+.mt-rk-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mt-rk-t b { font-weight: 500; font-size: 13.5px; }
+.mt-rk-t small { font-size: 11.5px; color: var(--muted); }
+.mt-rk-barra { position: relative; height: 8px; border-radius: 4px; background: var(--sunk); }
+.mt-rk-barra i { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: color-mix(in srgb, var(--accent) 70%, var(--surface)); }
+.mt-rk-barra em { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ink-2); border-radius: 1px; }
+.mt-rk-x { font-size: 14px; text-align: right; }
+.mt-abierto { margin: 2px 0 10px; padding: 12px; border-radius: 10px; background: var(--bg); }
+.mt-abierto > p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.mt-pzs { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 12px; }
+.mt-pz { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: inherit; text-decoration: none; }
+.mt-pz-img { position: relative; aspect-ratio: 3 / 4; border-radius: 8px; overflow: hidden; background: var(--sunk); display: grid; place-items: center; }
+.mt-pz-img img { width: 100%; height: 100%; object-fit: cover; }
+.mt-pz-img .net svg { width: 22px; height: 22px; color: var(--muted); }
+.mt-pz-img em { position: absolute; top: 6px; left: 6px; font-style: normal; padding: 2px 6px; border-radius: 5px; background: var(--surface); }
+.mt-pz:hover b { text-decoration: underline; }
+.mt-pz b { font-weight: 500; font-size: 12.5px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mt-pz small { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+.mt-pz-seg { flex-basis: 100%; color: var(--ok); }
+.mt-sub { margin: 18px 0 8px; font: 600 13px var(--sans); }
+.mt-cruces { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+.mt-cruce { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; text-align: left; }
+.mt-cruce:hover { border-color: var(--line-2); }
+.mt-cruce.on { border-color: var(--ink-2); background: var(--bg); }
+.mt-cruce-ic { display: inline-flex; gap: 3px; color: var(--ink-2); }
+.mt-cruce .t { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2); }
+.mt-cruce .t b { font-weight: 600; color: var(--ink); }
+.mt-cruce .t small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+
+/* fuentes, plegadas al pie */
+.mt-fuentes summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.mt-fuentes summary::-webkit-details-marker { display: none; }
+.mt-fuentes summary::before { content: ''; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; }
+.mt-fuentes[open] summary::before { transform: rotate(45deg); }
+.mt-fuentes summary h3 { margin: 0; font: 600 14px var(--sans); }
+.mt-fuentes[open] summary { margin-bottom: 12px; }
+.mt-fuentes table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.mt-fuentes th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11.5px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.mt-fuentes td { padding: 7px 8px; border-bottom: 1px solid var(--line); }
+.mt-fuentes td .net { vertical-align: -1px; margin-right: 4px; }
+.mt-fuentes .n { text-align: right; font-variant-numeric: tabular-nums; }
+.mt-fuentes .mt-vieja { color: var(--warn); }
+.mt-fuentes ul { margin: 10px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+
+@media (max-width: 1080px) {
+  .mt { padding: 12px 16px 32px; }
+}
+@media (max-width: 560px) {
+  .gv-pop:has(.mt-cal) { width: calc(100vw - 16px); }
+  .mt-cal { grid-template-columns: minmax(0, 1fr); }
+  .mt-cal-atajos { flex-direction: row; flex-wrap: wrap; padding: 0 0 8px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .mt-cal-atajos .gv-pop-opt { width: auto; }
+  .mt-rk { grid-template-columns: 30px minmax(0, 1fr) 56px; }
+  .mt-rk-barra { display: none; }
+}
+
+/* Qué tan amplio hablarle: cada anillo con su alcance, su conversión y su eficiencia. */
+.mt-anillos-t { overflow-x: auto; }
+.mt-anillos-t table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mt-anillos-t th, .mt-anillos-t td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; font-weight: 400; white-space: nowrap; }
+.mt-anillos-t thead th { font-size: 11.5px; color: var(--muted); vertical-align: bottom; white-space: normal; }
+.mt-anillos-t tbody th { display: flex; align-items: center; gap: 6px; color: var(--ink); }
+.mt-anillos-t tbody th .ti { width: 16px; height: 16px; flex: none; }
+.mt-anillos-t .n { text-align: right; font-variant-numeric: tabular-nums; }
+.mt-anillos-t .mejor { font-weight: 600; color: var(--ink); background: var(--sunk); }
+.mt-anillos-t tr.poca { opacity: .55; }
+.mt-anillos-t tr:last-child th, .mt-anillos-t tr:last-child td { border-bottom: 0; }
+.mt-def { font-size: 13px; }
+.mt-def-f { display: grid; grid-template-columns: 130px minmax(0, 1.2fr) minmax(0, 1fr); gap: 4px 16px; padding: 10px 0; border-top: 1px solid var(--line); }
+.mt-def-f.cab { padding: 0 0 6px; border-top: 0; font-size: 11.5px; color: var(--muted); }
+.mt-def-n { display: flex; align-items: flex-start; gap: 6px; }
+.mt-def-n b { font-weight: 600; }
+.mt-def-n .ti { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+.mt-def-t p { margin: 0 0 2px; color: var(--ink); }
+.mt-def small { display: block; font-size: 12px; color: var(--muted); }
+.mt-def-e a { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin-bottom: 2px; color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 2px; }
+@media (max-width: 720px) { .mt-def-f { grid-template-columns: minmax(0, 1fr); } .mt-def-f.cab { display: none; } }
+
+/* Instagram y TikTok juntos: una nota al pie, no una sección. */
+.mt-pie { margin: 10px 4px 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.mt-pie b { font-weight: 500; color: var(--ink-2); }

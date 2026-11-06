@@ -1,0 +1,36 @@
+{
+  "actualizado": "",
+  "origen": "Taxonomía de ejemplo. Copiala a <research>/taxonomia.json (el motor lo hace solo la primera vez) y adaptala a tu nicho con Claude Code: los temas de los que habla tu rubro, los formatos que ves y los anillos de tu audiencia, del comprador hacia afuera. `palabras` sirve para clasificar sin IA; con GEMINI_API_KEY clasifica Gemini con estas mismas definiciones.",
+  "temas": [
+    { "id": "herramientas", "nombre": "Herramientas", "largo": "Herramientas y apps", "que": "Una herramienta, una app o una función nueva y cómo se usa", "palabras": ["herramienta", "app", "aplicación", "plantilla", "función", "tool", "gratis"] },
+    { "id": "tutorial", "nombre": "Tutoriales", "largo": "Tutoriales y paso a paso", "que": "Cómo hacer algo concreto, paso a paso", "palabras": ["cómo", "paso a paso", "tutorial", "aprendé", "truco", "tip", "how to"] },
+    { "id": "casos", "nombre": "Casos", "largo": "Casos y resultados", "que": "Un caso real con números: antes, después y qué se hizo", "palabras": ["resultado", "facturé", "clientes", "caso", "antes y después", "crecí", "ventas"] },
+    { "id": "opinion", "nombre": "Opinión", "largo": "Opinión y postura", "que": "Una postura discutible sobre el rubro o un error común", "palabras": ["opinión", "error", "nadie te dice", "mito", "verdad", "deberías", "no hagas"] },
+    { "id": "negocio", "nombre": "Negocio", "largo": "Negocio y ventas", "que": "Vender, conseguir clientes, precios y ofertas", "palabras": ["vender", "cliente", "precio", "oferta", "negocio", "emprendedor", "marketing"] },
+    { "id": "tendencias", "nombre": "Tendencias", "largo": "Novedades y tendencias", "que": "Lo nuevo de la semana en el rubro", "palabras": ["nuevo", "lanzó", "novedad", "tendencia", "acaba de", "noticia"] },
+    { "id": "detras", "nombre": "Detrás de escena", "largo": "Detrás de escena", "que": "Cómo trabaja la persona o la marca, su día, su proceso", "palabras": ["mi día", "rutina", "proceso", "detrás", "así trabajo", "setup"] },
+    { "id": "humor", "nombre": "Humor", "largo": "Humor y memes del rubro", "que": "Chistes, memes y situaciones reconocibles", "palabras": ["cuando", "pov", "meme", "jaja", "nadie:"] },
+    { "id": "otros", "nombre": "Otros", "largo": "Fuera del nicho", "que": "Lo que no habla del rubro", "palabras": [] }
+  ],
+  "formatos": [
+    { "id": "talking-head", "nombre": "A cámara", "que": "Una persona hablando a cámara, con o sin cortes y subtítulos", "palabras": ["te cuento", "les cuento", "hoy te"] },
+    { "id": "pantalla", "nombre": "Pantalla grabada", "que": "Tutorial sobre la pantalla de la compu o del celular", "palabras": ["pantalla", "click", "abrís", "entrás"] },
+    { "id": "animado", "nombre": "Reel explicativo", "que": "Video dibujado, ilustrado o animado con voz en off, sin la persona a cámara", "palabras": ["animación", "explicado", "ilustrado"] },
+    { "id": "lista", "nombre": "Lista o top", "que": "Un top, un ranking o una lista de cosas", "palabras": ["top", "mejores", "razones", "cosas que", "errores"] },
+    { "id": "antes-despues", "nombre": "Antes y después", "que": "El contraste entre cómo era y cómo quedó", "palabras": ["antes", "después", "transformación"] },
+    { "id": "historia", "nombre": "Storytime", "que": "Una historia contada en primera persona", "palabras": ["me pasó", "historia", "una vez", "storytime"] },
+    { "id": "humor", "nombre": "Sketch o meme", "que": "Actuado o editado para hacer reír", "palabras": ["pov", "meme", "sketch"] },
+    { "id": "entrevista", "nombre": "Entrevista o podcast", "que": "Un recorte de una charla, entrevista o podcast", "palabras": ["podcast", "entrevista", "episodio"] },
+    { "id": "carrusel-educativo", "nombre": "Carrusel educativo", "que": "Láminas que enseñan algo paso a paso", "palabras": ["guardalo", "deslizá", "slide"] },
+    { "id": "carrusel-frases", "nombre": "Carrusel de frases", "que": "Láminas con frases, citas o una idea por lámina", "palabras": ["frase", "cita"] },
+    { "id": "broll-texto", "nombre": "B-roll con texto", "que": "Imágenes de apoyo con un texto encima, sin voz o con música", "palabras": [] },
+    { "id": "demo", "nombre": "Demo de producto", "que": "Muestra un producto o servicio funcionando", "palabras": ["demo", "mirá cómo", "probé"] }
+  ],
+  "anillos": [
+    { "n": 1, "nombre": "Ya quiere comprar", "corto": "Comprador", "que": "Tiene el problema que resolvés y busca cómo resolverlo ahora" },
+    { "n": 2, "nombre": "Tiene el problema", "corto": "Problema", "que": "Tiene el problema pero todavía no busca solución" },
+    { "n": 3, "nombre": "Su mundo", "corto": "Su mundo", "que": "Le interesa el rubro, sin el problema puntual" },
+    { "n": 4, "nombre": "Curioso general", "corto": "General", "que": "Público amplio que puede engancharse con el tema" },
+    { "n": 5, "nombre": "Fuera de nicho", "corto": "Afuera", "que": "No tiene relación con lo que ofrecés" }
+  ]
+}
