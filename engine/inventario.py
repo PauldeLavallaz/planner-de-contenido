@@ -13,6 +13,22 @@ from common import (CFG, CONFIG_PATH, PUBLISH, ROOT, STATE, ConfigError, load_co
 import piezas
 
 QUEUE_DIRS = ('inbox', 'agendado')
+AVISOS = []
+
+
+def aviso(origen, detalle, oculta=True):
+    """Lo que el planner muestra arriba del calendario. `oculta`: la pieza no se ve hasta que se corrija."""
+    AVISOS.append({'origen': origen, 'detalle': detalle, 'oculta': oculta})
+
+
+def aislar(items, origen, paso, *args):
+    """Una ficha mal armada no vacía el calendario: se saltea, se avisa cuál es y el resto se sigue viendo."""
+    n = len(items)
+    try:
+        paso(*args)
+    except Exception as e:
+        del items[n:]
+        aviso(origen, f'{type(e).__name__}: {e}')
 
 
 def date_value(value):
@@ -60,10 +76,10 @@ def queue_items(live):
     items, covered, used = [], set(), set()
     files = [f for sub in QUEUE_DIRS for f in sorted((PUBLISH / sub).glob('*.json'))]
     files += sorted((PUBLISH / 'publicado').glob('*/*.json'))
-    for f in files:
+    def pieza_de_la_cola(f):
         d = read_json(f)
         if not isinstance(d, dict) or not d.get('slug'):
-            continue
+            return
         src = queue_path(d.get('source_run'))
         if src:
             covered.add(rel(src))
@@ -71,7 +87,7 @@ def queue_items(live):
         used.update(p.get('id') for p in all_posts if p.get('id'))
         # Las historias se manejan en la pestaña Historias: no son piezas sueltas de Semana ni del Tablero.
         if d.get('formato') == 'story':
-            continue
+            return
         channels = []
         for lp in [p for p in all_posts if p.get('estado') != 'cancelado']:
             p = live.get(lp.get('id'))
@@ -121,6 +137,8 @@ def queue_items(live):
             'publication_reference': reference, 'collaborators': d.get('instagram_collaborators') or [],
             'series': d.get('serie'), 'category': d.get('categoria'), 'kind': d.get('tipo'), 'expires': d.get('vence'), 'pause': d.get('pausa'),
         })
+    for f in files:
+        aislar(items, rel(f), pieza_de_la_cola, f)
     return items, covered, used
 
 
@@ -128,22 +146,26 @@ def scan(snapshot):
     live = {p['id']: p for p in snapshot.get('posts', []) if p.get('id')}
     ig_mode = read_json(STATE / 'instagram-mode.json')
     items, covered, used = queue_items(live)
-    for path, src in piezas.pieces():
+
+    def pieza_de_la_carpeta(path, src):
         source = rel(path)
         if source in covered:
-            continue
+            return
         try:
             it = piezas.describe(path, src)
         except OSError:
-            continue
+            return
         it['trial'] = bool((ig_mode.get(source) or {}).get('trial'))
         if it['status'] == 'published' and it.get('published_on'):
             it['publication_reference'] = str(it['published_on'])[:10] + 'T12:00'
         items.append(it)
+    for path, src in piezas.pieces():
+        aislar(items, rel(path), pieza_de_la_carpeta, path, src)
     default_brand = (CFG.get('brands') or ['Mi marca'])[0]
-    for p in live.values():
+
+    def post_remoto(p):
         if p['id'] in used or p.get('state') not in ['QUEUE', 'ERROR']:
-            continue
+            return
         dt = date_value(p.get('publishDate'))
         net = network_of(p.get('platform'))
         items.append({'id': 'remote:' + p['id'], 'slug': p['id'], 'title': (p.get('content') or 'Publicación sin ficha local').split('\n')[0][:170],
@@ -152,7 +174,9 @@ def scan(snapshot):
                       'scheduled': dt.isoformat()[:16] if dt else None,
                       'channels': [{'id': p['id'], 'network': net, 'state': p['state'], 'verified': True, 'when': dt.isoformat() if dt else None, 'account': p.get('integrationName')}],
                       'networks': [net], 'captions': {}, 'approved': False, 'note': 'Creada en Postiz, sin archivo local.', 'fingerprint': p.get('publishDate') or ''})
-    return sorted(items, key=lambda x: x.get('created') or '', reverse=True)
+    for p in live.values():
+        aislar(items, f'Postiz {p["id"]}', post_remoto, p)
+    return sorted(items, key=lambda x: str(x.get('created') or ''), reverse=True)
 
 
 def refresh():
@@ -204,7 +228,7 @@ if __name__ == '__main__':
             refresh()
         snapshot = read_json(STATE / 'postiz-snapshot.json')
         out = {'generated_at': datetime.now(tz()).isoformat(), 'postiz_fetched_at': snapshot.get('fetched_at'),
-               'timezone': CFG['timezone'], 'config': ui_config(), 'items': scan(snapshot)}
+               'timezone': CFG['timezone'], 'config': ui_config(), 'items': scan(snapshot), 'avisos': AVISOS}
     except ConfigError as e:
         print(json.dumps({'error': str(e), 'needs_setup': True}, ensure_ascii=False))
         sys.exit(3)

@@ -677,9 +677,24 @@ def lead(red, meta):
     return timedelta(minutes=CFG.get('tiktok_inbox_lead_minutes') or 0) if red == 'tiktok' and tiktok_inbox(ch) else timedelta()
 
 
+def frenar_youtube(meta):
+    """Con `youtube.frenado` en planner.config.json (el motivo, en texto), ninguna pieza sube a YouTube y sus otras redes
+    siguen. Vale para todo lo que se agende o se mueva después: una propuesta vieja no lo vuelve a meter. Una pieza que sólo
+    sale en YouTube no se agenda."""
+    motivo = (CFG.get('youtube') or {}).get('frenado')
+    if not motivo or 'youtube' not in meta.get('redes', []):
+        return
+    if meta['redes'] == ['youtube']:
+        raise RuntimeError(f'YouTube está frenado y esta pieza sólo sale ahí; no se agenda. {motivo}')
+    meta['redes'] = [r for r in meta['redes'] if r != 'youtube']
+    meta['youtube_frenado'] = {'desde': now_local().isoformat(timespec='seconds'), 'motivo': motivo}
+    print(f"  ⚠ {meta['slug']}: sale sin YouTube, que está frenado")
+
+
 def preflight_piece(media, meta, when_local, draft=False):
     if when_local.tzinfo is None:
         raise RuntimeError('La fecha debe incluir zona horaria')
+    frenar_youtube(meta)
     if meta.get('portada_requerida') and not (meta.get('portada') or {}).get('imagen'):
         raise RuntimeError('Falta la portada: volvé a correr listo con --portada <segundos>')
     earliest = min([when_local - lead(r, meta) for r in meta['redes']] or [when_local])

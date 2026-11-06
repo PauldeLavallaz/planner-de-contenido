@@ -153,10 +153,32 @@ def read_publish_kit(folder):
     return out or {}
 
 
+# Copias técnicas de un final (liviana, para la web o para Postiz): no son otra versión de la pieza.
+COPIA_TECNICA = re.compile(r'liviano|_(app|web|postiz)\.(mp4|mov)$', re.I)
+
+
+def final_aprobado(folder):
+    """La versión del final aprobada en la pestaña Guiones (final_gancho_b.mp4, por ejemplo), si sigue igual que cuando
+    se aprobó: es la que sale, aunque haya otra más nueva. Una pieza pausada o descartada en Guiones no tiene aprobada."""
+    st = read_json(PUBLISH / '.planner' / 'guiones-estado.json').get(rel(folder)) or {}
+    if st.get('estado') != 'aprobado' or st.get('descartado') or st.get('pausado') or not isinstance(st.get('video'), str):
+        return None
+    v = (ROOT / st['video']).resolve()
+    try:
+        igual = abs(v.stat().st_mtime_ns / 1e6 - float(st.get('video_modified'))) < 1
+    except (OSError, TypeError, ValueError):
+        return None
+    return v if igual and v.parent == folder.resolve() and v.name.startswith('final') and v.suffix.lower() in VIDEO else None
+
+
 def find_final(folder):
-    """El video final de la pieza: el patrón más específico que encuentre algo; entre varios, el más nuevo."""
+    """El video final de la pieza: el aprobado en Guiones o, si no, el patrón más específico que encuentre algo; entre
+    varios, el más nuevo."""
+    aprobado = final_aprobado(folder)
+    if aprobado:
+        return aprobado
     for pattern in CFG['content'].get('final_patterns') or []:
-        found = [p for p in folder.glob(pattern) if p.is_file() and p.suffix.lower() in VIDEO and not p.name.startswith('.')]
+        found = [p for p in folder.glob(pattern) if p.is_file() and p.suffix.lower() in VIDEO and not p.name.startswith('.') and not COPIA_TECNICA.search(p.name)]
         if found:
             return max(found, key=lambda p: p.stat().st_mtime_ns)
     return None
