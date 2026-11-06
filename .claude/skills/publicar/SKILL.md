@@ -9,7 +9,7 @@ Motor: `engine/cola.py` (correlo desde la carpeta del planner; en Windows con `p
 
 ## Una propuesta del planner
 
-El mensaje empieza con «Confirmo la propuesta <id>» y trae la ruta del archivo. Pegarlo **es** la confirmación del usuario para exactamente esos cambios.
+El mensaje empieza con su línea de título (`[Agenda] …`, `[Feedback] …` o `[Anuncios] …`) y sigue con «Confirmo la propuesta <id>» y la ruta del archivo. Pegarlo **es** la confirmación del usuario para exactamente esos cambios.
 
 1. **Plan:** `python3 engine/cola.py aplicar <id>`. Muestra qué va a pasar con cada pieza y qué no se toca (descartadas, sin archivo final, no aprobadas, creadas directo en Postiz).
 2. **Avisos antes de ejecutar**, en una línea cada uno y sólo si aplican:
@@ -20,6 +20,8 @@ El mensaje empieza con «Confirmo la propuesta <id>» y trae la ruta del archivo
 3. **Ejecutar:** `python3 engine/cola.py aplicar <id> --ejecutar`. Para probar sin publicar: `--ejecutar --borrador` (quedan como borradores en Postiz).
 4. **Verificar:** `python3 engine/cola.py semana` y contá el resultado: qué quedó programado, cuándo y dónde, y cualquier error tal cual.
 5. **Feedback de contenido** (campo `feedback` de la propuesta): no lo aplica el motor. Seguí las reglas del mensaje: tomá cada nota (estado `en_curso`), transcribí los audios, corregí según las instrucciones del proyecto de contenido y marcá `aplicado`. Si una pieza tiene feedback y también fecha en la propuesta, primero se corrige y se agenda la versión nueva cuando el usuario la apruebe. Una nota `tipo: "copy"` trae el texto nuevo completo en `copy`: va textual a `captions.general` de la ficha (y a los textos por red que repetían el anterior) y al archivo de texto de la pieza, sin otra versión ni export; si la pieza ya está en Postiz, `cola.py mover <slug>` a la misma fecha y hora la recrea con ese texto. Si sólo cambió el copy, la pieza se agenda igual con el texto nuevo.
+
+6. **Anuncios** (campo `anuncios` de la propuesta): `python3 engine/anuncios.py subir <id>` sube esos videos a la carpeta de `anuncios` en `planner.config.json` con rclone, sin repetir lo que ya está, y deja el resultado en la propuesta. Pasale al usuario el link de la carpeta. Subir no publica nada.
 
 Si `aplicar` falla en una pieza, el resto sigue y la propuesta queda `partial` con el motivo en `results`. Resolvé la causa (ver Errores) y corré los pasos de esa pieza a mano con los comandos de abajo.
 
@@ -46,6 +48,8 @@ python3 engine/cola.py separar <slug> [--redes instagram]  # Instagram (con YouT
 python3 engine/cola.py pausar <slug> [--motivo …]     # sale de Postiz y queda retenida
 python3 engine/cola.py reanudar <slug>
 python3 engine/cola.py reemplazar <slug> <archivo>    # otra versión del video (sólo sin fecha: si está agendada, quitar → reemplazar → agendar)
+python3 engine/cola.py reemplazar <slug> <archivo> --solo-planner  # el planner muestra ésta («Versión sin subir»); la cola y Postiz siguen con la anterior
+python3 engine/anuncios.py estado                    # anuncios elegidos y ya subidos
 python3 engine/cola.py ahora <slug> [--redes …]       # publica ya lo que estaba programado
 python3 engine/cola.py modo-ig <slug> feed|trial
 python3 engine/cola.py cronograma [--dias 7]          # propone repartir inbox/ en los horarios libres; --apply agenda (con OK)
@@ -59,6 +63,7 @@ python3 engine/cola.py capacidades                     # qué formato admite cad
 - Antes de agendar un reel con Instagram, decí si sale en el feed o en Trial.
 - Postiz no permite reprogramar: `mover` borra y recrea los posts que todavía no salieron. Si una red ya publicó, no se toca.
 - Pasar a Trial un reel ya agendado no pide recrearlo: con el OK del usuario, `postiz posts:settings <id> --settings '{"is_trial_reel":true,"graduation_strategy":"SS_PERFORMANCE","collaborators":[]}'` sobre el post de Instagram (sólo esa red) y verificá `settings` en `posts:list`. `modo-ig --aunque-agendada`, lo que hace el planner, cambia sólo la ficha.
+- Si el usuario sigue iterando un video ya agendado y quiere verlo en el planner sin tocar Postiz, `reemplazar --solo-planner`: la tarjeta dice «Versión sin subir» y, cuando esa pieza vaya en una propuesta, el cambio trae esa versión en `requested_version` y se sube como cualquier reemplazo.
 - `youtube.frenado` en `planner.config.json` (un texto con el motivo) frena YouTube: lo que se agende o se mueva desde entonces sale sin YouTube y la ficha guarda `youtube_frenado`; una pieza que sólo sale en YouTube no se agenda. Para volver, sacá el campo.
 
 ## Errores

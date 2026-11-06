@@ -11,7 +11,7 @@ A la izquierda, de arriba abajo (se pliega a sólo íconos con el botón de arri
 
 - la **marca**, si tenés más de una en `brands`: vale para todas las secciones. Cada marca muestra cuántas cuentas tiene y sus redes; una cuenta con `marca` en `channels` es de esa marca y una sin marca, de todas;
 - **Buscar** (o ⌘K / Ctrl+K, desde cualquier lado): ir a una sección, cambiar de marca o de tema, consultar Postiz o abrir una pieza escribiendo parte de su título;
-- las **secciones**: Semana e Historias; después Guiones, Tablero y Publicadas;
+- las **secciones**: Semana, Historias, Referencias, Métricas, Twitter y LinkedIn; después Guiones, Tablero y Publicadas;
 - abajo de todo, el **formato** (Reels, Trial y Carruseles, que se prenden y se apagan), el interruptor **Collabs** y las **cuentas** conectadas, cada una con su casilla (siempre queda una prendida);
 - al pie, el **tema oscuro**, que queda guardado en el navegador.
 
@@ -24,6 +24,11 @@ Lo agendado se ve en la cuenta por la que sale; lo que todavía no tiene fecha s
 - **Semana.** El calendario. A la izquierda, *Por agendar*: lo Listo sin fecha y lo que falta revisar (con un botón para aprobar). Arrastrás una pieza a un día y toma el primer horario libre; tocando la hora la cambiás. Los horarios salen de `slots` (en la config de ejemplo, 11:00, 13:00, 15:00, 17:00, 19:00 y 21:00) y cada día se corren todos para un mismo lado 15 o 30 minutos, así no sale siempre a la misma hora; el mismo día da siempre los mismos, en el planner y en `cola.py agendar --slot`. Con `suggested_times` en la config, los botones de hora muestran ésos tal cual y `--slot` no corre nada. *Distribuir* reparte las piezas listas en tus horarios, separando temas parecidos e intercalando carruseles. La semana que mirás queda en la dirección (`#semana=<lunes>`), así un refresh vuelve a ella.
 - **Tablero.** Columnas por estado, tipo Trello: En desarrollo, Por revisar, Listo, En Postiz, Pausadas y Descartadas, lado a lado y cada una con su scroll. Cada tarjeta tiene la portada chica, el título, la fecha y las redes; en desarrollo muestra hasta dónde llegó la pieza (guion, audio, corte; en un carrusel, texto y láminas). Arrastrar entre las tres primeras cambia el estado; soltar en Listo es aprobar. Descartar oculta la pieza sin borrar nada.
 - **Publicadas.** Todo tu contenido en dos grupos que se pliegan: arriba lo agendado en Postiz, de lo más próximo a lo más lejano, y abajo lo publicado por mes.
+- **Referencias.** Qué producir: la Bandeja (el research de la semana y los contenidos que más rindieron de las cuentas que seguís), la Selección (lo elegido, por estado) y Competidores (la base de cuentas con su ficha). Hacer o Paso decide cada una; «Pedir guiones» manda lo elegido a Guiones. Ver [referencias.md](referencias.md).
+- **Métricas.** Cómo rinde cada cuenta en el período que elijas: seguidores, lo mejor del período, formatos y temas, y de dónde sale cada número. Ver [metricas.md](metricas.md).
+- **Twitter.** La semana para agendar, los borradores como se ven en X (los hilos, editables), tus bookmarks y búsquedas que los alimentan y la base de cuentas. Ver [twitter.md](twitter.md).
+- **LinkedIn.** Prospectos, videos a medida para cada uno, posts con su imagen, métricas y referencias, con su propio *Revisar cambios*. Ver [linkedin.md](linkedin.md).
+- **Historias** y **Guiones** tienen su página: [historias.md](historias.md) y [guiones.md](guiones.md).
 
 ## El detalle de una pieza
 
@@ -34,6 +39,10 @@ Al tocar una portada se abre el video (o las láminas; si todavía no hay ningun
 - **Dónde:** una fila por red, con su cuenta (un desplegable si conectaste más de una) y un interruptor. Instagram encendido suma **Formato** (feed o Trial) y **Collab**. En un reel de la cola que sale por Instagram y por otra red, **Otro horario para Instagram** pasa Instagram (con YouTube y LinkedIn) a una tarjeta propia sin fecha, para agendarla aparte (`cola.py separar`); si la original ya estaba en Postiz, sacarle esas redes va en *Revisar cambios*.
 - **Estado:** el tacho para descartar y En desarrollo, Por revisar, Listo o Publicado (para marcar algo que subiste a mano).
 - **Copy:** el texto que se publica, plegado a dos renglones. *Ver todo y editar* lo abre. Editarlo no toca tus archivos ni Postiz: queda como una nota de feedback con el texto nuevo, y Claude Code lo aplica cuando le pegás ese feedback (si la pieza ya estaba en Postiz, la recrea con el texto nuevo en la misma fecha).
+
+- **Anuncios**, al pie, en un video publicado o agendado: *Sumar a <carpeta>* lo elige para pautar. Viaja en *Revisar cambios* y Claude Code lo sube a tu carpeta compartida (Google Drive u otra que maneje rclone) con `engine/anuncios.py`; la tarjeta dice «Para <carpeta>» y, ya subido, «En <carpeta>». Aparece sólo si configuraste `anuncios` (ver INSTALAR.md).
+
+Si Claude Code dejó una versión nueva sólo para el planner (`cola.py reemplazar --solo-planner`, para seguir iterando un video agendado sin tocarlo en Postiz), la tarjeta dice **Versión sin subir**: se ve la nueva y Postiz sigue con la anterior hasta que la mandes en una propuesta.
 
 *Guardar* suma los cambios a tu borrador. Si la hora ya pasó, se guarda igual y el pie lo avisa: la propuesta no sale hasta que la corrijas.
 

@@ -5,7 +5,7 @@ import { createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, rea
 import { resolve, extname, relative, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { ENGINE_DIR, PYTHON, REPO_DIR, CONFIG_PATH, paths } from './config.ts';
+import { ENGINE_DIR, PYTHON, REPO_DIR, CONFIG_PATH, config, paths } from './config.ts';
 import { cantidad, capitalizar, conTitulo, editarDesc, listaNatural, nombreMensaje, tituloMensaje } from './titulo-mensaje.ts';
 export const exec = promisify(execFile);
 export const ROOT=()=>paths().root, STATE=()=>paths().state;
@@ -186,7 +186,18 @@ export function applyPlannerPublications(data:any, records:Record<string,any>, d
 function withPublications(data:any) {
   const out=applyPlannerPublications(data,fileRead(resolve(STATE(),'manual-publications.json'),{}),fileRead(resolve(STATE(),'discarded.json'),{}),plannerStages());
   // Notas de contenido sin aplicar: se suman a «Revisar cambios».
-  return {...out,items:out.items.map((i:any)=>{const n=existsSync(feedbackDir(i))?pendingFeedback(i).length:0;return n?{...i,feedback_pending:n}:i;})};
+  return {...out,anuncios:{carpeta:adsFolder(),...readAds()},items:out.items.map((i:any)=>{const n=existsSync(feedbackDir(i))?pendingFeedback(i).length:0;return n?{...i,feedback_pending:n}:i;})};
+}
+// Anuncios: en Publicadas (lo publicado y lo agendado) se eligen los videos listos para pautar; la selección viaja en
+// «Revisar cambios» y el agente los sube con engine/anuncios.py cuando pegás el mensaje. El planner nunca toca la carpeta.
+// La carpeta va en planner.config.json → anuncios (sin `remoto`, el botón no aparece).
+const ADS_FILE='anuncios-drive.json';
+export function adsFolder(){const a=config()?.anuncios;return a?.remoto?{nombre:String(a.nombre||'Anuncios'),url:a.url||(a.drive_id?'https://drive.google.com/drive/folders/'+a.drive_id:null)}:null;}
+function readAds(){const f=fileRead(resolve(STATE(),ADS_FILE),{});return {revision:Number.isInteger(f.revision)?f.revision:0,seleccion:f.seleccion||{},subidos:f.subidos||{}};}
+export const adsEligible=(item:any)=>['published','scheduled'].includes(item?.status)&&!['carrusel','carousel'].includes(item.format)&&item.primary?.kind==='video';
+export function validatePlannerAds(body:any) {
+  if(!body||typeof body.id!=='string'||!body.id||body.id.length>500||!['add','remove'].includes(body.action)||!Number.isInteger(body.revision))throw new Error('Selección de anuncios inválida');
+  return body;
 }
 // Stage overrides; returned-to-review.json is the earlier single-purpose record and still counts.
 function plannerStages() {
@@ -256,19 +267,21 @@ export function plannerAction(item:any,change:any) {
 }
 const AGENDA_DESC:Record<string,string>={schedule:'Agendar',move:'Cambio de horario de',unschedule:'Sacar de la agenda',pause:'Pausar',resume:'Retomar',update:'Ajustar'};
 // Lo que hace de verdad la propuesta: «Cambio de horario de «X»», «Agendar 3 piezas», «Agendar 2 piezas y corregir 1 pieza».
-export function proposalTitle(cambios:{accion:string,title:string}[], feedback:any[]) {
+export function proposalTitle(cambios:{accion:string,title:string}[], feedback:any[], anuncios=0, carpeta='Anuncios') {
   const tipos=[...new Set(cambios.map(c=>c.accion))],de=(k:string)=>cambios.filter(c=>c.accion===k).length;
   const agenda=!cambios.length?'':tipos.length>2?`Cambios de agenda en ${cantidad(cambios.length,'pieza')}`
     :tipos.length===2?`${AGENDA_DESC[tipos[0]]} ${cantidad(de(tipos[0]),'pieza')} y ${AGENDA_DESC[tipos[1]].toLowerCase()} ${de(tipos[1])}`
     :`${AGENDA_DESC[tipos[0]]} ${cambios.length===1?nombreMensaje(cambios[0].title):cantidad(cambios.length,'pieza')}`;
   const unaNota=feedback.length===1?feedback[0]:null,copy=!!unaNota?.notes.some((n:any)=>n.tipo==='copy'),otras=!!unaNota?.notes.some((n:any)=>n.tipo!=='copy');
   const contenido=!feedback.length?'':cambios.length?`corregir ${cantidad(feedback.length,'pieza')}`:unaNota?editarDesc(unaNota.title,copy,otras,/\.(mp4|mov|webm)$/i.test(unaNota.video||'')?'el video':'la pieza'):`Corregir ${cantidad(feedback.length,'pieza')}`;
-  return tituloMensaje(cambios.length?'Agenda':'Feedback',capitalizar(listaNatural([agenda,contenido].filter(Boolean))));
+  const drive=!anuncios?'':`subir ${cantidad(anuncios,'video')} a ${carpeta}`;
+  return tituloMensaje(cambios.length?'Agenda':feedback.length?'Feedback':'Anuncios',capitalizar(listaNatural([agenda,contenido,drive].filter(Boolean))));
 }
-export function proposalPrompt(id:string, agenda:number, feedback:any[]) {
+export function proposalPrompt(id:string, agenda:number, feedback:any[], anuncios=0, carpeta='Anuncios') {
   const file=resolve(STATE(),'proposal-'+id+'.json');
   const lines=['Confirmo la propuesta '+id+' del planner de contenido.','',
     `Propuesta: ${file}`,`Planner: ${REPO_DIR}`,`Instrucciones: seguí ${resolve(REPO_DIR,'.claude/skills/publicar/SKILL.md')} (motor: ${resolve(ENGINE_DIR,'cola.py')}).`];
+  if(anuncios)lines.push('',`Anuncios: subí ${anuncios===1?'el video que elegí':`los ${anuncios} videos que elegí`} a la carpeta «${carpeta}» (campo «anuncios» de la propuesta) con \`python3 ${resolve(ENGINE_DIR,'anuncios.py')} subir ${id}\` y pasame el link de la carpeta.`);
   if(agenda)lines.push('','Agenda: revisá sus fechas, redes, cuentas, colaboradores, versiones y estados actuales, y programá en Postiz las piezas terminadas que indiqué. Las que todavía no tienen archivo final quedan como reserva.',
     'Versiones: si un cambio trae requested_version, publicá ese archivo. Si la pieza está en la cola sin fecha, `cola.py reemplazar <slug> <archivo>`; si ya está agendada, quitar, reemplazar y volver a agendarla en la fecha pedida. Si todavía no está en la cola, `cola.py listo` con ese archivo.');
   if(feedback.length){
@@ -323,6 +336,23 @@ export function registerPublicationPlanner(app:Hono) {
     }catch(e){return c.json({error:(e as Error).message},400);}
   });
   // Descarte local: oculta la pieza del planner. Nunca borra archivos, fichas ni posts remotos.
+  // Sumar o quitar un video de la selección de anuncios. Sólo guarda la elección: subir es del agente.
+  app.post('/api/planner/ads',async c=>{
+    try {
+      const body=validatePlannerAds(await c.req.json()),ads=readAds();
+      if(body.revision!==ads.revision)return c.json({error:'La selección de anuncios cambió en otra pestaña. Recargá antes de seguir.'},409);
+      if(body.action==='add'){
+        if(!adsFolder())return c.json({error:'Falta la carpeta de anuncios en planner.config.json (anuncios.remoto).'},400);
+        const item=(await inventory()).items.find((i:any)=>i.id===body.id);
+        if(!item)return c.json({error:'Esta pieza ya no está en el tablero.'},400);
+        if(!adsEligible(item))return c.json({error:'Sólo se suman videos publicados o agendados en Postiz.'},400);
+        if(ads.subidos[body.id]?.video===item.primary.path)return c.json({error:'Este video ya está en la carpeta de anuncios.'},400);
+        ads.seleccion[body.id]={title:item.title,video:item.primary.path,brand:item.brand||null,added_at:new Date().toISOString()};
+      } else delete ads.seleccion[body.id];
+      write(ADS_FILE,{...fileRead(resolve(STATE(),ADS_FILE),{}),revision:ads.revision+1,seleccion:ads.seleccion,subidos:ads.subidos,saved_at:new Date().toISOString()});
+      return c.json({anuncios:{carpeta:adsFolder(),...readAds()}});
+    }catch(e){return c.json({error:(e as Error).message},400);}
+  });
   app.post('/api/planner/discard',async c=>{
     try {
       const body=validatePlannerDiscard(await c.req.json());
@@ -478,7 +508,8 @@ export function registerPublicationPlanner(app:Hono) {
     const data=await inventory();const changes=Object.entries(draft.changes).map(([id,value])=>({item:data.items.find((i:any)=>i.id===id),change:value as any}));
     // El feedback de contenido viaja en la misma propuesta que la agenda.
     const feedback=data.items.filter((i:any)=>i.feedback_pending&&!['discarded','component','archived'].includes(i.status)).map((i:any)=>({id:i.id,title:i.title,status:i.status,source:i.source||null,video:i.primary?.path||null,feedback_dir:rel(feedbackDir(i)),notes:pendingFeedback(i).map(e=>({file:e.file,created_at:e.created_at,...(e.tipo==='copy'?{tipo:'copy',copy:e.copy}:{}),text:e.text,audio:e.audio,audio_seconds:e.audio_seconds,video_time:e.video_time})),...(pendingFeedback(i).some(e=>e.tipo==='copy')?{sidecar:i.sidecar||null,slug:i.slug||null}:{})}));
-    if(!changes.length&&!feedback.length)return c.json({error:'Todavía no hay cambios.'},400);
+    const anuncios=Object.entries(readAds().seleccion).map(([id,s]:[string,any])=>{const item=data.items.find((i:any)=>i.id===id);return {id,title:item?.title||s.title,video:item?.primary?.path||s.video,brand:item?.brand||s.brand||null,status:item?.status||null};});
+    if(!changes.length&&!feedback.length&&!anuncios.length)return c.json({error:'Todavía no hay cambios.'},400);
     // Cada rechazo nombra las piezas, para corregirlas desde la lista de la propuesta.
     const names=(list:any[])=>list.map(x=>'«'+x.item.title+'»').join(', ');
     if(changes.some(x=>!x.item))return c.json({error:'Una pieza ya no está en el tablero. Quitala de la propuesta.'},409);
@@ -488,10 +519,10 @@ export function registerPublicationPlanner(app:Hono) {
     if(stale.length)return c.json({error:`Cambió desde tu edición: ${names(stale)}. Revisala en la propuesta.`},409);
     const id=new Date().toISOString().replace(/[-:TZ.]/g,'').slice(0,14)+'-'+randomUUID().slice(0,6);
     // Una pieza con final y fecha en el calendario queda aprobada al confirmar; sólo la que no tiene final sigue en reserva.
-    const proposal={id,status:'awaiting_chat_confirmation',created_at:new Date().toISOString(),timezone:data.timezone,postiz_fetched_at:data.postiz_fetched_at,revision:draft.revision,changes:changes.map(({item,change})=>({id:item.id,title:item.title,source:item.source,sidecar:item.sidecar,slug:item.slug,primary:item.primary,fingerprint:item.fingerprint,original:item.scheduled,requested:change.when,requested_action:plannerAction(item,change),paused:item.status==='paused',pause:item.pause||null,note:change.note||'',networks:item.networks,requested_networks:change.networks??(item.networks?.length?item.networks:data.config?.default_networks||[]),collaborators:item.collaborators||[],requested_version:change.version||null,accounts:item.accounts||{},requested_accounts:change.accounts??(item.accounts||{}),requested_collaborators:change.collaborators??(Array.isArray(item.collaborators)?item.collaborators:String(item.id).startsWith('queue:')?[]:data.config?.default_collaborators||[]),channels:item.channels,instagram_trial:item.trial===true,production_status:item.status,missing_final:!item.primary,approved_by_calendar:!item.approved&&!!change.when&&!!item.primary,requires_final_approval:!item.approved&&!(change.when&&item.primary)})),feedback};
+    const proposal={id,status:'awaiting_chat_confirmation',created_at:new Date().toISOString(),timezone:data.timezone,postiz_fetched_at:data.postiz_fetched_at,revision:draft.revision,changes:changes.map(({item,change})=>({id:item.id,title:item.title,source:item.source,sidecar:item.sidecar,slug:item.slug,primary:item.primary,fingerprint:item.fingerprint,original:item.scheduled,requested:change.when,requested_action:plannerAction(item,change),paused:item.status==='paused',pause:item.pause||null,note:change.note||'',networks:item.networks,requested_networks:change.networks??(item.networks?.length?item.networks:data.config?.default_networks||[]),collaborators:item.collaborators||[],requested_version:change.version||(item.reedit?.final&&item.reedit.final.path!==item.reedit.queued?.path?item.reedit.final.path:null),accounts:item.accounts||{},requested_accounts:change.accounts??(item.accounts||{}),requested_collaborators:change.collaborators??(Array.isArray(item.collaborators)?item.collaborators:String(item.id).startsWith('queue:')?[]:data.config?.default_collaborators||[]),channels:item.channels,instagram_trial:item.trial===true,production_status:item.status,missing_final:!item.primary,approved_by_calendar:!item.approved&&!!change.when&&!!item.primary,requires_final_approval:!item.approved&&!(change.when&&item.primary)})),feedback,...(anuncios.length?{anuncios:{carpeta:adsFolder(),videos:anuncios}}:{})};
     write('proposal-'+id+'.json',proposal);
     for(const f of feedback)markFeedbackSent(resolve(ROOT(),f.feedback_dir),f.notes.map((n:any)=>n.file),'propuesta '+id);
-    return c.json({id,path:rel(resolve(STATE(),'proposal-'+id+'.json')),prompt:conTitulo(proposalTitle(changes.map(({item,change})=>({accion:plannerAction(item,change),title:item.title})),feedback),proposalPrompt(id,changes.length,feedback))});
+    return c.json({id,path:rel(resolve(STATE(),'proposal-'+id+'.json')),prompt:conTitulo(proposalTitle(changes.map(({item,change})=>({accion:plannerAction(item,change),title:item.title})),feedback,anuncios.length,adsFolder()?.nombre),proposalPrompt(id,changes.length,feedback,anuncios.length,adsFolder()?.nombre))});
   });
   // Un archivo se abre seleccionado en su carpeta; una carpeta, abierta.
   app.post('/api/planner/reveal',async c=>{

@@ -121,6 +121,14 @@ def queue_items(live):
             except OSError:
                 components = []
         newer = newer_final(d) if status in ('ready', 'scheduled', 'paused', 'attention') else None
+        # Versión elegida sólo para el planner (cola.py reemplazar --solo-planner): la tarjeta la muestra y la cola y Postiz
+        # siguen con la anterior hasta que se pida subirla; una propuesta con esta pieza la lleva como requested_version.
+        vp = piezas.asset(queue_path((d.get('version_planner') or {}).get('path')))
+        reedit = None
+        if vp and (not primary or vp['path'] != primary['path']):
+            reedit = {'source': rel(src) if src else '', 'final': vp, 'queued': primary, 'sin_subir': True}
+            media = [vp] + [m for m in media if m['path'] != vp['path']]
+            primary, newer = vp, None
         scheduled = next((c['when'] for c in queued if c['network'] == 'instagram'), None) or next((c['when'] for c in queued if c['network'] != 'tiktok'), None) or next((c['when'] for c in queued), None)
         slot = d.get('slot') or {}
         reference = (slot.get('fecha') + 'T' + (slot.get('hora') or '00:00')) if slot.get('fecha') else next((c['when'] for c in channels if c['when']), None)
@@ -137,6 +145,8 @@ def queue_items(live):
             'publication_reference': reference, 'collaborators': d.get('instagram_collaborators') or [],
             'series': d.get('serie'), 'category': d.get('categoria'), 'kind': d.get('tipo'), 'expires': d.get('vence'), 'pause': d.get('pausa'),
         })
+        if reedit:
+            items[-1]['reedit'] = reedit
     for f in files:
         aislar(items, rel(f), pieza_de_la_cola, f)
     return items, covered, used

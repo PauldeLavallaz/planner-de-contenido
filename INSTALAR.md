@@ -103,6 +103,18 @@ Preguntá si quiere revisar guiones, audios y cortes en el planner antes de publ
 
 Detalle en [docs/guiones.md](docs/guiones.md).
 
+## 4d. Lo demás, opcional
+
+Cada sección funciona sola y se puede sumar después. Preguntá qué le interesa y configurá sólo eso; las claves van en el `.env` del planner (las escribe el usuario, nunca en el chat) y lo demás en `planner.config.json`.
+
+- **Referencias, Competidores y Métricas:** la base vive en `research/` adentro de su contenido (`research.carpeta`). Traer contenidos de cuentas usa `SCRAPECREATORS_API_KEY`; analizar videos, `GEMINI_API_KEY`. Las métricas propias salen de Postiz. Ver [docs/referencias.md](docs/referencias.md) y [docs/metricas.md](docs/metricas.md).
+- **Twitter:** `x.usuario` en la config; `X_BEARER_TOKEN` para búsquedas y, para los bookmarks, la app de OAuth de X (`X_OAUTH2_CLIENT_ID` y `X_OAUTH2_CLIENT_SECRET`; `python3 engine/x/oauth.py autorizar` hace el login, de sólo lectura). Ver [docs/twitter.md](docs/twitter.md).
+- **LinkedIn:** su cuenta en `linkedin.cuenta`; la búsqueda de prospectos usa las claves que elija en la skill `linkedin-prospectos`, y la lámina de los posts, Playwright. Ver [docs/linkedin.md](docs/linkedin.md).
+- **Avisos por Telegram:** que cree un bot con @BotFather, ponga `TELEGRAM_BOT_TOKEN` en el `.env` y el chat en `telegram.chat_id`; después elige qué avisos prender (`historias_tiktok`, `avisos_cadena`, `tiktok_copy`). Hace falta el servicio del planner corriendo. Ver [docs/historias.md](docs/historias.md#avisos-por-telegram).
+- **Anuncios:** una carpeta compartida (Google Drive u otra) con rclone instalado y configurado (`rclone config`, con su OK); en la config, `anuncios.remoto` (por ejemplo `drive:Anuncios`), `anuncios.nombre` y, si quiere el botón para abrirla, `anuncios.url`.
+- **Hora de las historias por día:** `historias.horas` (por ejemplo `{"1": "14:00", "6": "15:30"}`); sin eso, 15:00.
+- **Para en Guiones:** las opciones de `guiones.mensajes` (`[{"id": "producto", "nombre": "Producto"}]`), para filtrar las piezas por el mensaje que llevan.
+
 ## 5. Arrancar el planner
 
 ```bash

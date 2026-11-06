@@ -11,12 +11,15 @@ export const CONFIG_PATH = resolve(process.env.PLANNER_CONFIG || resolve(REPO_DI
 export const PYTHON = process.env.PLANNER_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
 
 const expand = (p: string) => p.startsWith('~') ? resolve(homedir(), p.slice(1).replace(/^[\\/]/, '')) : p;
-let cached: { mtime: number, value: Paths } | null = null;
+let cached: { mtime: number, value: Paths, cfg: any } | null = null;
 export const MOTOR_DIR = resolve(process.env.PLANNER_MOTOR || resolve(REPO_DIR, 'motor-historias'));
 // stories: la carpeta con las semanas de historias (cada una con su semana.json); photos: tu carpeta de fotos para
 // usar de fondo o de sticker en el editor (opcional).
 // guiones: la carpeta con los planes de cada semana (<AAAA-MM-DD>/plan.json); looks: una imagen o video por look del avatar.
-export type Paths = { configured: boolean, root: string, publish: string, state: string, timezone: string, networks: string[], stories: string, photos: string | null, guiones: string, looks: string };
+// research: la base de competidores y de métricas propias (radar.db) y sus portadas; referencias: el research de cada semana
+// (<AAAA-MM-DD>/referencias.json); x y linkedin: los borradores, el feedback y el estado de esas secciones.
+export type Paths = { configured: boolean, root: string, publish: string, state: string, timezone: string, networks: string[], stories: string, photos: string | null, guiones: string, looks: string,
+  research: string, referencias: string, x: string, linkedin: string };
 
 // La config se relee cuando cambia: la instalación la va completando con el planner ya abierto.
 export function paths(): Paths {
@@ -31,9 +34,13 @@ export function paths(): Paths {
   const pubRaw = expand(String(cfg?.publish_root ?? 'publicar'));
   const publish = isAbsolute(pubRaw) ? resolve(pubRaw) : resolve(root, pubRaw);
   const at = (raw: string) => { const x = expand(raw); return isAbsolute(x) ? resolve(x) : resolve(root, x); };
-  const st = cfg?.historias || {}, gu = cfg?.guiones || {};
+  const st = cfg?.historias || {}, gu = cfg?.guiones || {}, pub = (raw: string) => { const x = expand(raw); return isAbsolute(x) ? resolve(x) : resolve(publish, x); };
   const value = { configured: mtime >= 0, root, publish, state: resolve(publish, '.planner'), timezone: cfg?.timezone || 'America/Argentina/Buenos_Aires', networks: Object.keys(cfg?.channels || {}),
-    stories: at(String(st.carpeta ?? 'historias')), photos: st.fotos ? at(String(st.fotos)) : null, guiones: at(String(gu.carpeta ?? 'guiones')), looks: at(String(gu.looks ?? 'looks')) };
-  cached = { mtime, value };
+    stories: at(String(st.carpeta ?? 'historias')), photos: st.fotos ? at(String(st.fotos)) : null, guiones: at(String(gu.carpeta ?? 'guiones')), looks: at(String(gu.looks ?? 'looks')),
+    research: at(String(cfg?.research?.carpeta ?? 'research')), referencias: at(String(cfg?.referencias?.carpeta ?? 'referencias')),
+    x: pub(String(cfg?.x?.carpeta ?? 'x')), linkedin: pub(String(cfg?.linkedin?.carpeta ?? 'linkedin')) };
+  cached = { mtime, value, cfg };
   return value;
 }
+// La config entera (la de cada sección: research, referencias, x, linkedin, telegram, anuncios…), releída como paths().
+export function config(): any { paths(); return cached?.cfg || {}; }

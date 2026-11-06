@@ -7,6 +7,11 @@ import { registerPublicationPlanner } from './publication-planner.ts';
 import { registerStories } from './historias.ts';
 import { registerGuiones } from './guiones.ts';
 import { registerProduccion } from './produccion.ts';
+import { registerReferencias } from './referencias.ts';
+import { registerMetricas } from './metricas.ts';
+import { registerX } from './x.ts';
+import { registerLinkedin } from './linkedin.ts';
+import { registerAvisos } from './avisos.ts';
 
 const app = new Hono();
 const port = Number(process.env.PLANNER_PORT || 4180);
@@ -22,8 +27,13 @@ registerPublicationPlanner(app);
 registerStories(app);
 registerGuiones(app);
 registerProduccion(app);
+registerReferencias(app);
+registerMetricas(app);
+registerX(app);
+registerLinkedin(app);
+registerAvisos(app);
 // Serve only the planner's public files. No dashboard, watchers or generation jobs are loaded.
-for (const [file, type] of [['planner.html', 'text/html'], ['planner.js', 'text/javascript'], ['planner.css', 'text/css'], ['historias.js', 'text/javascript'], ['historias.css', 'text/css'], ['guiones.js', 'text/javascript'], ['guiones.css', 'text/css'], ['ui.js', 'text/javascript'], ['ui.css', 'text/css']]) {
+for (const [file, type] of [['planner.html', 'text/html'], ['planner.js', 'text/javascript'], ['planner.css', 'text/css'], ['historias.js', 'text/javascript'], ['historias.css', 'text/css'], ['guiones.js', 'text/javascript'], ['guiones.css', 'text/css'], ['referencias.js', 'text/javascript'], ['referencias.css', 'text/css'], ['metricas.js', 'text/javascript'], ['metricas.css', 'text/css'], ['x.js', 'text/javascript'], ['x.css', 'text/css'], ['linkedin.js', 'text/javascript'], ['linkedin.css', 'text/css'], ['ui.js', 'text/javascript'], ['ui.css', 'text/css']]) {
   const contents = readFileSync(resolve(PUBLIC_DIR, file));
   const handler = () => new Response(contents, { headers: { 'Content-Type': type + '; charset=utf-8', 'Cache-Control': 'no-store' } });
   app.get('/' + file, handler);

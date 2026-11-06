@@ -11,11 +11,13 @@ Subcomandos:
   quitar <slug>                                  saca de Postiz y devuelve a inbox/
   separar <slug> [--redes instagram,youtube]     esas redes pasan a una tarjeta propia en inbox/, para otro horario
   reemplazar <slug> <archivo>                    otra versión del video para una pieza sin agendar
+  reemplazar <slug> <archivo> --solo-planner     la tarjeta del planner la muestra; Postiz sigue con la anterior
   pausar <slug> [--motivo]                       saca de Postiz y la retiene: cronograma no la toma
   reanudar <slug>                                levanta la pausa: vuelve a inbox/ lista
   ahora <slug> [--redes instagram,tiktok]        publica ya: recrea los posts programados con envío inmediato
   modo-ig <slug> feed|trial                      Instagram del reel: feed o Trial; sólo la ficha, sin Postiz
   publicado                                      reconcilia con Postiz y archiva lo que ya salió
+  avisos                                         avisos del copy de TikTok por Telegram (telegram.tiktok_copy)
   reconciliar [--json]                           actualiza estados desde Postiz sin mover nada
   fijado <slug> [--descartar]                    registra que fijaste el comentario a mano
   capacidades                                    qué formatos admite cada cuenta conectada
@@ -33,6 +35,7 @@ from common import (AGENDADO, CFG, INBOX, PUBLICADO, PUBLISH, REPO, ROOT, STATE,
 from estado_publicacion import aggregate_state, channel_state, format_capability
 from postiz_errors import PostizError, error_for_output
 import piezas
+import avisos
 
 POSTIZ_TIMEOUT = 60
 UPLOAD_SECONDS_PER_MB = 2
@@ -958,6 +961,18 @@ def cmd_quitar(a):
 def cmd_reemplazar(a):
     with queue_lock():
         media = find_piece(a.slug)
+        if a.solo_planner:
+            # La tarjeta del planner muestra esta versión; la copia de la cola y Postiz no se tocan hasta que se pida subirla
+            # (una propuesta del planner con la pieza la lleva como requested_version). Sirve para seguir iterando un video ya
+            # agendado sin perder el que está en Postiz.
+            new = Path(a.archivo).expanduser().resolve()
+            if not new.is_file() or new.suffix.lower() not in {'.mp4', '.mov'} or not inside_root(new):
+                die('el archivo nuevo tiene que ser un mp4/mov dentro de la carpeta de contenido')
+            meta = load_meta(media)
+            meta['version_planner'] = {'path': rel(new), 'at': now_local().isoformat(timespec='seconds'), 'motivo': a.motivo}
+            save_meta(media, meta)
+            print(f"✓ {meta['slug']}: el planner muestra {new.name}; la cola y Postiz siguen con la versión anterior")
+            return
         if media.parent != INBOX:
             die(f'«{a.slug}» está agendada: quitala, reemplazala y volvé a agendarla')
         meta = load_meta(media)
@@ -983,6 +998,7 @@ def cmd_reemplazar(a):
         meta['portada'] = aplicar_portada(media, new, float(t), meta['slug']) if t is not None else None
         meta.setdefault('reemplazos', []).append({'at': now_local().isoformat(timespec='seconds'), 'antes': meta.get('source_final'), 'copia_anterior': str(old), 'motivo': a.motivo})
         meta['source_final'], meta['content_sha256'] = str(new), ordered_media_digest([new])
+        meta.pop('version_planner', None)
         meta['postiz']['media_path'] = None
         meta['postiz'].pop('media', None)
         meta['postiz'].pop('thumbnail', None)
@@ -1438,13 +1454,16 @@ def main():
     p = sp.add_parser('separar'); p.add_argument('slug')
     p.add_argument('--redes', help='instagram,youtube,…; por defecto Instagram, YouTube y LinkedIn de la pieza')
     p.add_argument('--motivo'); p.add_argument('--json', action='store_true'); p.set_defaults(fn=cmd_separar)
-    p = sp.add_parser('reemplazar'); p.add_argument('slug'); p.add_argument('archivo'); p.add_argument('--portada', type=float); p.add_argument('--motivo'); p.set_defaults(fn=cmd_reemplazar)
+    p = sp.add_parser('reemplazar'); p.add_argument('slug'); p.add_argument('archivo'); p.add_argument('--portada', type=float); p.add_argument('--motivo')
+    p.add_argument('--solo-planner', action='store_true', help='Sólo la tarjeta del planner muestra esta versión; no toca la copia de la cola ni Postiz. Vale también para una pieza agendada.')
+    p.set_defaults(fn=cmd_reemplazar)
     p = sp.add_parser('pausar'); p.add_argument('slug'); p.add_argument('--motivo'); p.set_defaults(fn=cmd_pausar)
     p = sp.add_parser('reanudar'); p.add_argument('slug'); p.set_defaults(fn=cmd_reanudar)
     p = sp.add_parser('ahora'); p.add_argument('slug'); p.add_argument('--redes'); p.set_defaults(fn=cmd_ahora)
     p = sp.add_parser('modo-ig'); p.add_argument('slug'); p.add_argument('modo', choices=['feed', 'trial'])
     p.add_argument('--aunque-agendada', action='store_true'); p.add_argument('--por', default='planner'); p.set_defaults(fn=cmd_modo_ig)
     p = sp.add_parser('publicado'); p.set_defaults(fn=cmd_publicado)
+    p = sp.add_parser('avisos', help='los avisos del copy de TikTok por Telegram que están por salir'); p.set_defaults(fn=cmd_avisos)
     p = sp.add_parser('reconciliar'); p.add_argument('--archivados', action='store_true'); p.add_argument('--json', action='store_true'); p.set_defaults(fn=cmd_reconciliar)
     p = sp.add_parser('fijado'); p.add_argument('slug'); p.add_argument('--descartar', action='store_true'); p.set_defaults(fn=cmd_fijado)
     p = sp.add_parser('capacidades'); p.set_defaults(fn=cmd_capacidades)
@@ -1463,12 +1482,65 @@ def main():
 MUTATING = {'agendar', 'mover', 'quitar', 'pausar', 'ahora', 'publicado', 'reconciliar', 'aplicar'}
 
 
+# ---------------------------------------------------------------- avisos de Telegram
+def aviso_tiktok(meta):
+    """El aviso con el copy de TikTok de una pieza que va como borrador a la bandeja de TikTok (cuenta en modo inbox), o
+    None. Sale cuando el borrador llega (la hora del post de TikTok + `telegram.tiktok_demora_minutos`, 2 por defecto), así
+    la publicás desde el teléfono con el texto a mano. Se prende con `telegram.tiktok_copy` en planner.config.json."""
+    tg = CFG.get('telegram') or {}
+    if not tg.get('tiktok_copy') or 'tiktok' not in meta.get('redes', []) or not tiktok_inbox(channel_for(meta, 'tiktok')):
+        return None
+    tk = next((p for p in (meta.get('postiz') or {}).get('posts', []) if p.get('red') == 'tiktok' and p.get('id') and p.get('estado') != 'cancelado'), None)
+    if not tk or tk.get('type') == 'draft' or not tk.get('date_utc'):
+        return None
+    llega = datetime.fromisoformat(tk['date_utc'].replace('Z', '+00:00')) + timedelta(minutes=tg.get('tiktok_demora_minutos', 2))
+    titulo = meta.get('titulo') or meta['slug']
+    return {'id': f"tiktok-copy-{meta['slug']}__{tk['id']}", 'tipo': 'tiktok_copy', 'slug': meta['slug'], 'titulo': f'Copy de TikTok · {titulo}',
+            'enviar_utc': avisos.utc_iso(llega),
+            'partes': [['aviso', f'📲 Llegó a tu bandeja de TikTok: «{titulo}». El texto va en el mensaje siguiente, para copiarlo.', False],
+                       ['copy', caption_for(meta, 'tiktok') or titulo, True]]}
+
+
+def sync_avisos():
+    """Espeja lo agendado en la cola de avisos: suma los que faltan, rehace los que cambiaron y saca los de piezas que se
+    movieron, se quitaron o dejaron de ir a la bandeja. Lo que ya empezó a salir no se toca; una pieza que se publicó antes
+    de que saliera su aviso lo conserva. Local: no toca Postiz ni Telegram."""
+    if not (CFG.get('telegram') or {}).get('tiktok_copy') or not avisos.configurado():
+        return []
+    vigentes = {}
+    for _, meta in agendado_pieces():
+        av = aviso_tiktok(meta)
+        if av:
+            vigentes[av['id']] = av
+            avisos.encolar(av, rehacer=True)
+    en_cola = {meta.get('slug') for _, meta in agendado_pieces() + inbox_pieces()}
+    for _, av in avisos.pendientes('tiktok-copy-'):
+        if av.get('id') not in vigentes and av.get('slug') in en_cola:
+            avisos.quitar(av['id'])
+    return sorted(vigentes.values(), key=lambda a: a['enviar_utc'])
+
+
+def avisos_al_dia():
+    try:
+        sync_avisos()
+    except Exception as e:  # el aviso nunca frena la cola de Postiz
+        print(f'  (avisos de Telegram sin actualizar: {e})', file=sys.stderr)
+
+
+def cmd_avisos(a):
+    avs = sync_avisos()
+    print(f'Avisos del copy de TikTok por Telegram pendientes ({len(avs)}):')
+    for av in avs:
+        print(f"  {datetime.fromisoformat(av['enviar_utc'].replace('Z', '+00:00')).astimezone(tz()).strftime('%a %d/%m %H:%M')}  {av['titulo']}")
+
+
 def refresh_snapshot(a):
     """Después de tocar Postiz, el planner tiene que ver lo nuevo sin esperar a que alguien toque «Actualizar»."""
     if a.cmd not in MUTATING and not (a.cmd == 'cronograma' and getattr(a, 'apply', False)):
         return
     if a.cmd == 'aplicar' and not getattr(a, 'ejecutar', False):
         return
+    avisos_al_dia()
     try:
         import inventario
         inventario.refresh()

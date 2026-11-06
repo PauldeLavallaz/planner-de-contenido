@@ -128,6 +128,8 @@ const accounts = i => ch(i)?.accounts ?? origAccounts(i);
 const acctOf = (n, map) => { const o = acctOpts(n); return o.find(a => a.id === map?.[n]) || o[0]; };
 // Versión que se publica: la elegida en el detalle o la de la pieza.
 const version = i => ch(i)?.version ?? null;
+// La tarjeta muestra otra versión que la de Postiz (cola.py reemplazar --solo-planner): se sube cuando la pidas en una propuesta.
+const reeditTag = i => i.reedit?.sin_subir ? `<span class="mini warn" title="El planner muestra ${esc(i.reedit.final?.path.split('/').pop() || '')}. Postiz sigue con la versión anterior hasta que pidas subir ésta.">Versión sin subir</span>` : '';
 const isVideoPiece = i => !isCarousel(i) && i.primary?.kind === 'video';
 const eqAcc = (a, b) => JSON.stringify(normAcc(a)) === JSON.stringify(normAcc(b));
 const collabValue = o => o.handle || o.label;
@@ -135,6 +137,13 @@ const collabLabel = v => (collabOptions().find(o => o.handle === v || o.label ==
 // Piezas con feedback de contenido sin aplicar: viajan en la misma propuesta.
 const feedbackItems = () => data.items.filter(i => i.feedback_pending && !['discarded', 'component', 'archived'].includes(i.status));
 const isCarousel = i => ['carrusel', 'carousel'].includes(i.format);
+// Anuncios: en Publicadas se eligen los videos listos para pautar; viajan en «Revisar cambios» y Claude Code los sube a la
+// carpeta compartida (engine/anuncios.py). El planner sólo guarda la selección. Sin carpeta en la config, no aparece.
+const ads = () => data.anuncios || { revision: 0, seleccion: {}, subidos: {} };
+const adsName = () => ads().carpeta?.nombre || 'Anuncios';
+const adsEligible = i => !!ads().carpeta && ['published', 'scheduled'].includes(i.status) && isVideoPiece(i);
+const adsPicked = i => !!ads().seleccion[i.id];
+const adsDone = i => ads().subidos[i.id]?.video === i.primary?.path ? ads().subidos[i.id] : null;
 const formatLabel = i => isCarousel(i) ? 'Carrusel' : ({ reel: 'Reel', video: 'Video', story: 'Historia', image: 'Imagen' }[i.format] || 'Sin ficha');
 const isRef = i => ['component', 'archived'].includes(i.status);
 const editable = i => !['published', 'component', 'archived', 'discarded'].includes(i.status);
@@ -245,20 +254,28 @@ function render() {
   if (location.hash !== wantHash) history.replaceState(null, '', location.pathname + location.search + wantHash);
   document.querySelectorAll('#navMenu [data-view]').forEach(b => b.setAttribute('aria-current', b.dataset.view === view ? 'page' : 'false'));
   $('viewName').textContent = VISTAS[view] || '';
-  $('weekView').hidden = view !== 'week'; $('piecesView').hidden = view !== 'pieces'; $('historyView').hidden = view !== 'history'; $('storiesView').hidden = view !== 'stories'; $('guionesView').hidden = view !== 'guiones';
+  $('weekView').hidden = view !== 'week'; $('piecesView').hidden = view !== 'pieces'; $('historyView').hidden = view !== 'history'; $('storiesView').hidden = view !== 'stories'; $('guionesView').hidden = view !== 'guiones'; $('referenciasView').hidden = view !== 'referencias'; $('metricasView').hidden = view !== 'metricas'; $('xView').hidden = view !== 'x'; $('liView').hidden = view !== 'linkedin';
   // El buscador sólo va donde filtra una lista y dice qué busca ahí; en las demás vistas no aparece ni filtra.
   const slot = document.querySelector('main:not([hidden]) [data-busca]'), sw = $('searchWrap');
   if (slot) { if (sw.parentElement !== slot) slot.append(sw); sw.hidden = false; $('search').placeholder = slot.dataset.busca; $('search').setAttribute('aria-label', slot.dataset.busca); }
   else { sw.hidden = true; $('search').value = ''; }
   renderCuentas();
   document.body.classList.toggle('stories-mode', view === 'stories');
-  const n = Object.keys(draft.changes).length + feedbackItems().filter(i => !draft.changes[i.id]).length;
-  $('changeCount').textContent = n; $('review').disabled = !n || saveError || busy;
+  // En LinkedIn el botón cuenta lo de LinkedIn; ver liContador en linkedin.js.
+  if (view === 'linkedin' && typeof liContador === 'function') liContador();
+  else {
+    const n = Object.keys(draft.changes).length + feedbackItems().filter(i => !draft.changes[i.id]).length + Object.keys(ads().seleccion).length;
+    $('changeCount').textContent = n; $('review').disabled = !n || saveError || busy;
+  }
   renderSync(); renderAlerts();
   if (view === 'week') { renderBacklog(); renderWeek(); }
   else if (view === 'pieces') renderPieces();
   else if (view === 'stories') renderStories(); // historias.js
   else if (view === 'guiones') { if (typeof renderGuiones === 'function') renderGuiones(); } // guiones.js
+  else if (view === 'referencias') { if (typeof renderReferencias === 'function') renderReferencias(); } // referencias.js
+  else if (view === 'metricas') { if (typeof renderMetricas === 'function') renderMetricas(); } // metricas.js
+  else if (view === 'x') { if (typeof renderX === 'function') renderX(); } // x.js
+  else if (view === 'linkedin') { if (typeof renderLinkedin === 'function') renderLinkedin(); } // linkedin.js
   else renderHistory();
 }
 
@@ -326,7 +343,7 @@ function tile(i, mode) {
   const brand = BRANDS.length > 1 && i.brand !== defaultBrand() ? `<span class="chip-ov brand">${esc(BRAND_LABEL[i.brand] || i.brand)}</span>` : '';
   const decided = done || i.id.startsWith('queue:') || i.id.startsWith('remote:') || ch(i)?.networks || w;
   const shownNets = done ? sortNets((i.channels || []).map(x => normNet(x.network))) : decided ? nets(i) : [];
-  const extras = [i.newer_final && !version(i) ? '<span class="mini warn" title="La carpeta de la pieza tiene un final más nuevo que el de la cola">Versión nueva</span>' : '', collabTag(i), isCarousel(i) ? '<span class="mini">Carrusel</span>' : '', i.trial && shownNets.includes('instagram') ? '<span class="mini" title="Reel de prueba en Instagram">Prueba</span>' : '', done || !decided ? '' : collabText(i)].join('');
+  const extras = [reeditTag(i), i.newer_final && !version(i) ? '<span class="mini warn" title="La carpeta de la pieza tiene un final más nuevo que el de la cola">Versión nueva</span>' : '', collabTag(i), isCarousel(i) ? '<span class="mini">Carrusel</span>' : '', i.trial && shownNets.includes('instagram') ? '<span class="mini" title="Reel de prueba en Instagram">Prueba</span>' : '', adsDone(i) ? `<span class="mini ads" title="Ya está en ${esc(adsName())}">En ${esc(adsName())}</span>` : adsPicked(i) ? `<span class="mini ads on" title="Se sube a ${esc(adsName())} cuando mandes Revisar cambios">Para ${esc(adsName())}</span>` : '', done || !decided ? '' : collabText(i)].join('');
   const acts = [];
   // Aprobar desde la semana = pasar a Listo (stages.json), con deshacer; no agenda nada en Postiz.
   // Con Aprobar no se muestra el estado al pie: repetiría el grupo «Por revisar».
@@ -381,7 +398,7 @@ function boardCard(i) {
   const decided = i.id.startsWith('queue:') || i.id.startsWith('remote:') || ch(i)?.networks || w;
   const brand = BRANDS.length > 1 && i.brand !== defaultBrand() ? BRAND_LABEL[i.brand] || i.brand : '';
   const meta = [brand, isCarousel(i) ? 'Carrusel' : '', w ? `${dayShort(w.slice(0, 10))} ${Number(w.slice(8, 10))} · ${w.slice(11, 16)}` : relDays(i.created)].filter(Boolean).map(esc).join(' · ');
-  const extras = [i.newer_final && !version(i) ? '<span class="mini warn" title="La carpeta de la pieza tiene un final más nuevo que el de la cola">Versión nueva</span>' : '', collabTag(i), i.trial && nets(i).includes('instagram') ? '<span class="mini" title="Reel de prueba en Instagram">Prueba</span>' : '', i.feedback_pending ? `<span class="mini">${i.feedback_pending} ${i.feedback_pending === 1 ? 'nota' : 'notas'}</span>` : ''].join('');
+  const extras = [reeditTag(i), i.newer_final && !version(i) ? '<span class="mini warn" title="La carpeta de la pieza tiene un final más nuevo que el de la cola">Versión nueva</span>' : '', collabTag(i), i.trial && nets(i).includes('instagram') ? '<span class="mini" title="Reel de prueba en Instagram">Prueba</span>' : '', i.feedback_pending ? `<span class="mini">${i.feedback_pending} ${i.feedback_pending === 1 ? 'nota' : 'notas'}</span>` : ''].join('');
   const acts = [];
   if (i.status === 'review') acts.push(`<button class="approve" data-approve="${esc(i.id)}" title="Aprobar: pasa a Listos" aria-label="Aprobar pieza">Aprobar</button>`);
   if (canDiscard(i)) acts.push(`<button data-discard="${esc(i.id)}" title="Descartar: deja de aparecer" aria-label="Descartar pieza">${ICON.trash}</button>`);
@@ -669,7 +686,7 @@ function renderDrawer() {
   // Guardar queda siempre a mano: una hora escrita sin salir del campo también cuenta. Si la hora ya pasó, se guarda
   // igual en el borrador y el pie lo avisa; la propuesta no sale hasta corregirla.
   const pastTime = (edDirty(i) || ch(i)) && edWhen() && edWhen() <= nowLocal();
-  $('dFooter').innerHTML = editable(i) ? `<p id="dSaveMessage" class="hint warn" role="status" ${pastTime ? '' : 'hidden'}>${pastTime ? 'Ese horario ya pasó. Podés guardar el borrador y corregirlo antes de programar.' : ''}</p>${edWhen() ? '<button class="ghost" id="edClear">Quitar fecha</button>' : ''}${ch(i) ? '<button class="ghost danger" id="edRevert">Descartar cambios</button>' : ''}<button class="primary" id="edSave">Guardar</button>` : '';
+  $('dFooter').innerHTML = adsSlot(i) + (editable(i) ? `<p id="dSaveMessage" class="hint warn" role="status" ${pastTime ? '' : 'hidden'}>${pastTime ? 'Ese horario ya pasó. Podés guardar el borrador y corregirlo antes de programar.' : ''}</p>${edWhen() ? '<button class="ghost" id="edClear">Quitar fecha</button>' : ''}${ch(i) ? '<button class="ghost danger" id="edRevert">Descartar cambios</button>' : ''}<button class="primary" id="edSave">Guardar</button>` : '');
   wireDrawer(i);
 }
 
@@ -762,6 +779,34 @@ Publicá ahora esta pieza del planner, sin agendarla para después (toqué «Pub
 - Dónde: ${donde.join(', ') || 'las redes por defecto'}${co}${ya}
 Usá la skill publicar (sección «Publicar ahora»). Cuando salga, pasame el link de cada red.`;
 }
+// Botón de anuncios en el pie del detalle, siempre a la vista: sumar, ya elegido (tocar lo saca) o ya en la carpeta.
+function adsSlot(i) {
+  if (!i || !adsEligible(i)) return '';
+  const done = adsDone(i), name = esc(adsName());
+  const inner = done ? `<a class="ads-btn done" href="${esc(done.url || ads().carpeta?.url || '#')}" target="_blank" rel="noopener" title="Abrir la carpeta">${ICON.check}En ${name}</a>`
+    : adsPicked(i) ? `<button class="ads-btn on" data-ads="${esc(i.id)}" aria-pressed="true" title="Se sube cuando mandes Revisar cambios. Tocá para sacarlo.">${ICON.check}Para ${name}</button>`
+    : `<button class="ads-btn" data-ads="${esc(i.id)}" aria-pressed="false" title="Lo sube Claude Code cuando mandes Revisar cambios">${ICON.plus}Sumar a ${name}</button>`;
+  return `<span id="adsSlot" class="ads-slot">${inner}</span>`;
+}
+async function toggleAds(id, undoing = false) {
+  if (busy) return;
+  const was = !!ads().seleccion[id];
+  busy = true;
+  try {
+    const send = () => api('ads', post({ id, action: was ? 'remove' : 'add', revision: ads().revision }));
+    let r;
+    try { r = await send(); }
+    catch (e) { if (e.status !== 409) throw e; data = await api('data'); r = await send(); } // otra pestaña cambió la selección
+    data.anuncios = r.anuncios;
+    if (!undoing) toast(was ? `Salió de ${adsName()}.` : `Para ${adsName()}: se sube cuando mandes Revisar cambios.`, () => toggleAds(id, true));
+  } catch (e) { toast(e.message); }
+  finally {
+    busy = false; render();
+    const slot = $('adsSlot'), i = ed && byId(ed.id);
+    if ($('drawer').open && slot && i) slot.outerHTML = adsSlot(i);
+    if ($('proposal').open && $('proposalResult').hidden) renderProposal();
+  }
+}
 function wireDrawer(i) {
   const body = $('dBody'), refresh = () => { const top = $('drawer').querySelector('.drawer-scroll').scrollTop; renderDrawer(); $('drawer').querySelector('.drawer-scroll').scrollTop = top; };
   body.querySelector('[data-split]')?.addEventListener('click', e => splitInstagram(i, e.currentTarget));
@@ -851,7 +896,7 @@ function renderFeedback() {
   if (editable(i) && isVideoPiece(i)) {
     const chosen = ed.version, newer = i.newer_final && chosen !== i.newer_final.path ? i.newer_final : null, cur = chosen || i.primary?.path;
     const newerWhen = newer?.modified ? ', del ' + new Date(Number(newer.modified) / 1e6).toLocaleString(LOCALE, { timeZone: TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(/\./g, '') : '';
-    version = `<div class="fb-row"><span class="fb-k">Versión</span><span class="fb-v" title="${esc(cur || '')}">${esc(cur ? name(cur) : '—')}</span>${chosen ? '<span class="tag accent">elegida</span><button class="ghost" id="versionBack">Volver a la anterior</button>' : ''}<button class="ghost" id="versionRefresh" title="Vuelve a leer Postiz y tus carpetas">${ICON.restore} Buscar versión nueva</button></div>${newer ? `<div class="version-alert"><span>Hay una más nueva en la carpeta de la pieza: <b>${esc(name(newer.path))}</b>${esc(newerWhen)}.</span><button class="secondary" id="useNewer">Traer la última versión</button></div>` : ''}`;
+    version = `<div class="fb-row"><span class="fb-k">Versión</span><span class="fb-v" title="${esc(cur || '')}">${esc(cur ? name(cur) : '—')}</span>${chosen ? '<span class="tag accent">elegida</span><button class="ghost" id="versionBack">Volver a la anterior</button>' : ''}<button class="ghost" id="versionRefresh" title="Vuelve a leer Postiz y tus carpetas">${ICON.restore} Buscar versión nueva</button></div>${newer ? `<div class="version-alert"><span>Hay una más nueva en la carpeta de la pieza: <b>${esc(name(newer.path))}</b>${esc(newerWhen)}.</span><button class="secondary" id="useNewer">Traer la última versión</button></div>` : ''}${i.reedit?.sin_subir ? '<div class="version-alert"><span>Postiz sigue con la versión anterior hasta que pidas subir ésta: agendala o movela desde una propuesta.</span></div>' : ''}`;
   }
   box.innerHTML = `<h4>Feedback <span class="aside">${fb.loading ? 'Cargando…' : pending ? pending + (pending === 1 ? ' pendiente' : ' pendientes') : ''}</span></h4>
     ${fb.error ? `<p class="hint warn">${esc(fb.error)}</p>` : ''}
@@ -1159,11 +1204,14 @@ function renderProposal() {
     return { sort: (blocked ? '0' : '1') + (c.when || '9999'), html: `<div class="prow${blocked ? ' blocked' : ''}"><button class="prow-open" data-open="${esc(id)}" aria-label="Abrir ${esc(i.title)}">${thumb(i)}</button><div style="min-width:0"><button class="prow-title" data-open="${esc(id)}">${esc(i.title)}</button><div class="prow-change">${change}${extra.length ? `<span class="prow-extra"> · ${esc(extra.join(' · '))}</span>` : ''}</div>${warns.length ? `<div class="prow-notes">${warns.join('')}</div>` : ''}</div><button class="icon" data-revert="${esc(id)}" title="Quitar de la propuesta">${ICON.trash}</button></div>` };
   }).sort((a, b) => a.sort.localeCompare(b.sort));
   const fbRows = feedbackItems().map(i => `<div class="prow"><button class="prow-open" data-open="${esc(i.id)}" aria-label="Abrir ${esc(i.title)}">${thumb(i)}</button><div style="min-width:0"><button class="prow-title" data-open="${esc(i.id)}">${esc(i.title)}</button><div class="prow-notes"><span class="tag accent">${i.feedback_pending === 1 ? '1 nota de contenido' : i.feedback_pending + ' notas de contenido'}</span></div></div></div>`);
-  $('proposalList').innerHTML = (rows.length ? `<div class="sub-label" style="margin-top:0">Agenda</div>` + rows.map(r => r.html).join('') : '') + (fbRows.length ? `<div class="sub-label"${rows.length ? '' : ' style="margin-top:0"'}>Contenido · feedback sin aplicar</div>` + fbRows.join('') : '') || '<div class="empty">No quedan cambios.</div>';
+  // Anuncios: los videos elegidos se suben a la carpeta cuando Claude Code recibe el mensaje.
+  const adsRows = Object.entries(ads().seleccion).map(([id, x]) => { const i = byId(id), title = esc(i?.title || x.title); return `<div class="prow">${i ? `<button class="prow-open" data-open="${esc(id)}" aria-label="Abrir ${title}">${thumb(i)}</button>` : '<div class="thumb ph">—</div>'}<div style="min-width:0">${i ? `<button class="prow-title" data-open="${esc(id)}">${title}</button>` : `<div class="prow-title">${title}</div>`}<div class="prow-change">${i ? esc(STATUS[i.status] || '') + ' · ' : ''}se sube a la carpeta</div></div><button class="icon" data-ads="${esc(id)}" title="Sacar de ${esc(adsName())}" aria-label="Sacar de ${esc(adsName())}">${ICON.trash}</button></div>`; });
+  const adsHead = `<div class="sub-label"${rows.length || fbRows.length ? '' : ' style="margin-top:0"'}>Anuncios · ${esc(adsName())}${ads().carpeta?.url ? ` <a class="link small" href="${esc(ads().carpeta.url)}" target="_blank" rel="noopener">Abrir carpeta</a>` : ''}</div>`;
+  $('proposalList').innerHTML = (rows.length ? `<div class="sub-label" style="margin-top:0">Agenda</div>` + rows.map(r => r.html).join('') : '') + (fbRows.length ? `<div class="sub-label"${rows.length ? '' : ' style="margin-top:0"'}>Contenido · feedback sin aplicar</div>` + fbRows.join('') : '') + (adsRows.length ? adsHead + adsRows.join('') : '') || '<div class="empty">No quedan cambios.</div>';
   // Si el botón queda apagado, el pie dice por qué y cómo destrabarlo.
   const who = list => list.length === 1 ? `«${esc(list[0].title)}»` : `${list.length} piezas`;
   const why = saveError ? 'No se guardó el borrador: recargá.'
-    : !rows.length && !fbRows.length ? 'No hay cambios para mandar.'
+    : !rows.length && !fbRows.length && !adsRows.length ? 'No hay cambios para mandar.'
     : [gone.length && `${gone.length === 1 ? '1 cambio es de una pieza que ya no está' : gone.length + ' cambios son de piezas que ya no están'} en el tablero. <button class="link small" data-revert-gone>Quitar${gone.length === 1 ? 'lo' : 'los'}</button>`,
        past.length && `${who(past)} ${past.length === 1 ? 'tiene la hora vencida: elegí otra o quitala' : 'tienen la hora vencida: elegí otra o quitalas'}.`,
        stale.length && `${who(stale)} ${stale.length === 1 ? 'cambió' : 'cambiaron'} desde tu edición.${stale.length > 1 ? ' <button class="link small" data-restamp-all>Usar la versión actual en todas</button>' : ''}`].filter(Boolean).join(' ');
@@ -1243,6 +1291,7 @@ document.addEventListener('click', e => {
   const res = t.closest('[data-restore]'); if (res) { setDiscard(res.dataset.restore, 'restore'); return; }
   const tm = t.closest('[data-time]'); if (tm) { const i = byId(tm.dataset.time); if (i && when(i)) openTimePop(i, tm); return; }
   if (t.closest('[data-revert-gone]')) { snapshot(); for (const id of Object.keys(draft.changes)) if (!byId(id)) delete draft.changes[id]; queueSave(); render(); renderProposal(); return; }
+  const adb = t.closest('[data-ads]'); if (adb) { toggleAds(adb.dataset.ads); return; }
   const rev = t.closest('[data-revert]'); if (rev) { snapshot(); delete draft.changes[rev.dataset.revert]; queueSave(); render(); renderProposal(); return; }
   const as = t.closest('#autoSlots [data-aslot]'); if (as) { as.classList.toggle('on'); renderAuto(); return; }
   const op = t.closest('[data-open]'); if (op) { openItem(op.dataset.open); return; }
@@ -1257,6 +1306,10 @@ document.addEventListener('keydown', e => {
   // En Guiones corren el período (un día, la semana, 15 días o el mes; ver gvMover en guiones.js) y «h» vuelve a hoy.
   if (view === 'guiones' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { if (typeof gvMover === 'function') gvMover(e.key === 'ArrowRight' ? 1 : -1); }
   else if (view === 'guiones' && e.key === 'h') $('gvToday').click();
+  // En Métricas corren el período (mtMover en metricas.js); en Referencias, el rango de fechas de lo que entró (rfCorrer en referencias.js).
+  else if (view === 'metricas' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { if (typeof mtMover === 'function') mtMover(e.key === 'ArrowRight' ? 1 : -1); }
+  else if (view === 'referencias' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { if (typeof rfCorrer === 'function') rfCorrer(e.key === 'ArrowRight' ? 1 : -1); }
+  else if (['x', 'linkedin'].includes(view)) { /* sus teclas las maneja x.js o linkedin.js */ }
   else if (['week', 'stories'].includes(view) && e.key === 'ArrowLeft') { week = dateAdd(week, -7); render(); }
   else if (['week', 'stories'].includes(view) && e.key === 'ArrowRight') { week = dateAdd(week, 7); render(); }
   else if (e.key === 'h') { week = monday(todayStr()); render(); }
@@ -1269,7 +1322,7 @@ $('weekTitle').onclick = () => { try { $('jumpDate').showPicker(); } catch { $('
 $('jumpDate').onchange = () => { if ($('jumpDate').value) { week = monday($('jumpDate').value); render(); } };
 ['search', 'age', 'showRefs'].forEach(id => $(id).addEventListener(id === 'search' ? 'input' : 'change', () => render()));
 // ---------- barra lateral: secciones, marca, formato y cuentas ----------
-const VISTAS = { week: 'Semana', stories: 'Historias', guiones: 'Guiones', pieces: 'Tablero', history: 'Publicadas' };
+const VISTAS = { week: 'Semana', stories: 'Historias', referencias: 'Referencias', guiones: 'Guiones', pieces: 'Tablero', history: 'Publicadas', metricas: 'Métricas', x: 'Twitter', linkedin: 'LinkedIn' };
 const plegar = si => { document.body.classList.toggle('side-plegada', si); store.set('sidePlegada', si); $('sideToggle').title = si ? 'Desplegar la barra' : 'Plegar la barra'; };
 $('sideToggle').onclick = () => plegar(!document.body.classList.contains('side-plegada'));
 plegar(store.get('sidePlegada', innerWidth <= 820));  // En una ventana angosta arranca plegada: si no, la barra se come la pantalla.
@@ -1331,6 +1384,7 @@ $('drawer').addEventListener('click', e => { if (e.target === $('drawer')) close
 ['proposal', 'auto'].forEach(id => $(id).addEventListener('click', e => { if (e.target === $(id)) $(id).close(); }));
 // La propuesta se revisa contra el estado actual de las piezas: si algo cambió en la carpeta o en la cola, se ve acá.
 $('review').onclick = async () => {
+  if (view === 'linkedin' && typeof liCambiosAbrir === 'function') return liCambiosAbrir();
   await saving; if (saveError) return;
   renderProposal(); $('proposal').showModal();
   try { data = await api('data'); if (pruneChanges()) queueSave(); render(); if ($('proposal').open && $('proposalResult').hidden) renderProposal(); } catch {}
@@ -1340,9 +1394,11 @@ $('prepare').onclick = async () => {
   await saving; if (saveError) return;
   try {
     $('prepare').disabled = true;
+    const t = [Object.keys(draft.changes).length && 'programa la agenda', feedbackItems().length && 'aplica el feedback', Object.keys(ads().seleccion).length && `sube los videos a ${adsName()}`].filter(Boolean);
+    const tareas = t.length > 1 ? t.slice(0, -1).join(', ') + ' y ' + t.at(-1) : t[0] || 'revisa la propuesta';
     const r = await api('proposals', post({ revision: draft.revision }));
     $('proposalResult').hidden = false;
-    $('proposalResult').innerHTML = `<div class="sub-label" style="margin-top:0"><b>Propuesta ${esc(r.id)} guardada.</b></div><p class="hint" style="margin:0">Pegá este mensaje en Claude Code: programa la agenda y aplica el feedback.</p><textarea readonly aria-label="Mensaje de confirmación">${esc(r.prompt)}</textarea><button class="primary" id="copyConfirm">${ICON.copy} Copiar mensaje</button>`;
+    $('proposalResult').innerHTML = `<div class="sub-label" style="margin-top:0"><b>Propuesta ${esc(r.id)} guardada.</b></div><p class="hint" style="margin:0">Pegá este mensaje en Claude Code: ${esc(tareas)}.</p><textarea readonly aria-label="Mensaje de confirmación">${esc(r.prompt)}</textarea><button class="primary" id="copyConfirm">${ICON.copy} Copiar mensaje</button>`;
     $('copyConfirm').onclick = () => copyText(r.prompt, 'Copiado. Pegalo en el chat.');
     // Las notas incluidas quedan «enviadas»: se actualiza el contador.
     try { data = await api('data'); render(); } catch {}

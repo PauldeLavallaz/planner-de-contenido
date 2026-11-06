@@ -24,6 +24,12 @@
   "youtube": { "made_for_kids": "no", "tags": [] },
   "captions": { "block_links": false },
   "require_cover": false,
-  "historias": { "carpeta": "historias", "fotos": "", "cadena": true },
-  "guiones": { "carpeta": "guiones", "looks": "looks", "titulos": [] }
+  "historias": { "carpeta": "historias", "fotos": "", "cadena": true, "horas": {} },
+  "guiones": { "carpeta": "guiones", "looks": "looks", "titulos": [], "mensajes": [] },
+  "telegram": { "chat_id": "", "historias_tiktok": false, "avisos_cadena": true, "tiktok_copy": false },
+  "anuncios": { "nombre": "Anuncios", "remoto": "", "drive_id": "", "url": "" },
+  "x": { "carpeta": "x", "usuario": "", "horarios": ["10:00", "14:00", "19:00"] },
+  "linkedin": { "carpeta": "linkedin", "cuenta": { "nombre": "", "titular": "", "avatar": "", "pagina": "" }, "separacion_horas": 2, "video": { "costo_usd": 0 }, "lamina": { "css": "", "logo": "" } },
+  "research": { "carpeta": "research", "gemini_modelo": "gemini-2.5-flash" },
+  "referencias": { "carpeta": "referencias" }
 }

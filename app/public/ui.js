@@ -19,7 +19,7 @@ function skeleton(kind = 'list', n) {
 // planner.js llama a arranqueListo() después del primer render (o si falla la carga).
 {
   const v = (() => { try { return JSON.parse(localStorage.getItem('planner.view')); } catch { return null; } })() || 'week';
-  const forma = v === 'pieces' || v === 'history' ? 'list' : 'posters';
+  const forma = { pieces: 'list', history: 'list', metricas: 'cards', x: 'split', linkedin: 'split' }[v] || 'posters';
   document.body.classList.add('arrancando');
   document.querySelector('.topbar')?.insertAdjacentHTML('afterend', `<div id="arranque" class="arranque">${skeleton(forma)}</div>`);
 }

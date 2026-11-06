@@ -7,3 +7,5 @@ planner.config.json
 .env
 # Cola y estado del planner si la carpeta de contenido apunta adentro del repo
 /publicar/
+/research/
+/referencias/
