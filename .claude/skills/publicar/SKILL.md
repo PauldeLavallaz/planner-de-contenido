@@ -16,7 +16,7 @@ El mensaje empieza con «Confirmo la propuesta <id>» y trae la ruta del archivo
    - reels con Instagram: si salen en el feed o en Trial, y con qué colaboradores;
    - piezas sin texto (`captions.general` vacío): pedí el texto o confirmá que sale sólo con el título;
    - piezas omitidas y por qué.
-   Si no hay nada dudoso, seguí sin volver a preguntar.
+   Si no hay nada dudoso, seguí sin volver a preguntar. Una pieza con final que el usuario puso en el calendario de la propuesta va, aunque figure por revisar o se parezca a otra: si le falta texto o portada, se prepara (el texto, con el usuario si no hay de dónde sacarlo), no se saca de la propuesta.
 3. **Ejecutar:** `python3 engine/cola.py aplicar <id> --ejecutar`. Para probar sin publicar: `--ejecutar --borrador` (quedan como borradores en Postiz).
 4. **Verificar:** `python3 engine/cola.py semana` y contá el resultado: qué quedó programado, cuándo y dónde, y cualquier error tal cual.
 5. **Feedback de contenido** (campo `feedback` de la propuesta): no lo aplica el motor. Seguí las reglas del mensaje: tomá cada nota (estado `en_curso`), transcribí los audios, corregí según las instrucciones del proyecto de contenido y marcá `aplicado`. Si una pieza tiene feedback y también fecha en la propuesta, primero se corrige y se agenda la versión nueva cuando el usuario la apruebe. Una nota `tipo: "copy"` trae el texto nuevo completo en `copy`: va textual a `captions.general` de la ficha (y a los textos por red que repetían el anterior) y al archivo de texto de la pieza, sin otra versión ni export; si la pieza ya está en Postiz, `cola.py mover <slug>` a la misma fecha y hora la recrea con ese texto. Si sólo cambió el copy, la pieza se agenda igual con el texto nuevo.
@@ -54,10 +54,12 @@ python3 engine/cola.py publicado                       # concilia con Postiz y a
 python3 engine/cola.py capacidades                     # qué formato admite cada cuenta
 ```
 
-- `listo` copia el final a `publicar/inbox/` con su ficha (`<slug>.json`). Toma título y texto de `pieza.json`, `publish_kit.md` o `caption.txt` de la pieza. Una carpeta con varias imágenes y sin video entra como carrusel.
+- `listo` copia el final a `publicar/inbox/` con su ficha (`<slug>.json`). Si la carpeta tiene varias versiones del final (`final.mp4`, `final_gancho_b.mp4`…), copia la aprobada en la pestaña Guiones; sin aprobación, la más nueva (las copias `*_liviano`, `*_web`, `*_app` y `*_postiz` no cuentan). Toma título y texto de `pieza.json`, `publish_kit.md` o `caption.txt` de la pieza. Una carpeta con varias imágenes y sin video entra como carrusel.
 - El texto se puede ajustar por red en la ficha: `captions.general`, y si hace falta `captions.instagram`, `captions.linkedin`, `captions.youtube_description`, `captions.youtube_title`, `captions.tiktok_title`.
 - Antes de agendar un reel con Instagram, decí si sale en el feed o en Trial.
 - Postiz no permite reprogramar: `mover` borra y recrea los posts que todavía no salieron. Si una red ya publicó, no se toca.
+- Pasar a Trial un reel ya agendado no pide recrearlo: con el OK del usuario, `postiz posts:settings <id> --settings '{"is_trial_reel":true,"graduation_strategy":"SS_PERFORMANCE","collaborators":[]}'` sobre el post de Instagram (sólo esa red) y verificá `settings` en `posts:list`. `modo-ig --aunque-agendada`, lo que hace el planner, cambia sólo la ficha.
+- `youtube.frenado` en `planner.config.json` (un texto con el motivo) frena YouTube: lo que se agende o se mueva desde entonces sale sin YouTube y la ficha guarda `youtube_frenado`; una pieza que sólo sale en YouTube no se agenda. Para volver, sacá el campo.
 
 ## Errores
 

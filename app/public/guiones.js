@@ -13,7 +13,12 @@ const gvDiaGuardado = () => { const g = store.get('gvDia', null); return g?.dia 
 const GV_FASES = [['tetoca', 'Te toca', 'Esperan tu feedback o tu aprobación, de cualquier etapa'], ['guion', 'Guion', 'Todavía sin audio (un carrusel, sin láminas)'],
   ['audio', 'Audio', 'Con audio y sin corte'], ['revisar', 'Por revisar', 'Con rough cut, final o láminas'], ['aprobado', 'Aprobado', 'El final o el carrusel aprobados'],
   ['publicado', 'Publicado', 'Ya salió: se maneja en Publicadas'], ['pausado', 'Pausado', 'Para más tarde'], ['descartado', 'Descartado', 'Se puede recuperar'], ['todas', 'Todas', 'Todas las etapas']];
-const gv = { data: null, loading: false, open: {}, arch: {}, rec: null, saving: {}, text: {}, copy: {},
+// La ficha de cada tarjeta y el filtro Formato. Para filtrar, «Reel explicativo · Marca A» y «Reel explicativo dibujado»
+// son el mismo formato, como «Avatar reel» y «Avatar reel editorial»: cuenta el primer tramo del nombre.
+const gvFormatoNombre = p => typeof p.formato === 'string' ? p.formato : p.formato?.nombre || '';
+const gvFamilia = p => { const n = gvFormatoNombre(p).split(' · ')[0].trim(); return /^reel explicativo/i.test(n) ? 'Reel explicativo' : /^avatar reel/i.test(n) ? 'Avatar reel' : n; };
+const gv = { data: null, loading: false, open: {}, version: {}, rec: null, saving: {}, text: {}, copy: {},
+  familia: String(store.get('gvFamilia', '') || ''), enRango: [],
   periodo: GV_PERIODOS.some(x => x[0] === store.get('gvPeriodo')) ? store.get('gvPeriodo') : 'semana', dia: gvDiaGuardado(),
   fase: GV_FASES.some(x => x[0] === store.get('gvFase')) ? store.get('gvFase') : 'todas', quieta: { sig: '', pos: new Map() } };
 const GV_ESTADO = { aprobado: ['Aprobado', 'ok'], cambios: ['Con feedback', 'accent'], por_escuchar: ['Por escuchar', 'warn'], por_revisar: ['Rough cut por revisar', 'warn'], final_por_revisar: ['Final por revisar', 'warn'], sin_audio: ['Sin audio', 'nofinal'], borrador_por_revisar: ['Borrador por revisar', 'warn'], sin_laminas: ['Sin láminas', 'nofinal'], texto_por_revisar: ['Texto por revisar', 'warn'] };
@@ -34,7 +39,7 @@ const gvEnFase = (p, k) => k === 'todas' || (k === 'tetoca' ? gvTeToca(p) : gvEt
 // comentaste o pausaste, o la que Claude Code pasó de etapa, sigue en su día y en su lugar, con el estado nuevo. Lo que
 // aparece nuevo entra arriba de su día. Volver a tocar la etapa, el período o el día reordena. `pos` guarda, por pieza en
 // pantalla, su día y su lugar.
-const gvFiltro = () => [gv.periodo, gv.dia, gv.fase, formatoPasa('reel'), formatoPasa('carrusel')].join('|');
+const gvFiltro = () => [gv.periodo, gv.dia, gv.fase, gv.familia, formatoPasa('reel'), formatoPasa('carrusel')].join('|');
 function gvQuieta() {
   const q = gv.quieta, s = gvFiltro(), g = gv.quietaGuardada;
   if (q.sig === s) return q;
@@ -63,6 +68,7 @@ const gvEnRango = (p, r) => !r || (gvDiaDe(p) >= r[0] && gvDiaDe(p) <= r[1]);
 function gvSetPeriodo(k) { gv.periodo = k; store.set('gvPeriodo', k); gvSoltar(); renderGuiones(true); }
 function gvSetDia(d) { gv.dia = d; store.set('gvDia', { dia: d, el: todayStr() }); gvSoltar(); renderGuiones(true); }
 function gvSetFase(k) { gv.fase = k; store.set('gvFase', k); gvSoltar(); renderGuiones(true); }
+function gvSetFamilia(v) { gv.familia = v; store.set('gvFamilia', v); gvSoltar(); renderGuiones(true); }
 function gvMover(n) {
   if (gv.periodo === 'todo') return;
   if (gv.periodo !== 'mes') { gvSetDia(dateAdd(gv.dia, n * { dia: 1, semana: 7, quincena: 15 }[gv.periodo])); return; }
@@ -88,6 +94,8 @@ const gvConPlanes = weeks => [...new Set((weeks || []).map(w => w.week))].filter
 const gvPlanes = (weeks, wk) => (weeks || []).filter(w => w.week === wk).sort((a, b) => a.perfil.localeCompare(b.perfil));
 // El formato de la barra lateral también separa videos de carruseles.
 const gvFormatoOk = p => formatoPasa(p.tipo === 'carrusel' ? 'carrusel' : 'reel');
+// El filtro Formato filtra lo que se ve, los contadores y el calendario, pero no «Copiar feedback», que junta todo lo de gvFormatoOk.
+const gvFichaOk = p => !gv.familia || gvFamilia(p) === gv.familia;
 
 const gvAprobable = p => !!(p.audio || p.video || p.laminas?.length || (p.mudo && p.guion?.texto));
 
@@ -108,10 +116,30 @@ function gvMenu(anchor, html, onClick) {
 }
 function gvMenuClose() { const p = document.getElementById('gvPop'); if (p) { p.hidden = true; p.innerHTML = ''; } gv.menuAnchor = null; }
 
+// El filtro Formato, en un botón con menú. Cada opción dice cuántas piezas hay en el período; si en el período ninguna
+// pieza dice su formato y no está filtrando, el botón no aparece.
+function gvOpcionesFamilia() {
+  const n = new Map();
+  for (const p of gv.enRango) { const v = gvFamilia(p); if (v) n.set(v, (n.get(v) || 0) + 1); }
+  const vals = [...new Set([...n.keys(), ...(gv.familia ? [gv.familia] : [])])];
+  return { total: gv.enRango.length, ops: vals.sort((a, b) => (n.get(b) || 0) - (n.get(a) || 0) || a.localeCompare(b, 'es')).map(v => [v, v, n.get(v) || 0]) };
+}
+function gvFiltrosHtml() {
+  if (!gvOpcionesFamilia().ops.length) return '';
+  return `<button class="gv-fil${gv.familia ? ' on' : ''}" data-gvfil="familia" aria-haspopup="true" title="Filtrar por formato">Formato${gv.familia ? `: <b>${esc(gv.familia)}</b>` : ''}</button>`;
+}
+function gvMenuFamilia(anchor) {
+  const { total, ops } = gvOpcionesFamilia();
+  gvMenu(anchor, `<div class="gv-pop-list gv-fil-list">${[['', 'Todos', total], ...ops].map(([v, l, n]) => `<button class="gv-pop-opt${v === gv.familia ? ' on' : ''}" data-fil="${esc(v)}">${v === gv.familia ? ICON.check : '<i></i>'}<span>${esc(l)}</span><span class="n">${n}</span></button>`).join('')}</div>`, e => {
+    const b = e.target.closest('[data-fil]'); if (!b) return;
+    gvMenuClose(); gvSetFamilia(b.dataset.fil);
+  });
+}
+
 // El calendario: cada día dice cuántas piezas empezaron ese día y lleva un punto si alguna te toca; tocar un día lo deja como
 // período. Lo que está dentro del período elegido va resaltado.
 function gvMenuCalendario(anchor) {
-  const hoy = todayStr(), vis = (gv.data?.piezas || []).filter(gvFormatoOk), por = new Map();
+  const hoy = todayStr(), vis = (gv.data?.piezas || []).filter(p => gvFormatoOk(p) && gvFichaOk(p)), por = new Map();
   for (const p of vis) { const d = gvDiaDe(p), x = por.get(d) || { n: 0, toca: 0 }; x.n++; if (gvTeToca(p)) x.toca++; por.set(d, x); }
   let mes = gv.dia.slice(0, 7);
   const html = () => {
@@ -147,8 +175,6 @@ function gvEstadoLabel(p) {
   if (p.estado === 'aprobado' && gvEtapa(p) !== 'aprobado') return [(p.video ? 'Corte' : gvDeQue(p)) + ' aprobado', 'ok'];
   return GV_ESTADO[p.estado] || ['', ''];
 }
-// Arriba de la tarjeta: a qué hora empezó, de qué plan es (cuando se ven varios) y su estado.
-const gvTop = (p, fecha) => `<div class="gv-top">${p.inicio ? `<span class="gv-time" title="Empezó a producirse el ${esc(gvFecha(p.inicio.slice(0, 10), { day: 'numeric', month: 'long' }))} a las ${esc(p.inicio.slice(11, 16))}">${esc(p.inicio.slice(11, 16))}</span>` : ''}${gv.variosPlanes && p.planTitulo ? `<span class="gv-de" title="${esc(p.planTitulo)}">${esc(p.planTitulo)}</span>` : ''}${gvEstadoTag(p, fecha)}</div>`;
 function gvEstadoTag(p, fecha) {
   // Una pieza publicada ya no cambia de estado desde acá: la publicación se maneja en Publicadas.
   if (p.publicado) return `<span class="tag ok gv-st" title="Publicada${p.publicado.redes?.length ? ' en ' + esc(p.publicado.redes.join(', ')) : ''}">Publicado${p.publicado.fecha ? ' · ' + esc(p.publicado.fecha.slice(8, 10) + '-' + p.publicado.fecha.slice(5, 7)) : ''}</span>`;
@@ -168,7 +194,7 @@ async function gvCambiarEstado(p, to) {
   const de = gvActual(p); if (to === de) return;
   const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ run: p.run, ...body }) });
   try {
-    if (to === 'aprobado') await post('guiones/estado', { estado: 'aprobado' });
+    if (to === 'aprobado') await post('guiones/estado', { estado: 'aprobado', ...(p.video?.lista ? { video: gvVisto(p).path } : {}) });
     else if (to === 'pausado' || to === 'descartado') await post('guiones/descartar', { accion: to === 'pausado' ? 'pausar' : 'descartar' });
     else {
       if (p.descartado) await post('guiones/descartar', { accion: 'recuperar' });
@@ -176,7 +202,8 @@ async function gvCambiarEstado(p, to) {
       if (p.estado === 'aprobado') await post('guiones/estado', { estado: 'por_escuchar' });
     }
   } catch (e) { toast(e.message); await loadGuiones(); return; }
-  const ok = p.video?.final ? 'Final aprobado.' : 'Aprobado.';
+  const agendada = gvOtraAgendada(p, gvVisto(p));
+  const ok = agendada ? gvAvisoAgendada(agendada) : p.video?.final ? 'Final aprobado.' : 'Aprobado.';
   toast({ aprobado: ok, pausado: 'Pausada: queda en gris.', descartado: 'Descartada: queda en gris.', revisar: 'Volvió a revisión.' }[to],
     () => { const q = gvPiece(p.key); if (q) gvCambiarEstado(q, de); });
   await loadGuiones();
@@ -208,28 +235,33 @@ function renderGuiones(fresh) {
   $('gvWeekTitle').textContent = gvPeriodoLabel();
   $('gvPrev').disabled = $('gvNext').disabled = gv.periodo === 'todo';
   $('gvPeriodo').innerHTML = GV_PERIODOS.map(([k, l]) => `<button class="${gv.periodo === k ? 'on' : ''}" data-gvperiodo="${k}" aria-pressed="${gv.periodo === k}">${esc(l)}</button>`).join('');
-  if (!fresh || !d) { if (!gv.loading) loadGuiones(); if (!d) { $('gvFases').innerHTML = ''; $('gvGrid').innerHTML = skeleton('posters'); return; } }
-  if (d.error) { $('gvCopy').hidden = true; $('gvFases').innerHTML = ''; $('gvGrid').innerHTML = `<p class="gv-empty">${esc(d.error)}</p>`; return; }
-  // Lo que pasa el formato de la barra; de eso, lo que empezó en el período.
-  const q = gvQuieta(), vis = d.piezas.filter(gvFormatoOk), enPeriodo = vis.filter(p => gvEnRango(p, r) || q.pos.has(p.key));
+  if (!fresh || !d) { if (!gv.loading) loadGuiones(); if (!d) { $('gvFases').innerHTML = $('gvFiltros').innerHTML = ''; $('gvGrid').innerHTML = skeleton('posters'); return; } }
+  if (d.error) { $('gvCopy').hidden = true; $('gvFases').innerHTML = $('gvFiltros').innerHTML = ''; $('gvGrid').innerHTML = `<p class="gv-empty">${esc(d.error)}</p>`; return; }
+  // Lo que pasa el formato de la barra; de eso, lo que empezó en el período y pasa el filtro Formato.
+  const q = gvQuieta(), vis = d.piezas.filter(gvFormatoOk), visF = vis.filter(gvFichaOk);
+  gv.enRango = vis.filter(p => gvEnRango(p, r) || q.pos.has(p.key));
+  const enPeriodo = gv.enRango.filter(p => gvFichaOk(p) || q.pos.has(p.key)), filtrando = !!gv.familia;
+  $('gvFiltros').innerHTML = gvFiltrosHtml();
+  const sinFiltros = filtrando ? '<button class="secondary" data-gvfilclear>Sacar el filtro</button>' : '';
   // Las etapas, con cuántas piezas hay en cada una en el período.
   $('gvFases').innerHTML = GV_FASES.map(([k, l, t]) => { const n = enPeriodo.filter(p => gvEnFase(p, k)).length;
     return `<button class="${gv.fase === k ? 'on' : ''}${k === 'tetoca' ? ' gv-f-toca' : ''}" data-gvfase="${k}" aria-pressed="${gv.fase === k}" title="${esc(t)}">${k === 'tetoca' && n ? '<i></i>' : ''}${esc(l)}<span class="n">${n}</span></button>`; }).join('');
   // «Copiar feedback» junta las notas sin enviar de todas las fechas y etapas: ninguna queda afuera por el filtro.
   const fbN = vis.reduce((t, p) => t + gvFb(p).length, 0);
   $('gvCopy').hidden = !vis.length; $('gvCopy').disabled = !fbN; $('gvCopyCount').textContent = fbN;
-  const ps = enPeriodo.filter(p => gvEnFase(p, gv.fase) || q.pos.has(p.key)), fuera = r && gv.fase !== 'todas' ? vis.filter(p => !gvEnRango(p, r) && !q.pos.has(p.key) && gvEnFase(p, gv.fase)).length : 0;
+  const ps = enPeriodo.filter(p => gvEnFase(p, gv.fase) || q.pos.has(p.key)), fuera = r && gv.fase !== 'todas' ? visF.filter(p => !gvEnRango(p, r) && !q.pos.has(p.key) && gvEnFase(p, gv.fase)).length : 0;
   const faseL = GV_FASES.find(x => x[0] === gv.fase)?.[1] || '', donde = { dia: 'este día', semana: 'esta semana', quincena: 'estos 15 días', mes: 'este mes' }[gv.periodo] || '';
   const verTodo = n => `<button class="secondary" data-gvperiodo="todo">Ver ${n ? `las ${n} de otras fechas` : 'todas las fechas'}</button>`;
   if (!ps.length) {
     let msg;
     if (!d.piezas.length) msg = '<p>No hay guiones planificados.</p>';
     else if (!vis.length) msg = `<p>No hay ${!formatoPasa('reel') ? 'carruseles' : 'reels'} planificados.</p>`;
+    else if (!visF.length) msg = `<p>Ninguna pieza con ese formato.</p><p>${sinFiltros}</p>`;
     else if (!enPeriodo.length) {
       // Sin nada empezado en el período: el último día con piezas, a un toque.
-      const ult = vis.map(gvDiaDe).filter(x => !r || x < r[0]).sort().at(-1);
-      msg = `<p>No empezó ninguna pieza ${donde}.</p><p>${ult ? `<button class="secondary" data-gvdia="${ult}">Ir al ${esc(gvFecha(ult, { weekday: 'long', day: 'numeric', month: 'long' }))}</button> ` : ''}${verTodo(0)}</p>`;
-    } else msg = `<p>${gv.fase === 'tetoca' ? `Nada te toca revisar${donde ? ' ' + donde : ''}.` : `Ninguna pieza en «${esc(faseL)}»${donde ? ' ' + donde : ''}.`}</p><p>${fuera ? verTodo(fuera) + ' ' : ''}<button class="secondary" data-gvfase="todas">Ver todas las etapas</button></p>`;
+      const ult = visF.map(gvDiaDe).filter(x => !r || x < r[0]).sort().at(-1);
+      msg = `<p>No empezó ninguna pieza ${donde}${filtrando ? ' con ese formato' : ''}.</p><p>${ult ? `<button class="secondary" data-gvdia="${ult}">Ir al ${esc(gvFecha(ult, { weekday: 'long', day: 'numeric', month: 'long' }))}</button> ` : ''}${verTodo(0)} ${sinFiltros}</p>`;
+    } else msg = `<p>${gv.fase === 'tetoca' ? `Nada te toca revisar${donde ? ' ' + donde : ''}.` : `Ninguna pieza en «${esc(faseL)}»${donde ? ' ' + donde : ''}.`}</p><p>${fuera ? verTodo(fuera) + ' ' : ''}<button class="secondary" data-gvfase="todas">Ver todas las etapas</button> ${sinFiltros}</p>`;
     $('gvGrid').innerHTML = `<div class="gv-empty">${msg}</div>`;
     return;
   }
@@ -243,7 +275,6 @@ function renderGuiones(fresh) {
   // hora (gvOrden). Lo que hay en otras fechas en la misma etapa se avisa arriba, para que nada quede afuera sin saberlo.
   // Lo que ya estaba en pantalla conserva su día y su lugar (gvQuieta); lo nuevo va arriba de su día.
   const diaDe = p => q.pos.get(p.key)?.dia || gvDiaDe(p), dias = [...new Set(ps.map(diaDe))].sort().reverse();
-  gv.variosPlanes = new Set(ps.map(p => p.planPath)).size > 1;
   const orden = (a, b) => { const x = q.pos.get(a.key)?.i, y = q.pos.get(b.key)?.i;
     return x != null && y != null ? x - y : x != null ? 1 : y != null ? -1 : gvOrden(a) - gvOrden(b) || (gvInicio(a) < gvInicio(b) ? 1 : gvInicio(a) > gvInicio(b) ? -1 : 0); };
   const grupos = dias.map(dia => [dia, ps.filter(p => diaDe(p) === dia).sort(orden)]);
@@ -260,8 +291,35 @@ function renderGuiones(fresh) {
   for (const [src, a] of sonando) [...$('gvGrid').querySelectorAll('audio[src]')].find(x => x.getAttribute('src') === src)?.replaceWith(a);
 }
 
+// La versión que se está mirando: la que muestra la pieza o la que se eligió debajo del video.
+const gvVisto = p => p.video?.lista?.find(v => v.path === (gv.version[p.key] ?? p.video.path)) || p.video;
+const gvFechaCorta = f => f ? ' ' + f.slice(8, 10) + '-' + f.slice(5, 7) : '';
+// Aprobar no cambia lo que ya está agendado en Postiz: si es otra versión, se avisa.
+const gvOtraAgendada = (p, vista) => p.video?.lista?.find(v => v.path !== vista.path && v.agendada != null);
+const gvAvisoAgendada = v => `Versión aprobada. En Postiz, la del${gvFechaCorta(v.agendada)} sigue con «${v.nombre}».`;
+const gvMarcasVersion = v => [v.aprobada && 'aprobada', v.agendada != null && 'agendada' + gvFechaCorta(v.agendada)].filter(Boolean).join(' · ');
+// Debajo del video: qué versión es y cuánto dura, y los íconos para abrir el archivo y su carpeta. Las versiones van en un
+// desplegable: en fila estiraban la tarjeta.
+function gvVideoPie(p) {
+  const v = gvVisto(p), marcas = [v.seconds && clock(v.seconds), p.video.lista && gvMarcasVersion(v)].filter(Boolean).join(' · ');
+  const que = p.video.lista ? v.nombre : (p.video.final ? 'Final' : 'Rough cut') + (p.video.versiones > 1 ? ' · v' + p.video.versiones : '');
+  const texto = `<b>${esc(que)}</b>${marcas ? `<small>${esc(marcas)}</small>` : ''}`;
+  return `<div class="gv-video-pie">${p.video.lista ? `<button type="button" class="gv-fil gv-ver" data-gvvers="${esc(p.key)}" aria-haspopup="true" title="${p.video.lista.length} versiones · ${esc(marcas)}">${texto}</button>` : `<span class="gv-ver gv-ver-sola">${texto}</span>`}<a class="icon" href="${esc(mediaUrl(v.path))}" target="_blank" rel="noopener" title="Abrir el archivo" aria-label="Abrir el archivo">${GV_ABRIR}</a>${gvFinder(v.path)}</div>`;
+}
+function gvMenuVersiones(anchor, p) {
+  const visto = gvVisto(p);
+  gvMenu(anchor, `<div class="gv-pop-list gv-ver-list">${p.video.lista.map(v => {
+    const on = v.path === visto.path, marcas = gvMarcasVersion(v);
+    return `<button class="gv-pop-opt${on ? ' on' : ''}" data-path="${esc(v.path)}" title="${esc(v.path.split('/').pop())}">${on ? ICON.check : '<i></i>'}<span>${esc(v.nombre)}${marcas ? `<small>${esc(marcas)}</small>` : ''}</span></button>`;
+  }).join('')}</div>`, e => {
+    const b = e.target.closest('[data-path]'); if (!b) return;
+    gvMenuClose(); gv.version[p.key] = b.dataset.path; gvRerender();
+  });
+}
+
 function gvCard(p) {
   const e = p.estilo || {}, o = gv.open[p.key] || '';
+  const vv = gvVisto(p), otraVersion = !!p.video && vv.path !== p.video.path;
   const pal = (e.paleta || []).slice(0, 5);
   const t = e.titulo_css || {};
   const posterStyle = `--gv-bg:${pal[0] || '#1d1b18'};--gv-fg:${t.color || pal[1] || '#fff'};--gv-ac:${t.acento || pal[2] || pal[1] || '#e4572e'}`;
@@ -272,34 +330,118 @@ function gvCard(p) {
     ? `<div class="gv-video gv-slides"><button class="gv-video-open gv-slide-open" data-gvslides="${esc(p.key)}" data-i="0" title="Ver el carrusel en grande"><img src="${esc(mediaUrl(p.laminas[0].png))}&v=${Math.round(p.laminas[0].modified || 0)}" alt="Portada de ${esc(p.titulo || p.id)}" loading="lazy"><span class="gv-count">${p.laminas.length} láminas</span></button>
       <div class="gv-thumbs">${p.laminas.slice(1, 9).map((l, i) => `<button data-gvslides="${esc(p.key)}" data-i="${i + 1}" title="Lámina ${l.n}"><img src="${esc(mediaUrl(l.png))}&v=${Math.round(l.modified || 0)}" alt="Lámina ${l.n}" loading="lazy"></button>`).join('')}</div></div>`
     : p.video
-    ? `<div class="gv-video"><video data-gvvid="${esc(p.key + '|' + p.video.path + '|' + Math.round(p.video.modified || 0))}" src="${esc(mediaUrl(p.video.path))}&v=${Math.round(p.video.modified || 0)}" poster="/api/planner/poster?path=${encodeURIComponent(p.video.path)}&v=${Math.round(p.video.modified || 0)}" controls playsinline preload="none"></video><span class="muted">${p.video.final ? 'Final' : 'Rough cut'}${p.video.versiones > 1 ? ' · v' + p.video.versiones : ''}${p.video.seconds ? ' · ' + clock(p.video.seconds) : ''} · <a class="link" href="${esc(mediaUrl(p.video.path))}" target="_blank" rel="noopener">abrir archivo</a>${gvFinder(p.video.path)}</span></div>`
+    ? `<div class="gv-video"><video data-gvvid="${esc(p.key + '|' + vv.path + '|' + Math.round(vv.modified || 0))}" src="${esc(mediaUrl(vv.path))}&v=${Math.round(vv.modified || 0)}" poster="/api/planner/poster?path=${encodeURIComponent(vv.path)}&v=${Math.round(vv.modified || 0)}" controls playsinline preload="none"></video>${gvVideoPie(p)}</div>`
     : `<div class="gv-poster ${esc(t.clase || '')}${m0 ? ' has-sample' : ''}" style="${posterStyle}" title="Título en pantalla · ${esc(e.nombre || '')}${m0 ? ' · fondo: muestra del estilo' : ''}">
       ${m0 ? `<img class="gv-sample" src="/api/planner/poster?path=${encodeURIComponent(m0.path)}" alt="" loading="lazy">` : ''}
-      <span class="gv-poster-t">${gvTitLineas(p.titulo_pantalla || p.titulo || '').filter(Boolean).map(esc).join('<br>')}</span><span class="gv-poster-s">${esc(e.nombre || '')}</span>
+      <span class="gv-poster-t">${gvTitLineas(p.titulo_pantalla || p.titulo || '').filter(Boolean).map(esc).join('<br>')}</span>
     </div>`;
   // Una pieza descartada o pausada baja al final, en gris, con «Recuperar» o «Reanudar».
   if (p.descartado || p.pausado) return gvDescartada(p, media);
+  // Arriba qué es; abajo, siempre en el mismo lugar, la decisión: aprobar o escribir la nota. Lo que se consulta de vez en
+  // cuando (guion, copy, por qué, notas aplicadas) se pliega en pestañas.
   return `<article class="gv-card st-${p.estado}${p.video || p.laminas?.length ? ' has-video' : ''}${p.laminas?.length ? ' is-carrusel' : ''}" data-gvid="${esc(p.key)}">
     ${media}
     <div class="gv-body">
-      ${gvTop(p)}
-      <h3 class="gv-title">${esc(p.titulo || '')}</h3>
-      <div class="gv-chips">${gvProdBtns(p)}</div>
-      <p class="gv-hook">${esc(p.hook || '')}</p>
-      ${p.portadas?.length ? gvPortadas(p) : ''}
-      ${p.video || (p.tipo === 'carrusel' && p.run_ok) ? '' : p.audio ? `<div class="gv-audio"><audio controls preload="none" src="${esc(mediaUrl(p.audio.path))}&v=${Math.round(p.audio.modified || 0)}"></audio><span class="muted">${p.audio.seconds ? clock(p.audio.seconds) : ''}${p.guion ? ` · ${p.guion.palabras} palabras` : ''}</span>${gvFinder(p.audio.path)}</div>` : `<p class="muted gv-noaudio">${!p.run_ok ? (p.tipo === 'carrusel' ? 'Borrador en preparación.' : 'Falta el run de esta pieza.') : p.mudo ? 'Va mudo a propósito: revisá el texto en pantalla en «Guion».' : 'Audio en preparación.'}</p>`}
-      <div class="gv-acts">
-        ${p.estado === 'aprobado' ? `<button class="secondary on-ok" data-gvok="${esc(p.key)}" data-v="por_escuchar" title="Deshacer la aprobación">${ICON.check} Aprobado</button>` : `<button class="secondary" data-gvok="${esc(p.key)}" data-v="aprobado" ${gvAprobable(p) ? '' : 'disabled'}>${ICON.check} ${p.laminas?.length || p.tipo === 'carrusel' ? 'Aprobar borrador' : p.mudo && !p.video ? 'Aprobar texto' : p.video?.final ? 'Aprobar final' : p.video ? 'Aprobar corte' : 'Aprobar audio'}</button>`}
-        <button class="ghost ${o === 'guion' ? 'on' : ''}" data-gvopen="guion" data-id="${esc(p.key)}">${p.tipo === 'carrusel' ? 'Texto' : 'Guion'}</button>
-        ${p.run_ok ? `<button class="ghost ${o === 'copy' ? 'on' : ''}" data-gvopen="copy" data-id="${esc(p.key)}" title="${p.copy || gvCopyNota(p) ? 'El copy que se sube con la pieza' : 'Todavía no tiene copy'}">Copy${p.copy || gvCopyNota(p) ? '' : '<i class="gv-falta" aria-label="sin copy"></i>'}</button>` : ''}
-        ${(p.muestras || []).length ? `<button class="ghost ${o === 'estilo' ? 'on' : ''}" data-gvopen="estilo" data-id="${esc(p.key)}">Estilo</button>` : ''}
-        <button class="ghost ${o === 'why' ? 'on' : ''}" data-gvopen="why" data-id="${esc(p.key)}">Por qué</button>
-        <button class="ghost gv-desc" data-gvdesc="${esc(p.key)}" data-v="descartar" title="Descartar: baja al final en gris y la podés recuperar">${ICON.trash} Descartar</button>
+      <div class="gv-info">
+        <header class="gv-head">${gvEstadoTag(p)}${gvQueEs(p)}</header>
+        ${gvFicha(p, true)}
+        ${gvReferencia(p)}
       </div>
-      ${o === 'guion' ? gvGuion(p) : o === 'copy' ? gvCopy(p) : o === 'estilo' ? gvEstilo(p) : o === 'why' ? gvWhy(p) : ''}
-      ${gvFeedback(p)}
+      ${p.portadas?.length ? gvPortadas(p) : ''}
+      ${p.video || (p.tipo === 'carrusel' && p.run_ok) ? '' : p.audio ? `<div class="gv-audio"><audio controls preload="none" src="${esc(mediaUrl(p.audio.path))}&v=${Math.round(p.audio.modified || 0)}"></audio><span class="muted">${p.audio.seconds ? clock(p.audio.seconds) : ''}${p.guion ? ` · ${p.guion.palabras} palabras` : ''}</span>${gvFinder(p.audio.path)}</div>` : `<p class="muted gv-noaudio">${!p.run_ok ? (p.tipo === 'carrusel' ? 'Borrador en preparación.' : 'Falta la carpeta de esta pieza.') : p.mudo ? 'Va mudo: revisá el texto en Guion.' : 'Audio en preparación.'}</p>`}
+      <div class="gv-acciones">
+        <div class="gv-acts">
+          ${gvTab(p, 'guion', p.tipo === 'carrusel' ? 'Texto' : 'Guion')}
+          ${p.run_ok ? gvTab(p, 'copy', `Copy${p.copy || gvCopyNota(p) ? '' : '<i class="gv-falta" aria-label="sin copy"></i>'}`) : ''}
+          ${gvHayPorque(p) ? gvTab(p, 'porque', p.porque ? 'Por qué' : 'Fuentes') : ''}
+          ${gvNotasHechas(p).length ? gvTab(p, 'notas', `Notas <span class="gv-tab-n">${gvNotasHechas(p).length}</span>`) : ''}
+          <button class="icon gv-desc" data-gvdesc="${esc(p.key)}" data-v="descartar" title="Descartar: baja al final en gris y la podés recuperar" aria-label="Descartar">${ICON.trash}</button>
+        </div>
+        ${o === 'guion' ? gvGuion(p) : o === 'copy' ? gvCopy(p) : o === 'estilo' ? gvEstilo(p) : o === 'porque' ? gvPorque(p) : o === 'notas' ? `<div class="gv-panel fb-list">${gvNotasHechas(p).map(e => gvNota(p, e)).join('')}</div>` : ''}
+        ${gvFeedback(p, otraVersion)}
+      </div>
     </div>
   </article>`;
+}
+const gvTab = (p, k, txt) => { const on = (gv.open[p.key] || '') === k; return `<button class="ghost gv-tab${on ? ' on' : ''}" data-gvopen="${k}" data-id="${esc(p.key)}" aria-expanded="${on}">${txt}</button>`; };
+const gvNotasHechas = p => (p.feedback || []).filter(e => e.estado === 'aplicado');
+// Aprobar va al final de la barra de la nota. Con notas sin copiar, lo que sigue es copiarlas y el botón baja de peso; qué se
+// aprueba lo dice el estado de arriba y, si hay versiones, el desplegable del video.
+function gvAprobar(p, otraVersion, conNotas) {
+  if (p.estado === 'aprobado' && !otraVersion) return `<button class="secondary gv-ok on-ok" data-gvok="${esc(p.key)}" data-v="por_escuchar" title="Deshacer la aprobación">${ICON.check} Aprobado</button>`;
+  const que = p.laminas?.length || p.tipo === 'carrusel' ? 'el borrador' : p.mudo && !p.video ? 'el texto' : otraVersion ? 'esta versión' : p.video?.final ? 'el final' : p.video ? 'el corte' : 'el audio';
+  return `<button class="${conNotas ? 'secondary' : 'primary'} gv-ok" data-gvok="${esc(p.key)}" data-v="aprobado" title="Aprobar ${que}" ${gvAprobable(p) ? '' : 'disabled'}>${ICON.check} Aprobar</button>`;
+}
+
+// Qué es: el título y de qué trata. Con video o láminas el gancho ya se ve en la pieza; sin ellos va acá, salvo que repita el
+// título con otra puntuación. Sin título, el gancho hace de título. Cuándo empezó y de qué plan viene, en el tooltip.
+const gvSinSignos = s => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+function gvQueEs(p) {
+  const t = String(p.titulo || p.hook || '').trim(), h = String(p.hook || '').trim(), tema = String(p.tema || '').trim();
+  const info = p.inicio ? `Empezó a producirse el ${gvFecha(p.inicio.slice(0, 10), { day: 'numeric', month: 'long' })} a las ${p.inicio.slice(11, 16)}${p.planTitulo ? ` · ${p.planTitulo}` : ''}` : '';
+  return `<h3 class="gv-title"${info ? ` title="${esc(info)}"` : ''}>${esc(t)}</h3>${h && !p.video && !p.laminas?.length && gvSinSignos(h) !== gvSinSignos(t) ? `<p class="gv-hook">${esc(h)}</p>` : ''}${tema && gvSinSignos(tema) !== gvSinSignos(t) ? `<p class="gv-tema">${esc(tema)}</p>` : ''}`;
+}
+// `edicion` es texto libre: para la ficha alcanza su primer tramo. Las que describen el contenido («Cuadro 0: un cuchillo…»,
+// «Gancho: …», «Láminas: …») no dicen de qué estilo es la pieza y no van. El texto entero sigue en el panel Guion.
+const gvResumen = t => { const s = String(t || '').trim(); if (!s || /^(cuadro\s*\d|gancho\b|l[áa]minas?\b)/i.test(s)) return ''; const c = s.split(/[:.(;]/)[0].trim(); return c.length > 64 ? c.slice(0, 62).trimEnd() + '…' : c; };
+const GV_ABRIR = '<svg class="ti" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
+// La ficha, en etiquetas sin rótulo: el formato y el estilo con su paleta. Lo que no está, no se muestra. El estilo es el
+// botón que elige el look, el B-roll y el título. Los nombres largos se leen por lo que distingue (del formato, lo primero;
+// de un kit, la variante); el nombre entero queda en el tooltip.
+const gvEstiloCorto = s => { const c = String(s || '').replace(/^[^·:]*[·:]\s*/, '') || String(s || ''); return c.charAt(0).toUpperCase() + c.slice(1); };
+function gvFicha(p, editable) {
+  const e = p.estilo || {}, pal = (e.paleta || []).slice(0, 4), formato = gvFormatoNombre(p), estilo = gvEstiloCorto(e.nombre || gvResumen(p.edicion));
+  const antes = p.estilo_antes || p.look_antes || p.titulo_tipo_antes, descartado = p.estilo_descartado ? ' descartado' : '';
+  const info = p.estilo_descartado ? 'Descartaste este estilo: cambialo' : [e.nombre || p.edicion, e.titulo && 'Título: ' + e.titulo, e.ritmo && 'Ritmo: ' + e.ritmo].filter(Boolean).join(' · ');
+  const adentro = `${pal.length ? `<span class="gv-pb-pal" aria-hidden="true">${pal.map(c => `<i style="background:${esc(c)}"></i>`).join('')}</span>` : ''}<span class="gv-chip-t">${esc(estilo || 'Elegir estilo')}</span>`;
+  const que = p.tipo === 'carrusel' ? 'Cambiar el estilo del carrusel' : 'Cambiar el look del avatar, el estilo del B-roll o el título en pantalla';
+  const chips = [formato ? `<span class="gv-chip" title="${esc(p.formato?.detalle || formato)}">${esc(formato.split(' · ')[0])}</span>` : '',
+    editable ? `<button class="gv-chip gv-cambiar${antes ? ' changed' : ''}${descartado}" data-gvcambiar="${esc(p.key)}" aria-haspopup="true" aria-label="${que}" title="${esc(info || que)}">${adentro}</button>` : estilo ? `<span class="gv-chip${descartado}" title="${esc(info)}">${adentro}</span>` : ''].filter(Boolean);
+  return chips.length ? `<div class="gv-chips">${chips.join('')}</div>` : '';
+}
+// Qué se abre desde el botón del estilo: las pestañas del editor que aplican a la pieza, con lo elegido a la vista, y las
+// muestras del estilo. Si queda una sola opción, se abre sin menú.
+function gvMenuCambiar(anchor, p) {
+  const e = p.estilo || {}, pal = (e.paleta || []).slice(0, 4);
+  const ops = [
+    gvConAvatar(p) && { tab: 'look', t: 'Look del avatar', v: p.look?.nombre || 'Sin elegir', ic: p.look?.id ? `<img src="${esc(gvLookImg(p.look))}" alt="" loading="lazy">` : GV_IC.avatar, antes: p.look_antes?.nombre },
+    { tab: 'broll', t: p.tipo === 'carrusel' ? 'Estilo del carrusel' : 'Estilo del B-roll', v: e.nombre || 'Sin elegir', ic: pal.length ? `<span class="gv-pb-pal">${pal.map(c => `<i style="background:${esc(c)}"></i>`).join('')}</span>` : GV_IC.broll, antes: p.estilo_antes?.nombre },
+    p.tipo !== 'carrusel' && { tab: 'titulo', t: 'Título en pantalla', v: p.titulo_tipo?.nombre || 'El del estilo', ic: GV_IC.titulo, antes: p.titulo_tipo_antes?.nombre },
+    (p.muestras || []).length && { muestras: true, t: gv.open[p.key] === 'estilo' ? 'Ocultar las muestras' : 'Ver muestras del estilo', v: p.muestras.length === 1 ? '1 muestra' : p.muestras.length + ' muestras', ic: GV_IC.muestras },
+  ].filter(Boolean);
+  if (ops.length === 1) { gvOpenEstilos(p, ops[0].tab); return; }
+  gvMenu(anchor, `<div class="gv-pop-list gv-cam-list">${ops.map(o => `<button class="gv-cam" ${o.muestras ? 'data-muestras' : `data-tab="${o.tab}"`}><span class="gv-pb-ic">${o.ic}</span><span class="gv-cam-t"><b>${esc(o.t)}</b><small>${esc(o.v)}${o.antes ? ` · antes: ${esc(o.antes)}` : ''}</small></span></button>`).join('')}</div>`, ev => {
+    const b = ev.target.closest('.gv-cam'); if (!b) return;
+    gvMenuClose();
+    if (b.dataset.tab) gvOpenEstilos(p, b.dataset.tab);
+    else { gv.open[p.key] = gv.open[p.key] === 'estilo' ? '' : 'estilo'; gvRerender(); }
+  });
+}
+// La referencia original, sólo cuando la hay. guiones.ts ya dejó afuera las rutas internas: si llega, es una URL externa.
+// Todo el bloque abre el original en otra pestaña, sin mandar de dónde viene.
+const GV_TOMA = { recrear: ['Clona a', 'Clona un original'], idea: ['Toma el tema de', 'Toma el tema de un original'], formato: ['Toma el formato de', 'Toma el formato de un original'] };
+const gvNum = v => v >= 1e6 ? (Math.round(v / 1e5) / 10).toLocaleString('es-AR') + ' M' : v >= 1e4 ? Math.round(v / 1e3).toLocaleString('es-AR') + ' mil' : Math.round(v).toLocaleString('es-AR');
+const gvMultiplo = v => '×' + (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString('es-AR');
+function gvReferencia(p) {
+  const r = p.referencia; if (!r?.url) return '';
+  const [con, sin] = GV_TOMA[r.tomar] || ['Referencia:', 'Referencia original'];
+  const datos = [r.vistas != null ? `${gvNum(r.vistas)} vistas` : '', r.multiplo != null ? gvMultiplo(r.multiplo) : ''].filter(Boolean).join(' · ');
+  const nota = r.hook_original ? `«${r.hook_original}»` : r.nota || '';
+  return `<a class="gv-ref" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer" title="${esc(nota ? `${nota} · ` : '')}Abrir el original">
+    ${r.poster ? `<img class="gv-ref-th" src="/api/planner/poster?path=${encodeURIComponent(r.poster)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
+    <span class="gv-ref-tx"><b>${esc(r.cuenta ? `${con} ${r.cuenta}` : sin)}</b>${datos ? `<span class="gv-ref-st">${esc(datos)}</span>` : ''}</span>${GV_ABRIR}
+  </a>`;
+}
+// «Por qué», detrás de su pestaña: el texto entero, todas las fuentes del plan (las rutas internas sin link) y los datos de
+// producción. Sin `porque` ni fuentes no hay pestaña: esos datos siguen en los tooltips de la ficha.
+const gvRefsPlan = p => (p.referencias || []).map(r => typeof r === 'string' ? { url: r } : r).filter(r => r?.url);
+const gvHayPorque = p => !!(p.porque || gvRefsPlan(p).length);
+function gvPorque(p) {
+  const e = p.estilo || {}, refs = gvRefsPlan(p);
+  if (!gvHayPorque(p)) return '';
+  const datos = [p.formato?.detalle, e.titulo && 'Título: ' + e.titulo, e.ritmo && 'Ritmo: ' + e.ritmo, p.planTitulo && 'Plan: ' + p.planTitulo].filter(Boolean);
+  return `<div class="gv-panel gv-why">${p.porque ? `<p>${esc(p.porque)}</p>` : ''}${refs.length ? `<ul class="gv-refs">${refs.map(r => `<li>${/^https?:\/\//i.test(r.url) ? `<a class="link" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.cuenta || r.url)}</a>` : esc(r.cuenta || r.url)}${r.nota ? ` <span class="muted">· ${esc(r.nota)}</span>` : ''}</li>`).join('')}</ul>` : ''}
+    ${datos.length ? `<p class="muted">${datos.map(esc).join('<br>')}</p>` : ''}</div>`;
 }
 
 // Las tres portadas del carrusel lado a lado; tocar una la abre en grande y «Elegir» la deja como lámina 1.
@@ -335,9 +477,9 @@ const gvCopyDirty = p => gv.copy?.[p.key] != null && gv.copy[p.key].trim() !== g
 function gvCopy(p) {
   const n = gvCopyNota(p), base = gvCopyBase(p), val = gv.copy?.[p.key] ?? base;
   return `<div class="gv-panel gv-copy">
-    <div class="gv-copy-head">${n ? `<span class="tag ${n.estado === 'en_curso' ? 'warn' : 'accent'}">Editado · ${{ en_curso: 'en curso', enviado: 'copiado' }[n.estado] || 'pendiente'}</span>` : base ? '' : '<span class="muted">Todavía no tiene copy: se escribe al pasar a producción final. Podés escribirlo vos acá.</span>'}</div>
-    <textarea class="gv-copytext" data-gvcopytext="${esc(p.key)}" placeholder="El copy que se sube con la pieza…" aria-label="Copy de ${esc(p.titulo || p.id)}">${esc(val)}</textarea>
-    <div class="gv-copy-acts" ${gvCopyDirty(p) ? '' : 'hidden'}><button class="secondary" data-gvcopysave="${esc(p.key)}">Guardar copy</button><button class="ghost" data-gvcopyundo="${esc(p.key)}">Deshacer</button><span class="hint">Queda como feedback: se aplica cuando lo pegás en Claude Code.</span></div>
+    ${n ? `<div class="gv-copy-head"><span class="tag ${n.estado === 'en_curso' ? 'warn' : 'accent'}">Editado · ${{ en_curso: 'en curso', enviado: 'copiado' }[n.estado] || 'pendiente'}</span></div>` : ''}
+    <textarea class="gv-copytext" data-gvcopytext="${esc(p.key)}" placeholder="Todavía no tiene copy: escribilo acá" aria-label="Copy de ${esc(p.titulo || p.id)}">${esc(val)}</textarea>
+    <div class="gv-copy-acts" ${gvCopyDirty(p) ? '' : 'hidden'}><button class="secondary" data-gvcopysave="${esc(p.key)}">Guardar copy</button><button class="ghost" data-gvcopyundo="${esc(p.key)}">Deshacer</button></div>
   </div>`;
 }
 async function gvSaveCopy(p) {
@@ -357,23 +499,16 @@ function gvEstilo(p) {
     <div class="gv-samples">${p.muestras.map(m => `<figure>${m.tipo === 'video' ? `<video src="${esc(mediaUrl(m.path))}" controls muted loop playsinline preload="metadata"></video>` : `<a href="${esc(mediaUrl(m.path))}" target="_blank" rel="noopener"><img src="${esc(mediaUrl(m.path))}" alt="" loading="lazy"></a>`}${m.nota ? `<figcaption>${esc(m.nota)}</figcaption>` : ''}</figure>`).join('')}</div></div>`;
 }
 
-function gvWhy(p) {
-  const e = p.estilo || {};
-  return `<div class="gv-panel">${p.porque ? `<p>${esc(p.porque)}</p>` : ''}
-    ${(p.referencias || []).length ? `<ul class="gv-refs">${p.referencias.map(r => `<li><a class="link" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.cuenta || r.url)}</a> ${r.nota ? `<span class="muted">· ${esc(r.nota)}</span>` : ''}</li>`).join('')}</ul>` : ''}
-    <p class="muted">${[p.formato?.detalle, e.titulo && 'Título: ' + e.titulo, e.ritmo && 'Ritmo: ' + e.ritmo].filter(Boolean).map(esc).join('<br>')}</p></div>`;
-}
-
-// Las notas ya aplicadas se pliegan en «N notas aplicadas», arriba de las abiertas. Siguen en feedback/ de la pieza;
-// sólo dejan de ocupar la tarjeta.
-function gvFeedback(p) {
+// Las notas ya aplicadas se pliegan en la pestaña «Notas». Siguen en feedback/ de la pieza; sólo dejan de ocupar la tarjeta.
+const gvNota = (p, e) => `<div class="fb-entry ${e.estado === 'aplicado' ? 'done' : ''}"><div class="fb-head"><span>${esc(new Date(e.created_at).toLocaleString('es-AR', { timeZone: TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace('.', ''))}</span><span class="tag ${e.estado === 'aplicado' ? 'ok' : e.estado === 'en_curso' ? 'warn' : 'accent'}">${{ aplicado: 'Aplicado', en_curso: 'En curso', enviado: 'Copiado' }[e.estado] || 'Pendiente'}</span><button class="icon fb-del" data-gvdel="${esc(e.file)}" data-id="${esc(p.key)}" aria-label="Borrar nota">${ICON.trash}</button></div>${typeof e.copy === 'string' ? `<p class="fb-text"><b>Copy editado:</b> ${esc(e.copy.length > 140 ? e.copy.slice(0, 140) + '…' : e.copy)}</p>` : ''}${e.text ? `<p class="fb-text">${esc(e.text)}</p>` : ''}${e.audio ? `<audio src="${esc(mediaUrl(e.audio))}" controls preload="metadata"></audio>` : ''}${e.cambio ? `<p class="hint">${esc(e.cambio)}</p>` : ''}</div>`;
+function gvFeedback(p, otraVersion) {
   const rec = gv.rec?.id === p.key ? gv.rec : null, saving = gv.saving[p.key];
-  const fb = p.feedback || [], hechas = fb.filter(e => e.estado === 'aplicado'), abiertas = fb.filter(e => e.estado !== 'aplicado');
-  const entry = e => `<div class="fb-entry ${e.estado === 'aplicado' ? 'done' : ''}"><div class="fb-head"><span>${esc(new Date(e.created_at).toLocaleString('es-AR', { timeZone: TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace('.', ''))}</span><span class="tag ${e.estado === 'aplicado' ? 'ok' : e.estado === 'en_curso' ? 'warn' : 'accent'}">${{ aplicado: 'Aplicado', en_curso: 'En curso', enviado: 'Copiado' }[e.estado] || 'Pendiente'}</span><button class="icon fb-del" data-gvdel="${esc(e.file)}" data-id="${esc(p.key)}" aria-label="Borrar nota">${ICON.trash}</button></div>${typeof e.copy === 'string' ? `<p class="fb-text"><b>Copy editado:</b> ${esc(e.copy.length > 140 ? e.copy.slice(0, 140) + '…' : e.copy)}</p>` : ''}${e.text ? `<p class="fb-text">${esc(e.text)}</p>` : ''}${e.audio ? `<audio src="${esc(mediaUrl(e.audio))}" controls preload="metadata"></audio>` : ''}${e.cambio ? `<p class="hint">${esc(e.cambio)}</p>` : ''}</div>`;
-  return `<div class="gv-panel gv-fbp">${hechas.length ? `<details class="gv-arch" data-gvarch="${esc(p.key)}" ${gv.arch[p.key] ? 'open' : ''}><summary>${hechas.length === 1 ? '1 nota aplicada' : hechas.length + ' notas aplicadas'}</summary><div class="fb-list">${hechas.map(entry).join('')}</div></details>` : ''}${abiertas.length ? `<div class="fb-list">${abiertas.map(entry).join('')}</div>` : ''}
-    <div class="gv-fb-in"><input type="text" data-gvtext="${esc(p.key)}" placeholder="Escribí y apretá Enter" value="${esc(gv.text[p.key] || '')}" ${saving ? 'disabled' : ''}>
-    ${rec ? `<button class="secondary rec on" data-gvrec="${esc(p.key)}" title="Detener y guardar">${ICON.stop}<span data-gvclock>${clock((performance.now() - rec.start) / 1000)}</span></button>` : `<button class="secondary rec" data-gvrec="${esc(p.key)}" title="Grabar audio" aria-label="Grabar audio" ${saving ? 'disabled' : ''}>${ICON.mic}</button>`}</div>
-    ${saving ? `<p class="hint">Guardando…</p>` : ''}</div>`;
+  const abiertas = (p.feedback || []).filter(e => e.estado !== 'aplicado'), sinCopiar = gvFb(p).some(e => !e.estado || e.estado === 'pendiente');
+  return `${abiertas.length ? `<div class="fb-list gv-notas">${abiertas.map(e => gvNota(p, e)).join('')}</div>` : ''}
+    ${gvFb(p).length ? `<button class="${sinCopiar ? 'primary' : 'ghost'} gv-fb-copy" data-gvfbcopy="${esc(p.key)}" title="Copia sólo las notas de esta pieza para pegarlas en Claude Code">${ICON.copy} ${sinCopiar ? 'Copiar feedback' : 'Copiar de nuevo'}</button>` : ''}
+    <div class="gv-fb-in"><input type="text" data-gvtext="${esc(p.key)}" placeholder="${saving ? 'Guardando…' : 'Escribí tu feedback'}" aria-label="Feedback de ${esc(p.titulo || p.id)}" enterkeyhint="send" value="${esc(gv.text[p.key] || '')}" ${saving ? 'disabled' : ''}>
+    ${rec ? `<button class="secondary rec on" data-gvrec="${esc(p.key)}" title="Detener y guardar">${ICON.stop}<span data-gvclock>${clock((performance.now() - rec.start) / 1000)}</span></button>` : `<button class="secondary rec" data-gvrec="${esc(p.key)}" title="Grabar audio" aria-label="Grabar audio" ${saving ? 'disabled' : ''}>${ICON.mic}</button>`}
+    ${gvAprobar(p, otraVersion, sinCopiar)}</div>`;
 }
 
 const gvPiece = key => gv.data?.piezas?.find(p => p.key === key);
@@ -468,26 +603,13 @@ function gvRenderEstilos(y) {
 const gvConAvatar = p => p.tipo !== 'carrusel' && !p.sin_avatar && !!(gv.prod?.looks?.length || p.look);
 const gvTabs = p => [...(gvConAvatar(p) ? [['look', 'Avatar']] : []), ['broll', 'B-roll'], ...(p.tipo !== 'carrusel' ? [['titulo', 'Título']] : [])];
 const gvLookImg = l => l?.id ? `/api/planner/guiones/looks/img?id=${encodeURIComponent(l.id)}` : '';
-// Tres botones chicos, uno por pestaña del editor. El ícono ya dice lo elegido (la cara del look y la paleta del estilo);
-// el nombre va en el tooltip.
+// Los íconos del menú del estilo (gvMenuCambiar). El ícono ya dice lo elegido: la cara del look y la paleta del estilo.
 const GV_IC = {
   avatar: '<svg viewBox="0 0 16 16"><circle cx="8" cy="5.6" r="2.6"/><path d="M3 13.5c.6-2.6 2.6-4 5-4s4.4 1.4 5 4"/></svg>',
   broll: '<svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.6"/><path d="M2 6h12M2 10h12M5.5 3v3M10.5 3v3M5.5 10v3M10.5 10v3"/></svg>',
   titulo: '<svg viewBox="0 0 16 16"><path d="M3.5 4.5V3h9v1.5M8 3v10M6 13h4"/></svg>',
+  muestras: '<svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="1.6"/><circle cx="6" cy="6" r="1.2"/><path d="m13.5 10-2.8-2.8L4 13.5"/></svg>',
 };
-function gvProdBtns(p) {
-  const e = p.estilo || {}, pal = (e.paleta || []).slice(0, 4);
-  const btn = (attrs, cls, tip, ic, label) => `<button class="gv-pb${cls}" ${attrs} title="${esc(tip)}" aria-label="${esc(tip)}"><span class="gv-pb-ic">${ic}</span>${label}</button>`;
-  const look = gvConAvatar(p) ? btn(`data-gvprod="look" data-id="${esc(p.key)}"`, p.look_antes ? ' changed' : '',
-    ['Avatar: ' + (p.look?.nombre || 'sin elegir'), p.look?.combina && 'combina con ' + p.look.combina, p.look_antes && 'antes: ' + p.look_antes.nombre].filter(Boolean).join(' · '),
-    p.look?.id ? `<img src="${esc(gvLookImg(p.look))}" alt="" loading="lazy">` : GV_IC.avatar, 'Avatar') : '';
-  const broll = btn(`data-gvestilo="${esc(p.key)}"`, (p.estilo_antes ? ' changed' : '') + (p.estilo_descartado ? ' descartado' : ''),
-    [p.estilo_descartado ? 'Descartaste este estilo: tocá para cambiarlo' : (p.tipo === 'carrusel' ? 'Estilo: ' : 'B-roll: ') + (e.nombre || 'sin elegir'), p.estilo_antes && 'antes: ' + p.estilo_antes.nombre].filter(Boolean).join(' · '),
-    pal.length ? `<span class="gv-pb-pal">${pal.map(c => `<i style="background:${esc(c)}"></i>`).join('')}</span>` : GV_IC.broll, p.tipo === 'carrusel' ? 'Estilo' : 'B-roll');
-  const tit = p.tipo !== 'carrusel' ? btn(`data-gvprod="titulo" data-id="${esc(p.key)}"`, p.titulo_tipo_antes ? ' changed' : '',
-    ['Título: ' + (p.titulo_tipo?.nombre || 'el del estilo'), p.titulo_tipo_antes && 'antes: ' + p.titulo_tipo_antes.nombre].filter(Boolean).join(' · '), GV_IC.titulo, 'Título') : '';
-  return look + broll + tit;
-}
 const gvEdHecho = p => p.video ? `<p class="hint">Ya tiene ${p.video.final ? 'final' : 'rough cut'}: si lo cambiás queda una nota para rehacerlo.</p>` : '';
 
 function gvLookGrilla(p) {
@@ -672,15 +794,19 @@ function gvDescartada(p, media) {
   return `<article class="gv-card is-descartada${p.pausado ? ' is-pausada' : ''}${p.video || p.laminas?.length ? ' has-video' : ''}" data-gvid="${esc(p.key)}">
     ${media}
     <div class="gv-body">
-      ${gvTop(p, d)}
-      <h3 class="gv-title">${esc(p.titulo || '')}</h3>
-      <p class="gv-hook">${esc(p.hook || '')}</p>
-      <div class="gv-acts">
-        <button class="secondary" data-gvdesc="${esc(p.key)}" data-v="${p.pausado ? 'reanudar' : 'recuperar'}">${ICON.restore} ${p.pausado ? 'Reanudar' : 'Recuperar'}</button>
-        <button class="ghost ${o === 'guion' ? 'on' : ''}" data-gvopen="guion" data-id="${esc(p.key)}">${p.tipo === 'carrusel' ? 'Texto' : 'Guion'}</button>
-        <button class="ghost ${o === 'why' ? 'on' : ''}" data-gvopen="why" data-id="${esc(p.key)}">Por qué</button>
+      <div class="gv-info">
+        <header class="gv-head">${gvEstadoTag(p, d)}${gvQueEs(p)}</header>
+        ${gvFicha(p, false)}
+        ${gvReferencia(p)}
       </div>
-      ${o === 'guion' ? gvGuion(p) : o === 'why' ? gvWhy(p) : ''}
+      <div class="gv-acciones">
+        <div class="gv-acts">
+          <button class="secondary" data-gvdesc="${esc(p.key)}" data-v="${p.pausado ? 'reanudar' : 'recuperar'}">${ICON.restore} ${p.pausado ? 'Reanudar' : 'Recuperar'}</button>
+          ${gvTab(p, 'guion', p.tipo === 'carrusel' ? 'Texto' : 'Guion')}
+          ${gvHayPorque(p) ? gvTab(p, 'porque', p.porque ? 'Por qué' : 'Fuentes') : ''}
+        </div>
+        ${o === 'guion' ? gvGuion(p) : o === 'porque' ? gvPorque(p) : ''}
+      </div>
     </div>
   </article>`;
 }
@@ -694,16 +820,17 @@ async function gvDescartar(p, accion) {
 }
 
 async function gvSetEstado(p, estado) {
-  try { await api('guiones/estado', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ run: p.run, estado }) }); }
+  const vista = gvVisto(p), agendada = gvOtraAgendada(p, vista);
+  try { await api('guiones/estado', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ run: p.run, estado, ...(p.video?.lista ? { video: vista.path } : {}) }) }); }
   catch (e) { toast(e.message); return; }
-  const ok = p.video?.final ? 'Final aprobado.' : p.video ? 'Corte aprobado.' : p.laminas?.length ? 'Borrador aprobado.' : 'Audio aprobado.';
+  const ok = agendada ? gvAvisoAgendada(agendada) : p.video?.final ? 'Final aprobado.' : p.video ? 'Corte aprobado.' : p.laminas?.length ? 'Borrador aprobado.' : 'Audio aprobado.';
   toast(estado === 'aprobado' ? ok : 'Volvió a Por escuchar.', estado === 'aprobado' ? () => gvSetEstado(p, 'por_escuchar') : null);
   await loadGuiones();
 }
 
 async function gvSave(p, text, clip) {
   gv.saving[p.key] = true; gvRerender();
-  const body = { run: p.run, pieza: p.id, text: text || '' };
+  const body = { run: p.run, pieza: p.id, text: text || '', ...(p.video?.lista ? { video: gvVisto(p).path } : {}) };
   try {
     if (clip) { body.audio = await blobB64(clip.blob); body.mime = clip.mime; body.audio_seconds = clip.seconds; }
     const r = await api('guiones/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -742,10 +869,13 @@ $('guionesView').addEventListener('click', async e => {
   const pv = t.closest('[data-gvportview]'); if (pv) { const p = gvPiece(pv.dataset.gvportview); if (p?.portadas?.length) gvOpenSlides({ ...p, titulo: (p.titulo || '') + ' · portadas', laminas: p.portadas.map((x, k) => ({ n: k + 1, png: x.path, modified: x.modified })) }, Number(pv.dataset.i) || 0); return; }
   const pc = t.closest('[data-gvport]'); if (pc) { const p = gvPiece(pc.dataset.gvport); if (p) gvElegirPortada(p, pc.dataset.v); return; }
   const sl = t.closest('[data-gvslides]'); if (sl) { const p = gvPiece(sl.dataset.gvslides); if (p?.laminas?.length) gvOpenSlides(p, Number(sl.dataset.i) || 0); return; }
+  const fc = t.closest('[data-gvfbcopy]'); if (fc) { gvCopiarFeedback(p => p.key === fc.dataset.gvfbcopy); return; }
+  const vers = t.closest('[data-gvvers]'); if (vers) { const p = gvPiece(vers.dataset.gvvers); if (p?.video?.lista) gvMenuVersiones(vers, p); return; }
   const ok = t.closest('[data-gvok]'); if (ok) { const p = gvPiece(ok.dataset.gvok); if (p) gvSetEstado(p, ok.dataset.v); return; }
   const dsc = t.closest('[data-gvdesc]'); if (dsc) { const p = gvPiece(dsc.dataset.gvdesc); if (p) gvDescartar(p, dsc.dataset.v); return; }
-  const es = t.closest('[data-gvestilo]'); if (es) { const p = gvPiece(es.dataset.gvestilo); if (p) gvOpenEstilos(p); return; }
-  const pr = t.closest('[data-gvprod]'); if (pr) { const p = gvPiece(pr.dataset.id); if (p) gvOpenEstilos(p, pr.dataset.gvprod); return; }
+  if (t.closest('[data-gvfil]')) { gvMenuFamilia(t.closest('[data-gvfil]')); return; }
+  if (t.closest('[data-gvfilclear]')) { gvSetFamilia(''); return; }
+  const cm = t.closest('[data-gvcambiar]'); if (cm) { const p = gvPiece(cm.dataset.gvcambiar); if (p) gvMenuCambiar(cm, p); return; }
   const op = t.closest('[data-gvopen]'); if (op) { const id = op.dataset.id; gv.open[id] = gv.open[id] === op.dataset.gvopen ? '' : op.dataset.gvopen; gvRerender(); return; }
   const rc = t.closest('[data-gvrec]'); if (rc) { const p = gvPiece(rc.dataset.gvrec); if (p) gvRecord(p); return; }
   const cs = t.closest('[data-gvcopysave]'); if (cs) { const p = gvPiece(cs.dataset.gvcopysave); if (p) gvSaveCopy(p); return; }
@@ -759,8 +889,6 @@ $('guionesView').addEventListener('click', async e => {
 });
 // Un video a la vez: al darle play a uno se pausan los demás.
 $('guionesView').addEventListener('play', e => { if (e.target.matches?.('video[data-gvvid]')) $('gvGrid').querySelectorAll('video[data-gvvid]').forEach(v => v !== e.target && v.pause()); }, true);
-// El archivo de notas aplicadas queda abierto o cerrado aunque la tarjeta se vuelva a pintar.
-$('guionesView').addEventListener('toggle', e => { if (e.target.matches?.('[data-gvarch]')) gv.arch[e.target.dataset.gvarch] = e.target.open; }, true);
 $('guionesView').addEventListener('input', e => {
   const t = e.target.closest('[data-gvtext]'); if (t) gv.text[t.dataset.gvtext] = t.value;
   const c = e.target.closest('[data-gvcopytext]'); if (c) { const p = gvPiece(c.dataset.gvcopytext); (gv.copy ||= {})[c.dataset.gvcopytext] = c.value; const a = c.closest('.gv-copy')?.querySelector('.gv-copy-acts'); if (a && p) a.hidden = !gvCopyDirty(p); }
@@ -775,17 +903,20 @@ $('gvNext').onclick = () => gvMover(1);
 // «Hoy» vuelve al día de hoy sin cambiar el largo del período; desde «Todo», muestra hoy.
 $('gvToday').onclick = () => { if (gv.periodo === 'todo') { gv.periodo = 'dia'; store.set('gvPeriodo', 'dia'); } gvSetDia(todayStr()); };
 $('gvWeekTitle').onclick = () => gvMenuCalendario($('gvWeekTitle'));
-$('gvCopy').onclick = async () => {
-  // Un pedido por plan con notas sin enviar, sólo de las piezas que pasan el formato de la barra; se copian juntos. Van
-  // todas las fechas y etapas, no sólo lo filtrado.
-  const planes = (gv.data?.planes || []).map(x => ({ ...x, runs: x.piezas.filter(p => gvFormatoOk(p) && gvFb(p).length).map(p => p.run) })).filter(x => x.runs.length);
+// Un pedido por plan con notas sin enviar de las piezas pedidas; se copian juntos. El botón de arriba lleva las que pasan
+// el formato de la barra, de todas las fechas y etapas, no sólo lo filtrado; el de cada tarjeta, sólo la suya.
+$('gvCopy').onclick = () => gvCopiarFeedback(gvFormatoOk);
+async function gvCopiarFeedback(cuales) {
+  const planes = (gv.data?.planes || []).map(x => ({ ...x, runs: x.piezas.filter(p => cuales(p) && gvFb(p).length).map(p => p.run) })).filter(x => x.runs.length);
   try {
     const rs = await Promise.all(planes.map(x => api('guiones/copiar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ perfil: x.perfil, week: x.week, path: x.path, runs: x.runs }) })));
-    await copyText(rs.map(r => r.prompt).filter(Boolean).join('\n\n---\n\n'), 'Copiado: pegalo en Claude Code.');
+    // Con varios planes, un solo título al principio: el de la conversación es la primera línea.
+    const pedidos = rs.map(r => r.prompt).filter(Boolean), piezas = planes.reduce((k, x) => k + x.runs.length, 0);
+    await copyText(pedidos.length > 1 ? `${tituloMensaje('Feedback', `Corregir ${piezas} piezas de Guiones`)}\n\n${pedidos.map(sinTituloMensaje).join('\n\n---\n\n')}` : pedidos.join(''), 'Copiado: pegalo en Claude Code.');
   }
   catch (e) { toast(e.message); }
   loadGuiones();
-};
+}
 // Al volver a la pestaña, el audio pudo haber cambiado (otra sesión aplicó el feedback).
 document.addEventListener('visibilitychange', () => { if (document.hidden) return; gvCheckVersion(); if (view === 'guiones' && !gv.rec) loadGuiones(); });
 if (view === 'guiones') renderGuiones();

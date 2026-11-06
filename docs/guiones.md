@@ -3,13 +3,14 @@
 La pestaña **Guiones** es donde revisás el contenido de la semana mientras se produce, antes de que pase a la cola de publicación: el guion, el audio, el rough cut, el final y los carruseles. Desde ahí:
 
 - escuchás el audio, mirás el rough cut o el final ahí mismo en la tarjeta, y leés el guion;
-- **aprobás** lo que está bien (el audio, el corte, el final o el borrador del carrusel). Una aprobación vale para lo que revisaste: si el archivo cambia después, la pieza vuelve a «por revisar»;
-- dejás **feedback** escrito (Enter) o grabado con el micrófono, en cada pieza;
+- ves en cada tarjeta qué es la pieza: el título, el tema, el formato, el estilo con su paleta y, si la tiene, la referencia original que toma (con un link al original);
+- **aprobás** lo que está bien (el audio, el corte, el final o el borrador del carrusel). Una aprobación vale para lo que revisaste: si el archivo cambia después, la pieza vuelve a «por revisar». Si el final tiene varias versiones, elegís cuál mirar y aprobás ésa (ver «Versiones de un final»);
+- dejás **feedback** escrito (Enter) o grabado con el micrófono, en cada pieza, y lo copiás para Claude Code de esa pieza sola o de todas;
 - editás el **copy** del post;
-- elegís, en el **editor de producción**, el look del avatar, el estilo del B-roll y el tipo de título;
+- elegís, desde la etiqueta del estilo, el look del avatar, el estilo del B-roll y el tipo de título (el **editor de producción**);
 - pausás una pieza que va más adelante o descartás la que no va (se pueden recuperar);
 - ves cada pieza en el día en que empezó a producirse: el del nombre de su carpeta si termina en `AAAAMMDD-HHMMSS` o, si no, el día en que se creó la carpeta. El período va arriba (Día, Semana, 15 días, Mes o Todo) y el título abre un calendario que dice cuántas piezas empezaron cada día, con un punto si alguna te toca. Lo elegido queda al recargar;
-- filtrás por etapa, con su contador: **Te toca** (lo que espera tu feedback o tu aprobación, de cualquier etapa), Guion, Audio, Por revisar, Aprobado, Publicado, Pausado y Descartado; con el formato de la barra lateral, reels o carruseles. Lo que aprobás o comentás se queda en su lugar hasta que cambies un filtro o recargues;
+- filtrás por etapa, con su contador: **Te toca** (lo que espera tu feedback o tu aprobación, de cualquier etapa), Guion, Audio, Por revisar, Aprobado, Publicado, Pausado y Descartado; por **Formato** (el `formato` del plan: «Reel explicativo · Mi marca» y «Reel explicativo» cuentan como el mismo); y con el formato de la barra lateral, reels o carruseles. Lo que aprobás o comentás se queda en su lugar hasta que cambies un filtro o recargues;
 - abrís en el Finder la carpeta de una pieza, con su video o su audio seleccionado (el ícono de carpeta al lado del archivo);
 - tocás **Copiar feedback para Claude Code** y pegás el mensaje en el chat: trae cada nota con su pieza y cómo aplicarla.
 
@@ -27,7 +28,7 @@ Cada semana es una carpeta con la fecha de su lunes adentro de `guiones/` en tu 
       guion.txt                 el guion (en un video mudo, el texto en pantalla)
       audio.mp3                 la voz (también vale voz.mp3, audio.wav, voice/audio_final.mp3…)
       rough_cut.mp4             el corte para revisar (rough_cut_v2.mp4… manda el más nuevo)
-      final.mp4                 el final
+      final.mp4                 el final (final_<algo>.mp4 es otra versión del final)
       publish_kit.md            el copy del post, en la sección «## Caption» (o caption.txt)
       feedback/                 las notas que dejás desde el planner
     C01/                        un carrusel
@@ -76,10 +77,28 @@ Si una semana tiene más de un plan (por ejemplo, uno por marca), cada uno va en
 - `look` y `titulo_tipo`: los elige el editor de producción; también los puede escribir quien arma el plan.
 - `mudo: true`: un video sin voz se aprueba por el texto de `guion.txt` hasta que haya corte.
 - `sin_avatar: true`: la pieza no lleva avatar y no muestra la pestaña Avatar.
+- `tema` (opcional): de qué trata, en una línea; va abajo del título.
+- `porque` y `referencias` (opcionales): por qué se eligió la pieza y sus fuentes; se ven en la pestaña «Por qué» de la tarjeta.
+- `referencia` (opcional): el original que toma la pieza, si lo hay. Se muestra como un bloque que abre el original:
+
+  ```json
+  "referencia": { "url": "https://www.instagram.com/p/XXXX/", "cuenta": "@cuenta", "vistas": 234523, "multiplo": 78.7,
+                  "tomar": "recrear", "poster": "refs/original.jpg", "hook_original": "La primera frase del original" }
+  ```
+
+  Sólo `url` es obligatoria y tiene que ser una dirección web (no una carpeta). `tomar` dice qué toma: `recrear` (lo clona), `idea` (el tema) o `formato`. `poster` es una imagen dentro de tu carpeta de contenido. Sin `referencia`, el planner usa la primera URL de una red social de `referencias`; `"referencia": null` dice que no tiene.
+
+## Versiones de un final
+
+Si un final ya aprobado o agendado necesita otra iteración, la nueva va aparte, con otro nombre que empiece con `final` (`final_gancho_b.mp4`, por ejemplo), sin pisar `final.mp4`. La tarjeta muestra la más nueva y, debajo del video, un desplegable con todas: cada una dice cuánto dura, si es la aprobada y si es la que está agendada en Postiz (con su fecha). Las copias técnicas (`*_liviano.mp4`, `*_web.mp4`, `*_app.mp4`, `*_postiz.mp4`) no cuentan como versiones.
+
+- **Aprobar** aprueba la versión que estás mirando, y la tarjeta se queda en ésa hasta que aparezca una más nueva.
+- La nota de feedback guarda sobre qué versión la escribiste, y el mensaje para Claude Code lo dice.
+- La cola (`listo`) y la Semana usan la versión aprobada en Guiones, aunque haya otra más nueva. Aprobar otra versión no cambia lo que ya está agendado en Postiz: el planner te avisa, y para cambiarla se reemplaza en la cola (ver la skill `publicar`).
 
 ## Editor de producción
 
-Cada video tiene tres botones: **Avatar**, **B-roll** y **Título**. Cada uno abre el mismo editor en su pestaña, y el editor queda abierto después de elegir.
+La etiqueta del estilo, en la ficha de la tarjeta, abre un menú con lo que se puede cambiar: **Look del avatar**, **Estilo del B-roll** (o del carrusel), **Título en pantalla** y las muestras del estilo, cada uno con lo elegido. Cada opción abre el mismo editor en su pestaña, y el editor queda abierto después de elegir.
 
 - **Avatar:** los looks de la carpeta `looks/` (se cambia con `guiones.looks`), con una foto de cada uno. Un look es una imagen (JPG, PNG o WebP) o un video corto (MP4, MOV o WebM, se muestra un cuadro). Para ponerles nombre, `looks/looks.json`:
 
@@ -104,7 +123,7 @@ Los que el planner sabe dibujar: condensada en caja, condensada, negrita en caja
 
 ## Copiar feedback para Claude Code
 
-El botón junta las notas sin corregir de todas las fechas y etapas, de los formatos prendidos en la barra, y las marca como enviadas. El mensaje dice, por pieza, la carpeta, el guion, el audio o el corte que revisaste y cada nota (los audios se transcriben antes de actuar), con las reglas para aplicarlas: corregir el guion o el corte sin pisar la versión anterior (`rough_cut_v2.mp4`), el copy textual en `publish_kit.md`, avisar antes de gastar en generaciones pagas y no agendar nada. Al terminar, cada nota queda `aplicado` con una línea de qué cambió.
+El botón de arriba junta las notas sin corregir de todas las fechas y etapas, de los formatos prendidos en la barra (el filtro Formato no lo achica), y las marca como enviadas; el de cada tarjeta copia sólo las de esa pieza. La primera línea del mensaje dice qué se pide («[Feedback] Editar el video «…»», «[Feedback] Corregir 3 piezas de «…»») y, si abre una conversación nueva, queda como su título. El mensaje dice, por pieza, la carpeta, el guion, el audio o el corte que revisaste y cada nota (los audios se transcriben antes de actuar), con las reglas para aplicarlas: corregir el guion o el corte sin pisar la versión anterior (`rough_cut_v2.mp4`), el copy textual en `publish_kit.md`, avisar antes de gastar en generaciones pagas y no agendar nada. Al terminar, cada nota queda `aplicado` con una línea de qué cambió.
 
 ## Estado y archivos del planner
 
@@ -112,4 +131,4 @@ En `<publicar>/.planner/`: `guiones-estado.json` (aprobaciones, pausas y descart
 
 ## API
 
-`GET guiones?week=&perfil=`, `POST guiones/estado` (`run`, `estado`: `aprobado` o `por_escuchar`), `POST guiones/descartar` (`run`, `accion`: `descartar`, `recuperar`, `pausar` o `reanudar`), `POST guiones/feedback` (`run`, `text` o `copy`, o `audio` en base64 con `mime`), `POST guiones/feedback/remove`, `POST guiones/copiar` (`perfil`, `week`; `runs` limita el pedido a esas piezas), `POST guiones/portada` (`run`, `id`), `GET guiones/estilos`, `GET guiones/estilos/cuadro?f=`, `POST guiones/estilo` (`plan`, `run`, `estilo`, `deshacer`), `POST guiones/estilos/preferencia`, `POST guiones/estilos/portada`, `GET guiones/produccion`, `GET guiones/looks/img?id=` y `POST guiones/produccion` (`plan`, `run`, `campo`: `look` o `titulo_tipo`, `valor`; `null` vuelve a lo del plan). `perfil` es la subcarpeta del plan (vacío si el plan está en la carpeta de la semana).
+`GET guiones?week=&perfil=`, `POST guiones/estado` (`run`, `estado`: `aprobado` o `por_escuchar`; `video`: la versión del final que se aprueba), `POST guiones/descartar` (`run`, `accion`: `descartar`, `recuperar`, `pausar` o `reanudar`), `POST guiones/feedback` (`run`, `text` o `copy`, o `audio` en base64 con `mime`; `video`: la versión del final sobre la que es la nota), `POST guiones/feedback/remove`, `POST guiones/copiar` (`perfil`, `week`; `runs` limita el pedido a esas piezas), `POST guiones/portada` (`run`, `id`), `GET guiones/estilos`, `GET guiones/estilos/cuadro?f=`, `POST guiones/estilo` (`plan`, `run`, `estilo`, `deshacer`), `POST guiones/estilos/preferencia`, `POST guiones/estilos/portada`, `GET guiones/produccion`, `GET guiones/looks/img?id=` y `POST guiones/produccion` (`plan`, `run`, `campo`: `look` o `titulo_tipo`, `valor`; `null` vuelve a lo del plan). `perfil` es la subcarpeta del plan (vacío si el plan está en la carpeta de la semana).

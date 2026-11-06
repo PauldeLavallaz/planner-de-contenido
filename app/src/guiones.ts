@@ -4,11 +4,12 @@
 // rough_cut*.mp4, final.mp4, slides/ y feedback/. El planner sólo lee esas carpetas; lo que escribe es lo que elegís acá
 // (estado, estilo, look y título) en el plan y en el estado del planner (<publicar>/.planner/). Formato en docs/guiones.md.
 import type { Hono } from 'hono';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, relative, resolve, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { paths } from './config.ts';
-import { ROOT, STATE, exec, fileRead, within, posix, readFeedback, validatePlannerFeedback, markFeedbackSent, OPEN } from './publication-planner.ts';
+import { ROOT, STATE, exec, fileRead, within, posix, readFeedback, validatePlannerFeedback, markFeedbackSent, OPEN, plannerMediaPath } from './publication-planner.ts';
+import { cantidad, editarDesc, nombreMensaje, tituloMensaje } from './titulo-mensaje.ts';
 
 const ESTADO = () => resolve(STATE(), 'guiones-estado.json');
 // Estilos cambiados desde el planner, por pieza: el de antes, el elegido y sus muestras.
@@ -93,7 +94,35 @@ const deContenido = (e: any) => typeof e.copy !== 'string';
 const AUDIOS = ['voice/audio_final.mp3', 'voice/audio_final.wav', 'audio.mp3', 'audio.wav', 'audio.m4a', 'voz.mp3', 'voz.wav', 'voz.m4a'];
 const audioDe = (dir: string) => AUDIOS.map(n => resolve(dir, n)).find(existsSync) || null;
 const cortesDe = (dir: string) => readdirSync(dir).filter(f => /^rough_cut(_v\d+)?\.mp4$/.test(f)).map(f => resolve(dir, f)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
-export const etapaDe = (dir: string) => existsSync(resolve(dir, 'final.mp4')) ? 'final' : cortesDe(dir).length ? 'rough_cut' : laminas(dir).length ? 'borrador_carrusel' : null;
+export const etapaDe = (dir: string) => versionesFinal(dir).length ? 'final' : cortesDe(dir).length ? 'rough_cut' : laminas(dir).length ? 'borrador_carrusel' : null;
+
+// Versiones de un final: una iteración se guarda aparte (final_gancho_b.mp4) para no pisar lo aprobado o agendado, y se ve
+// igual en la tarjeta. Las copias técnicas (liviana, para la web o para Postiz) no son versiones.
+export function versionesFinal(dir: string) {
+  return readdirSync(dir).filter(f => /^final([_-].*)?\.mp4$/.test(f) && !/liviano|_(app|web|postiz)\.mp4$/.test(f)).map(f => {
+    const abs = resolve(dir, f), n = f === 'final.mp4' ? 'final' : f.slice(6, -4).replace(/[_-]+/g, ' ');
+    return { abs, path: rel(abs), modified: statSync(abs).mtimeMs, nombre: n[0].toUpperCase() + n.slice(1) };
+  }).sort((a, b) => b.modified - a.modified);
+}
+// Se revisa la más nueva. Aprobar una la fija, hasta que aparezca otra después de esa aprobación.
+function finalVigente(vs: ReturnType<typeof versionesFinal>, st: any) {
+  const ok = st?.estado === 'aprobado' ? vs.find(v => v.path === st.video && v.modified === st.video_modified) : null;
+  return ok && !vs.some(v => v.modified > Date.parse(st.at)) ? ok : vs[0];
+}
+// Qué versión está en el calendario: la cola guarda de qué archivo copió cada pieza agendada. Lo que se ve en Guiones puede ser otra.
+let agendados: { at: number, map: Map<string, string> } | null = null;
+function agendadaEl(abs: string) {
+  if (!agendados || Date.now() - agendados.at > 15000) {
+    const map = new Map<string, string>(), d = resolve(paths().publish, 'agendado');
+    for (const f of existsSync(d) ? readdirSync(d) : []) if (f.endsWith('.json')) {
+      const m = fileRead(resolve(d, f), null);
+      if (m?.source_final) map.set(real(m.source_final), m?.slot?.fecha || '');
+    }
+    agendados = { at: Date.now(), map };
+  }
+  return agendados.map.get(real(abs)) ?? null;
+}
+const real = (p: string) => { try { return realpathSync(p); } catch { return resolve(p); } };
 
 // El copy del post: publish_kit.md → «## Caption» (o «## Copy»), caption.txt o, en un reel, copy.txt. En un carrusel
 // copy.txt es el texto de las láminas.
@@ -159,8 +188,8 @@ export function estilosLibrary() {
     const e = p?.estilo; if (!e?.id) continue;
     usos.set(e.id, (usos.get(e.id) || 0) + 1);
     // De qué estilo es cada video terminado: el de su pieza o, si se cambió desde el planner después de terminarla, el de antes.
-    const dir = runDir(p.run), fin = dir && resolve(dir, 'final.mp4'), ch = cambiados[p.run];
-    const deFinal = fin && existsSync(fin) ? (ch && statSync(fin).mtimeMs <= Date.parse(ch.at) ? ch.de?.id : e.id) : null;
+    const dir = runDir(p.run), fin = dir ? versionesFinal(dir)[0]?.abs : null, ch = cambiados[p.run];
+    const deFinal = fin ? (ch && statSync(fin).mtimeMs <= Date.parse(ch.at) ? ch.de?.id : e.id) : null;
     if (deFinal) terminados.set(deFinal, (terminados.get(deFinal) || 0) + 1);
     if (!Array.isArray(e.paleta) || !e.paleta.length) continue;
     const prev = by.get(e.id), ms = muestras(p.muestras), tipo = p.tipo === 'carrusel' ? 'carrusel' : 'reel';
@@ -208,12 +237,54 @@ async function analizarCola() {
   } finally { analizando = false; }
 }
 
+// La ficha de la tarjeta: `tema` y `referencia` son opcionales en plan.json; lo que falta o no vale no llega a la tarjeta.
+const TOMAR = ['recrear', 'idea', 'formato'];
+const REDES = /(^|\.)((instagram|tiktok|youtube|x|twitter|facebook|threads|linkedin|reddit)\.(com|net)|youtu\.be)$/i;
+const limpio = (v: unknown, max: number) => typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
+const cifra = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+// Sólo http(s) hacia afuera: las rutas de carpetas o de documentos y localhost no son un original.
+function urlExterna(v: unknown) {
+  if (typeof v !== 'string') return null;
+  try {
+    const u = new URL(v.trim()), h = u.hostname.toLowerCase();
+    return ['http:', 'https:'].includes(u.protocol) && h.includes('.') && !/^[\d.]+$/.test(h) && !/\.(local|localhost)$/.test(h) ? u : null;
+  } catch { return null; }
+}
+// El @ de la cuenta: el del plan («@cuenta (original)» queda «@cuenta») o el de la URL. Si no hay, lo que diga el plan.
+function cuentaDe(v: unknown, u: URL) {
+  const c = limpio(v, 80), arroba = c && /^@[\w.-]+/.exec(c);
+  if (arroba) return arroba[0];
+  const [a, b] = u.pathname.split('/').filter(Boolean);
+  if (a?.startsWith('@')) return a;
+  if (/(^|\.)(x|twitter)\.com$/i.test(u.hostname) && b === 'status' && a !== 'i') return '@' + a;
+  if (/(^|\.)instagram\.com$/i.test(u.hostname) && ['p', 'reel', 'reels', 'tv'].includes(b)) return '@' + a;
+  return c;
+}
+// La miniatura pasa por la misma validación de media que el resto del planner.
+function posterDe(v: unknown) {
+  const p = limpio(v, 400);
+  return p && /\.(jpe?g|png|webp|mp4|mov|webm)$/i.test(p) && plannerMediaPath(p) ? p : null;
+}
+// La referencia original de una pieza: `referencia` o, en planes que no la tienen, la primera URL de una red social de
+// `referencias[]`. `referencia: null` dice que no tiene, aunque `referencias[]` traiga fuentes. Sin una URL externa, no hay bloque.
+export function referenciaDe(p: any) {
+  if (p?.referencia === null) return null;
+  let r = p?.referencia, u = urlExterna(r?.url);
+  if (!u) for (const x of Array.isArray(p?.referencias) ? p.referencias : []) {
+    const c = urlExterna(typeof x === 'string' ? x : x?.url);
+    if (c && REDES.test(c.hostname)) { r = typeof x === 'string' ? {} : x; u = c; break; }
+  }
+  if (!u) return null;
+  return { url: u.href, cuenta: cuentaDe(r.cuenta, u), vistas: cifra(r.vistas), multiplo: cifra(r.multiplo), tomar: TOMAR.includes(r.tomar) ? r.tomar : null,
+    poster: posterDe(r.poster), hook_original: limpio(r.hook_original, 400), nota: limpio(r.nota, 300) };
+}
+
 async function pieza(p: any, estados: Record<string, any>, estilos: Record<string, any> = {}) {
   // El estilo elegido en el planner manda mientras el plan siga con el de antes; si trae un tercero, gana el plan.
   const ov = estilos[p.run];
   if (ov && p.estilo?.id === ov.de?.id) p = { ...p, estilo: ov.a, muestras: ov.muestras };
   const dir = runDir(p.run), st = estados[p.run];
-  const out: any = { ...p, run_ok: !!dir, inicio: inicioDe(p.run, dir), guion: null, audio: null, feedback: [], estado: p.tipo === 'carrusel' ? 'sin_laminas' : 'sin_audio', muestras: muestras(p.muestras),
+  const out: any = { ...p, tema: limpio(p.tema, 120), referencia: referenciaDe(p), run_ok: !!dir, inicio: inicioDe(p.run, dir), guion: null, audio: null, feedback: [], estado: p.tipo === 'carrusel' ? 'sin_laminas' : 'sin_audio', muestras: muestras(p.muestras),
     estilo_antes: ov && p.estilo?.id === ov.a?.id ? { id: ov.de?.id || null, nombre: ov.de?.nombre || ov.de?.id || '' } : null,
     descartado: st?.descartado || null, pausado: st?.descartado ? null : st?.pausado || null };
   if (!dir) { if (p.guion_texto) out.guion = { texto: p.guion_texto, palabras: 0 }; return out; }
@@ -233,8 +304,11 @@ async function pieza(p: any, estados: Record<string, any>, estilos: Record<strin
   out.copy = captionDe(dir);
   const a = audioDe(dir);
   if (a) out.audio = { path: rel(a), seconds: await seconds(a), modified: statSync(a).mtimeMs };
-  const cuts = cortesDe(dir), fin = resolve(dir, 'final.mp4');
-  if (existsSync(fin)) out.video = { path: rel(fin), seconds: await seconds(fin), modified: statSync(fin).mtimeMs, versiones: 1, final: true };
+  // Con varias versiones del final se revisa la vigente (finalVigente) y la tarjeta lista las demás.
+  const cuts = cortesDe(dir), finales = versionesFinal(dir), fin = finalVigente(finales, st);
+  if (fin) out.video = { path: fin.path, seconds: await seconds(fin.abs), modified: fin.modified, versiones: 1, final: true,
+    ...(finales.length > 1 ? { lista: await Promise.all(finales.map(async v => ({ path: v.path, nombre: v.nombre, modified: v.modified, seconds: await seconds(v.abs), agendada: agendadaEl(v.abs),
+      aprobada: st?.estado === 'aprobado' && st.video === v.path && st.video_modified === v.modified }))) } : {}) };
   else if (cuts[0]) out.video = { path: rel(cuts[0]), seconds: await seconds(cuts[0]), modified: statSync(cuts[0]).mtimeMs, versiones: cuts.length };
   out.etapa = out.video?.final ? 'final' : out.video ? 'rough_cut' : 'audio';
   // Un video mudo a propósito se aprueba por el texto en pantalla (guion.txt) hasta que haya corte.
@@ -253,6 +327,15 @@ async function pieza(p: any, estados: Record<string, any>, estilos: Record<strin
   return out;
 }
 
+// Lo que hace de verdad el pedido, como título de la conversación: «Editar el video «X»», «Cambiar el copy de «X»» o
+// «Corregir 3 piezas de «Semana del 3 nov»».
+function guionesTitulo(plan: any, piezas: any[]) {
+  const conNotas = piezas.map(p => ({ p, notas: p.feedback.filter((e: any) => UNAPPLIED(e) && e.estado !== 'en_curso') })).filter(x => x.notas.length);
+  if (conNotas.length !== 1) return tituloMensaje('Feedback', `Corregir ${cantidad(conNotas.length, 'pieza')} de ${nombreMensaje(plan.titulo || plan.semana || plan.week)}`);
+  const { p, notas } = conNotas[0];
+  return tituloMensaje('Feedback', editarDesc(p.titulo || p.hook || p.id, notas.some((e: any) => !deContenido(e)), notas.some(deContenido), p.tipo === 'carrusel' ? 'el carrusel' : p.video ? 'el video' : 'el guion'));
+}
+
 function guionesPrompt(plan: any, piezas: any[]) {
   const lines: string[] = [];
   let n = 0;
@@ -266,9 +349,12 @@ function guionesPrompt(plan: any, piezas: any[]) {
       n++;
       if (!deContenido(e)) { lines.push(`${n}. Copy nuevo, textual (reemplaza el actual en todas las redes):`, e.copy, `   Nota: ${p.run}/feedback/${e.file}`); continue; }
       lines.push(`${n}. ${e.text ? `«${e.text}»` : ''}${e.audio ? `${e.text ? ' + ' : ''}audio ${e.audio}${e.audio_seconds ? ` (${Math.round(e.audio_seconds)} s)` : ''}: transcribilo antes de actuar` : ''}`, `   Nota: ${p.run}/feedback/${e.file}`);
+      if (e.video && e.video !== p.video?.path) lines.push(`   Sobre la versión: ${e.video}`);
     }
   }
   return [
+    guionesTitulo(plan, piezas),
+    '',
     `Feedback desde el planner (pestaña Guiones) sobre «${plan.titulo || plan.semana || plan.week}».`,
     '',
     `Carpeta de contenido: ${ROOT()}`,
@@ -281,6 +367,7 @@ function guionesPrompt(plan: any, piezas: any[]) {
     '- Transcribí cada audio y, si la nota es sobre un rough cut o un final, mirá el video en los segundos que nombra antes de decidir.',
     '- Notas de guion o voz: corregí guion.txt; si cambia una frase, regenerá sólo ese tramo del audio, con la misma voz.',
     '- Notas de rough cut: corregí el montaje y volvé a renderizar como rough_cut_vN.mp4, sin pisar la versión anterior.',
+    '- Notas de un final ya aprobado o agendado: guardá la iteración aparte (final_<qué cambia>.mp4) sin pisar final.mp4; la tarjeta muestra las dos versiones.',
     '- Notas de carrusel: corregí las láminas o copy.txt y volvé a exportar slides/.',
     '- Notas de copy: es el texto que escribió el usuario; usalo textual (sólo arreglá un error de tipeo evidente). Va en publish_kit.md de la pieza, sección «## Caption» (creala si falta). Si la pieza ya está en la cola de publicación o en Postiz, avisá antes de cambiarla ahí.',
     '- Notas de estilo, look o título (las deja el planner cuando se cambian en una pieza que ya tiene corte): plan.json ya tiene `estilo`, `look` o `titulo_tipo`; rehacé el corte (o las láminas) con eso como rough_cut_vN.mp4.',
@@ -311,11 +398,13 @@ export function registerGuiones(app: Hono) {
     const body = await c.req.json().catch(() => null);
     const dir = runDir(body?.run);
     if (!dir || !['aprobado', 'por_escuchar'].includes(body?.estado)) return c.json({ error: 'Pieza inválida' }, 400);
-    const a = audioDe(dir), v = existsSync(resolve(dir, 'final.mp4')) ? resolve(dir, 'final.mp4') : cortesDe(dir)[0];
+    const estados = fileRead(ESTADO(), {}), finales = versionesFinal(dir);
+    // Se aprueba la versión que se estaba mirando; sin decir cuál, la que muestra la tarjeta.
+    const elegida = finales.find(x => x.path === body.video) || finalVigente(finales, estados[body.run]);
+    const a = audioDe(dir), v = elegida ? elegida.abs : cortesDe(dir)[0];
     const ls = laminas(dir), lmod = ls.reduce((m, x) => Math.max(m, x.modified), 0), g = resolve(dir, 'guion.txt');
     const mudo = !a && !v && !ls.length && existsSync(g) && guionesPlans().some(pl => pl.data.piezas.some((x: any) => x.run === body.run && x.mudo));
     if (body.estado === 'aprobado' && !a && !v && !ls.length && !mudo) return c.json({ error: 'Esta pieza todavía no tiene audio.' }, 409);
-    const estados = fileRead(ESTADO(), {});
     // Aprobar desde el menú de estado también saca la pausa o el descarte.
     if (body.estado === 'aprobado') { const { descartado: _d, pausado: _p, ...prev } = estados[body.run] || {}; estados[body.run] = { ...prev, estado: 'aprobado', at: new Date().toISOString(), by: BY,
       ...(a ? { audio: rel(a), audio_modified: statSync(a).mtimeMs } : {}), ...(v ? { video: rel(v), video_modified: statSync(v).mtimeMs } : {}),
@@ -440,7 +529,9 @@ export function registerGuiones(app: Hono) {
         if (existsSync(tmp)) try { renameSync(tmp, resolve(fb, '.' + stamp + '-raw' + body.audio.ext)); } catch {}
         audio = rel(target);
       }
-      const entry = { tipo: 'guion', etapa: etapaDe(dir) || 'audio', run: raw.run, pieza: typeof raw.pieza === 'string' ? raw.pieza.slice(0, 40) : null, created_at: now.toISOString(), by: BY, text: body.text || null, audio, audio_mime: body.audio?.mime || null, audio_seconds: body.audio_seconds, transcript: null, estado: 'pendiente' };
+      const entry: any = { tipo: 'guion', etapa: etapaDe(dir) || 'audio', run: raw.run, pieza: typeof raw.pieza === 'string' ? raw.pieza.slice(0, 40) : null, created_at: now.toISOString(), by: BY, text: body.text || null, audio, audio_mime: body.audio?.mime || null, audio_seconds: body.audio_seconds, transcript: null, estado: 'pendiente' };
+      // Con varias versiones, la nota dice sobre cuál se escribió.
+      if (versionesFinal(dir).some(v => v.path === raw.video)) entry.video = raw.video;
       writeJson(resolve(fb, stamp + '-planner.json'), entry);
       // Una nota nueva saca la aprobación: lo revisado va a cambiar. La pausa o el descarte quedan.
       const estados = fileRead(ESTADO(), {}); if (estados[raw.run]) { const m = marcas(estados[raw.run]); if (Object.keys(m).length) estados[raw.run] = m; else delete estados[raw.run]; writeJson(ESTADO(), estados); }
