@@ -1,0 +1,12 @@
+{
+  "nota": "Temas de ejemplo para agrupar tus bookmarks. La primera vez se copian a temas.json en la carpeta de X: cambialos por los tuyos (o pedile a Claude Code que los arme mirando lo que guardás). El color de cada uno en el planner sale de su lugar en la lista.",
+  "temas": [
+    { "id": "herramientas", "nombre": "Herramientas", "desc": "Productos, apps y modelos nuevos o actualizados que podrías usar." },
+    { "id": "como-se-hace", "nombre": "Cómo se hace", "desc": "Tutoriales, procesos, prompts y paso a paso que muestran cómo alguien hizo algo." },
+    { "id": "ideas", "nombre": "Ideas y opinión", "desc": "Lecturas, opiniones y marcos para pensar tu tema." },
+    { "id": "negocio", "nombre": "Negocio y marketing", "desc": "Ventas, crecimiento en redes, contenido, emprender." },
+    { "id": "novedades", "nombre": "Novedades", "desc": "Noticias y lanzamientos de tu industria." },
+    { "id": "personal", "nombre": "Personal y humor", "desc": "Lo que no es de trabajo." },
+    { "id": "otros", "nombre": "Otros", "desc": "Lo que no entra en ninguno de los anteriores." }
+  ]
+}
