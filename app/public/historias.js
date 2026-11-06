@@ -7,9 +7,13 @@ const TIPO_NAME = { venta: 'Venta', recurso: 'Recurso', conciencia: 'Conciencia'
 const CIERRE_NAME = { encuesta: 'Sin pedido · encuesta', slider: 'Sin pedido · slider', caja: 'Caja de preguntas', ninguno: 'Sin pedido', perfil: 'CTA al link del perfil' };
 const STORY_METRIC_KEYS = ['respuestas', 'vistas_primera', 'vistas_ultima'];
 const MODE_NAME = { postiz: 'Postiz', mano: 'A mano', no: 'No se publica' };
-const STORY_DEFAULT_HOUR = '15:00'; // la hora de la primera historia de un día que pasa a Postiz
+// La hora de la primera historia de un día que pasa a Postiz: la de ese día de la semana en `historias.horas` de la config
+// (por ejemplo, escalonadas cada 15 minutos para que las secuencias de varias cuentas no se pisen) o, si no está, 15:00.
+// El servidor la manda por día de la semana, como getDay(): 0 es domingo.
+const STORY_DEFAULT_HOUR = '15:00';
+const storyDefaultHour = fecha => stories.data?.horas?.[new Date(String(fecha || '').slice(0, 10) + 'T12:00:00').getDay()] || STORY_DEFAULT_HOUR;
 const STORY_GAP_MIN = 2; // minutos entre historias para que salgan en orden (igual que engine/historias.py)
-const storyTime = (hora, i) => fromMin(toMin(hora || STORY_DEFAULT_HOUR) + i * STORY_GAP_MIN);
+const storyTime = (hora, i, fecha) => fromMin(toMin(hora || storyDefaultHour(fecha)) + i * STORY_GAP_MIN);
 let stories = { week: null, cuenta: '', data: null, error: null };
 // La pestaña muestra las semanas de una cuenta de Instagram; cada día puede salir desde otra cuenta conectada.
 let sCuenta = store.get('sCuenta', '');
@@ -51,7 +55,7 @@ const ownAccount = s => s.cuenta && s.cuenta !== stories.data?.cuenta ? s.cuenta
 const seqChanged = s => JSON.stringify([s.fecha, s.historias, s.publicar, s.hora || null, ownAccount(s), !!s.descartada]) !== JSON.stringify((({ fecha, historias, publicar, hora }) => [fecha, historias, publicar, hora, null, false])(defaultSeq(s.dia)));
 async function saveSeqs(list, message) {
   const prev = structuredClone(stories.data.draft);
-  const secuencias = list.some(seqChanged) ? Object.fromEntries(list.map(s => [s.orig, { fecha: s.fecha, historias: s.historias, publicar: s.publicar, hora: s.publicar === 'postiz' ? (s.hora || STORY_DEFAULT_HOUR) : (s.hora || null), ...(ownAccount(s) ? { cuenta: s.cuenta } : {}), ...(s.descartada ? { descartada: true } : {}) }])) : {};
+  const secuencias = list.some(seqChanged) ? Object.fromEntries(list.map(s => [s.orig, { fecha: s.fecha, historias: s.historias, publicar: s.publicar, hora: s.publicar === 'postiz' ? (s.hora || storyDefaultHour(s.fecha)) : (s.hora || null), ...(ownAccount(s) ? { cuenta: s.cuenta } : {}), ...(s.descartada ? { descartada: true } : {}) }])) : {};
   stories.data.draft = { ...stories.data.draft, secuencias }; renderStories();
   sSaving = sSaving.then(async () => {
     try { setSave('Guardando…'); const r = await api('stories/draft', post({ week: stories.week, cuenta: stories.data.cuenta, revision: prev.revision, secuencias })); stories.data.draft = r; setSave('Guardado'); if (message) toast(message, () => saveSeqs(seqsFrom(prev))); refreshPending(); }
@@ -64,7 +68,7 @@ async function saveSeqs(list, message) {
 // recuperarla.
 function saveSeqOne(s, patch, message, goto, undo) {
   const next = { fecha: s.fecha, historias: s.historias, publicar: s.publicar, hora: s.hora || null, cuenta: s.cuenta || null, descartada: !!s.descartada, ...patch };
-  if (next.publicar === 'postiz' && !next.hora) next.hora = STORY_DEFAULT_HOUR;
+  if (next.publicar === 'postiz' && !next.hora) next.hora = storyDefaultHour(next.fecha);
   if (!next.cuenta || next.cuenta === stories.data.cuenta) delete next.cuenta;
   if (!next.descartada) delete next.descartada;
   sSaving = sSaving.then(async () => {
@@ -137,7 +141,7 @@ function shiftSeqs(pairs, message, undo) {
     try {
       setSave('Guardando…');
       for (const [s, fecha] of pairs) {
-        const secuencia = { fecha, historias: s.historias, publicar: s.publicar, hora: s.publicar === 'postiz' ? (s.hora || STORY_DEFAULT_HOUR) : (s.hora || null), ...(s.cuenta && s.cuenta !== stories.data.cuenta ? { cuenta: s.cuenta } : {}) };
+        const secuencia = { fecha, historias: s.historias, publicar: s.publicar, hora: s.publicar === 'postiz' ? (s.hora || storyDefaultHour(fecha)) : (s.hora || null), ...(s.cuenta && s.cuenta !== stories.data.cuenta ? { cuenta: s.cuenta } : {}) };
         ({ revision } = await api('stories/seq', post({ cuenta: stories.data.cuenta, semana: s.src, orig: s.orig, revision, secuencia })));
       }
       setSave('Guardado'); toast(message, undo || null);
@@ -194,7 +198,7 @@ function renderStories() {
     const dia = s.dia, tipo = dia.tipo || 'libre', mc = seqAccount(s), m = metricsFor(mc, d), moved = s.orig !== d, pasado = d < today;
     // Días que ya pasaron: atenuados, sin los controles de Postiz, con lo que dice la cola de cada historia. Hoy se marcan
     // las que ya pasaron su hora.
-    const pasada = i => pasado || (d === today && s.publicar === 'postiz' && storyTime(s.hora, i) <= hhmm);
+    const pasada = i => pasado || (d === today && s.publicar === 'postiz' && storyTime(s.hora, i, d) <= hhmm);
     const nPub = s.historias.filter(img => storyPublished(cola[img])).length;
     const seqHtml = s.historias.length
       ? s.historias.map((img, i) => {
@@ -214,14 +218,14 @@ function renderStories() {
     const ratio = [tasa !== null ? `${pc(tasa)} respondió` : '', llega !== null ? `${pc(llega)} llegó a la última` : ''].filter(Boolean).join(' · ');
     const auto = m.fuente === 'instagram' ? `<span class="s-auto" title="Medido de Instagram ${m.medido_at ? 'el ' + esc(new Date(m.medido_at).toLocaleString('es-AR', { timeZone: TZ, hourCycle: 'h23' })) : ''}">Instagram</span>` : '';
     const metrics = tipo === 'libre' && !s.historias.length ? '' : `<div class="s-metrics"><label class="main"><span>Respuestas</span>${num('respuestas', '—', 'Respuestas')}</label><div class="s-vistas"><span>Vistas</span>${num('vistas_primera', '1.ª', 'Vistas de la primera historia')}${num('vistas_ultima', 'última', 'Vistas de la última historia')}</div>${auto || ratio ? `<p class="s-ratio">${auto}${esc(ratio)}</p>` : ''}</div>`;
-    const handAt = s.historias.map((img, i) => needsHand(byImg[img]) ? `${i + 1} a las ${storyTime(s.hora, i)}` : null).filter(Boolean);
+    const handAt = s.historias.map((img, i) => needsHand(byImg[img]) ? `${i + 1} a las ${storyTime(s.hora, i, d)}` : null).filter(Boolean);
     const hands = handAt.length;
     const total = s.historias.length, salia = s.publicar !== 'no' || s.historias.some(img => cola[img]);
     const paso = `<span class="s-paso ${nPub === total ? 'ok' : nPub ? 'warn' : salia ? 'bad' : 'mute'}" title="${nPub === total ? 'La cola de Postiz registra todas como publicadas' : salia ? 'Sin registro de publicación de las que faltan en la cola de Postiz' : 'Ese día estaba en «No se publica»'}">${nPub === total ? (total === 1 ? '✓ Salió' : `✓ Salieron las ${total}`) : nPub ? `Salieron ${nPub} de ${total}` : total === 1 ? 'No salió' : 'No salió ninguna'}</span>`;
     const pub = pasado && total ? paso : s.historias.length ? `<div class="s-pub" data-seq="${esc(s.orig)}">
         <div class="seg">${(s.publicar === 'mano' ? ['postiz', 'mano', 'no'] : ['postiz', 'no']).map(k => `<button class="${s.publicar === k ? 'on' : ''}" data-pub="${k}" title="${k === 'postiz' ? 'Se agenda en Postiz cuando confirmes en el chat' : k === 'mano' ? 'La subís vos desde Instagram' : 'Queda en su día sin salir; si estaba en Postiz, vuelve a la bandeja al programar. Para sacarla del calendario, Descartar'}">${MODE_NAME[k]}</button>`).join('')}</div>
         ${s.publicar !== 'no' ? '<div class="s-publine">' : ''}${s.publicar !== 'no' && cuentas.length > 1 ? `<label class="s-cuenta" title="Desde qué Instagram sale esta secuencia"><select data-scuenta="${esc(s.orig)}" aria-label="Cuenta de Instagram">${cuentas.map(a => `<option value="${esc(a.profile)}" ${a.profile === mc ? 'selected' : ''}>@${esc(a.profile)}</option>`).join('')}</select></label>` : ''}
-        ${s.publicar === 'postiz' ? `<label class="s-hora">a las <input data-hora="${esc(s.orig)}" value="${esc(s.hora || STORY_DEFAULT_HOUR)}" inputmode="numeric" aria-label="Hora de la primera historia"></label>` : ''}${s.publicar !== 'no' ? '</div>' : ''}
+        ${s.publicar === 'postiz' ? `<label class="s-hora">a las <input data-hora="${esc(s.orig)}" value="${esc(s.hora || storyDefaultHour(d))}" inputmode="numeric" aria-label="Hora de la primera historia"></label>` : ''}${s.publicar !== 'no' ? '</div>' : ''}
         ${s.publicar === 'postiz' ? `${hands ? `<span class="s-hand" title="Instagram no deja publicar ese sticker por la API: la subís vos a esa hora, en su lugar de la secuencia">✋ A mano: ${esc(handAt.join(' · '))}</span>` : ''}` : ''}
       </div>` : '';
     return `<section class="s-row tipo-${tipo} ${s.historias.length ? 'con-historias' : ''} ${tipo === 'libre' && !s.historias.length ? 'libre' : ''} ${d === today ? 'today' : ''} ${moved ? 'moved' : ''} ${pasado ? 'pasado' : ''}" data-srow="${d}" data-seq="${esc(s.orig)}" aria-label="${esc(dayLong(d))}">
@@ -269,7 +273,7 @@ async function saveStoryMetric(input) {
 function setStoryPub(orig, patch) {
   const e = entrantes().find(x => x.orig === orig); if (e) return saveSeqOne(e, patch);
   const list = storySeqs(), s = list.find(x => x.orig === orig); if (!s) return;
-  Object.assign(s, patch); if (s.publicar === 'postiz' && !s.hora) s.hora = STORY_DEFAULT_HOUR;
+  Object.assign(s, patch); if (s.publicar === 'postiz' && !s.hora) s.hora = storyDefaultHour(s.fecha);
   saveSeqs(list);
 }
 // Arrastrar una historia: reordena en su día o la pasa a otro día. Arrastrar ⋮⋮: cambia la secuencia de día (intercambia).
@@ -1735,7 +1739,7 @@ function renderStoryProposal() {
     if (d.descartada) what = `Descartada${en} · ${pl(a.descartar || 0, 'historia')} ${a.descartar === 1 ? 'sale' : 'salen'} de Postiz y ${a.descartar === 1 ? 'queda' : 'quedan'} en pausa`;
     else if (d.publicar === 'postiz') {
       const partes = [a.agendar ? pl(a.agendar, 'nueva') : '', a.mover ? `${a.mover} ${a.mover === 1 ? 'cambia' : 'cambian'} de día, hora o cuenta` : '', a.en_postiz ? `${a.en_postiz} ya en Postiz así` : '', a.reemplazar ? `${a.reemplazar} con la imagen nueva` : '', a.espera_feedback ? `${pl(a.espera_feedback, 'espera', 'esperan')} la corrección del feedback` : '', a.ya_publicada ? `${a.ya_publicada} ya ${a.ya_publicada === 1 ? 'publicada' : 'publicadas'}` : '', a.a_mano ? `${a.a_mano} a mano` : '', d.historias > n ? `${d.historias - n} ya ${d.historias - n === 1 ? 'pasó' : 'pasaron'}` : ''].filter(Boolean);
-      what = `Postiz${en} desde las ${esc(d.hora || STORY_DEFAULT_HOUR)}, cada ${STORY_GAP_MIN} min · ${pl(d.historias, 'historia')}${partes.length ? ': ' + partes.join(', ') : ''}`;
+      what = `Postiz${en} desde las ${esc(d.hora || storyDefaultHour(d.fecha))}, cada ${STORY_GAP_MIN} min · ${pl(d.historias, 'historia')}${partes.length ? ': ' + partes.join(', ') : ''}`;
     } else what = (d.publicar === 'mano' ? 'A mano' : 'No se publica') + en + (a.quitar ? ` · ${a.quitar === 1 ? 'se quita 1' : `se quitan ${a.quitar}`} de Postiz` : '');
     return `<div class="sp-row ${d.descartada ? 'descartada' : d.publicar}"><b>${esc(dayLong(d.fecha))}</b><span>${TIPO_NAME[d.tipo] || ''} ${esc(d.formula || '')}</span><span class="what">${what}</span></div>`;
   };

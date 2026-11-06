@@ -13,9 +13,10 @@ Todo lo de la pestaña está en [docs/guiones.md](../../../docs/guiones.md): car
 2. Proponé el plan en texto antes de escribir archivos: por pieza, el título, el tema, el gancho, el título en pantalla (dos renglones como máximo, separados con ` / `), el formato, el estilo y, si toma un original, la referencia. Esperá su OK.
 3. Creá `<guiones.carpeta>/<lunes>/plan.json` con el formato de la guía y una carpeta por pieza (`R01/`, `C01/`…). En cada video, `guion.txt` con el guion. Para que la biblioteca de estilos funcione, cada estilo lleva `id`, `nombre` y `paleta`; reusá los `id` de estilos de semanas anteriores cuando sea el mismo, y leé `<publicar>/.planner/estilos-preferencias.json` para no usar los descartados y preferir los favoritos y lo que eligió para cada formato.
 4. Si una pieza toma un contenido ajeno, poné `referencia` con su URL, la cuenta y qué toma (`recrear`, `idea` o `formato`); si no toma ninguno, no la pongas. Formato en la guía.
-5. Si hay looks en la carpeta de looks, asigná uno por video en `look` (`id` = nombre del archivo sin extensión, `nombre`) que combine con el estilo y varíe entre piezas vecinas.
-6. El guion se aprueba antes de gastar en voz, video o música. Después, cada etapa (audio, rough cut, final) se deja en la carpeta de la pieza con los nombres de la guía y se revisa en la pestaña.
-7. Avisale que ya lo ve en la pestaña Guiones del planner.
+5. Si la config tiene `guiones.mensajes`, poné en cada pieza su `mensaje_de` (el id de la opción: para qué mensaje u oferta es); con más de una marca en `brands`, `marca` en el plan o en la pieza. Los guiones de pauta van en su propio plan, en `<lunes>/anuncios/plan.json` (o con `"tipo": "anuncios"`), con `quien` en cada pieza si hablan personas distintas: el planner los muestra en Guiones → Anuncios.
+6. Si hay looks en la carpeta de looks, asigná uno por video en `look` (`id` = nombre del archivo sin extensión, `nombre`) que combine con el estilo y varíe entre piezas vecinas.
+7. El guion se aprueba antes de gastar en voz, video o música. Después, cada etapa (audio, rough cut, final) se deja en la carpeta de la pieza con los nombres de la guía y se revisa en la pestaña.
+8. Avisale que ya lo ve en la pestaña Guiones del planner.
 
 ## Feedback del planner
 

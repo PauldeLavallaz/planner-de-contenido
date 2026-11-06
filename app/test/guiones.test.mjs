@@ -161,7 +161,7 @@ test('guiones: plan, aprobar, feedback, estilos, looks y títulos', async () => 
     writeFileSync(resolve(root, 'refs/datos.json'), '{}');
     const interna = { url: 'guiones/2026-10-05/R01', cuenta: 'propia' }, doc = { url: 'docs/canon.md', cuenta: 'propia' };
     writeFileSync(resolve(root, fichaPlan), JSON.stringify({ semana: '2026-10-12', titulo: 'Ficha', piezas: [
-      { id: 'F1', titulo: 'Completa', tema: '  Automatización de contenido ', referencia: { url: 'https://www.instagram.com/p/XXXX/', cuenta: '@ai._kid', vistas: 234523, multiplo: 78.7, tomar: 'recrear', poster: 'refs/instagram-XXXX.jpg', hook_original: 'No tengo diseñador…' } },
+      { id: 'F1', titulo: 'Completa', tema: '  Automatización de contenido ', referencia: { url: 'https://www.instagram.com/p/XXXX/', cuenta: '@cuenta.ejemplo', vistas: 120000, multiplo: 12.5, tomar: 'recrear', poster: 'refs/instagram-XXXX.jpg', hook_original: 'No tengo diseñador…' } },
       { id: 'F2', titulo: 'Valores inválidos', tema: '   ', referencia: { url: 'https://www.tiktok.com/@alguien/video/123', vistas: 'muchas', multiplo: -3, tomar: 'copiar', poster: '../../afuera.jpg' } },
       { id: 'F3', titulo: 'Póster que no es media', referencia: { url: 'https://x.com/persona/status/99', cuenta: 'Una creadora', poster: 'refs/datos.json' } },
       { id: 'F4', titulo: 'Con red social', referencias: [interna, doc, { url: 'https://techcrunch.com/nota', cuenta: 'TechCrunch' }, { url: 'https://www.instagram.com/reel/BASE/', cuenta: '@micuenta (original)', nota: '1,1 M vistas' }, { url: 'https://x.com/otra/status/1', cuenta: 'Otra' }] },
@@ -172,7 +172,7 @@ test('guiones: plan, aprobar, feedback, estilos, looks y títulos', async () => 
       { id: 'F9', titulo: 'Una URL suelta', referencias: ['https://youtu.be/abc'] },
     ] }));
     const ficha = Object.fromEntries((await porArchivo(fichaPlan)).piezas.map(p => [p.id, p]));
-    assert.deepEqual(ficha.F1.referencia, { url: 'https://www.instagram.com/p/XXXX/', cuenta: '@ai._kid', vistas: 234523, multiplo: 78.7, tomar: 'recrear', poster: 'refs/instagram-XXXX.jpg', hook_original: 'No tengo diseñador…', nota: null });
+    assert.deepEqual(ficha.F1.referencia, { url: 'https://www.instagram.com/p/XXXX/', cuenta: '@cuenta.ejemplo', vistas: 120000, multiplo: 12.5, tomar: 'recrear', poster: 'refs/instagram-XXXX.jpg', hook_original: 'No tengo diseñador…', nota: null });
     assert.equal(ficha.F1.tema, 'Automatización de contenido');
     assert.deepEqual(ficha.F2.referencia, { url: 'https://www.tiktok.com/@alguien/video/123', cuenta: '@alguien', vistas: null, multiplo: null, tomar: null, poster: null, hook_original: null, nota: null });
     assert.equal(ficha.F2.tema, null);
@@ -201,7 +201,7 @@ test('versiones de un final: se ve la más nueva, se aprueba la que se mira y lo
   mkdirSync(resolve(r2, 'publicar/.planner'), { recursive: true });
   mkdirSync(resolve(r2, 'publicar/agendado'), { recursive: true });
   const cfg = resolve(r2, 'planner.config.json'), inv = resolve(r2, 'fake_inventory.py');
-  writeFileSync(cfg, JSON.stringify({ timezone: 'America/Argentina/Buenos_Aires', content: { root: '.' }, publish_root: 'publicar', guiones: { carpeta: 'guiones' } }));
+  writeFileSync(cfg, JSON.stringify({ timezone: 'America/Argentina/Buenos_Aires', content: { root: '.' }, publish_root: 'publicar', guiones: { carpeta: 'guiones', mensajes: [{ id: 'producto', nombre: 'Producto' }, { id: 'comunidad', nombre: 'Comunidad' }] } }));
   writeFileSync(inv, 'print(' + JSON.stringify(JSON.stringify({ items: [], timezone: 'America/Argentina/Buenos_Aires', config: {} })) + ')\n');
   writeFileSync(resolve(d, 'guion.txt'), 'Una frase.\n');
   const hace = min => new Date(Date.now() - min * 60000);
@@ -211,7 +211,16 @@ test('versiones de un final: se ve la más nueva, se aprueba la que se mira y lo
   poner('final_liviano.mp4', 5); poner('final_gancho_simple_liviano.mp4', 5); poner('final_web.mp4', 5); poner('final_postiz.mp4', 5);
   // La cola guarda de qué archivo copió la pieza agendada.
   writeFileSync(resolve(r2, 'publicar/agendado/reel.json'), JSON.stringify({ source_final: realpathSync(resolve(d, 'final.mp4')), slot: { fecha: '2026-11-12' } }));
-  writeFileSync(resolve(r2, 'guiones/2026-11-02/plan.json'), JSON.stringify({ semana: '2026-11-02', titulo: 'Prueba', piezas: [{ id: 'R04', titulo: 'Con versiones', carpeta: 'R04' }] }));
+  // Otra pieza con una versión elegida sólo para el planner (cola.py reemplazar --solo-planner): ésa está en el calendario
+  // sin subir y Postiz sigue con la anterior.
+  const d5 = resolve(r2, 'guiones/2026-11-02/R05');
+  mkdirSync(d5, { recursive: true });
+  for (const [f, min] of [['final.mp4', 60], ['final_b.mp4', 30]]) { writeFileSync(resolve(d5, f), Buffer.alloc(64, 3)); utimesSync(resolve(d5, f), hace(min), hace(min)); }
+  writeFileSync(resolve(r2, 'publicar/agendado/reel5.json'), JSON.stringify({ source_final: realpathSync(resolve(d5, 'final.mp4')), slot: { fecha: '2026-11-13' }, version_planner: { path: 'guiones/2026-11-02/R05/final_b.mp4' } }));
+  writeFileSync(resolve(r2, 'guiones/2026-11-02/plan.json'), JSON.stringify({ semana: '2026-11-02', titulo: 'Prueba', piezas: [{ id: 'R04', titulo: 'Con versiones', carpeta: 'R04', mensaje_de: 'PRODUCTO' }, { id: 'R05', titulo: 'Sin subir', carpeta: 'R05', mensaje_de: 'Otra campaña' }] }));
+  // Un plan de pauta en la subcarpeta anuncios/, de una marca, con quién habla en cada pieza.
+  mkdirSync(resolve(r2, 'guiones/2026-11-02/anuncios/A01'), { recursive: true });
+  writeFileSync(resolve(r2, 'guiones/2026-11-02/anuncios/plan.json'), JSON.stringify({ semana: '2026-11-02', titulo: 'Pauta', marca: 'Mi marca', piezas: [{ id: 'A01', titulo: 'Anuncio', carpeta: 'A01', quien: 'Ana', mensaje_de: 'comunidad' }] }));
   const srv = spawn(process.execPath, [serverPath], { cwd: tmpdir(), env: { ...process.env, PLANNER_PORT: '0', PLANNER_CONFIG: cfg, PLANNER_INVENTORY: inv }, stdio: ['ignore', 'pipe', 'pipe'] });
   let errs = '';
   srv.stderr.on('data', c => { errs += c; });
@@ -221,7 +230,7 @@ test('versiones de un final: se ve la más nueva, se aprueba la que se mira y lo
     srv.stdout.on('data', c => { out += c; const line = out.split('\n').find(l => l.includes('"event":"listening"')); if (line) { clearTimeout(timer); ok(JSON.parse(line).url); } });
   });
   const send = (path, body) => fetch(url + '/api/planner/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: url }, body: JSON.stringify(body) });
-  const pieza = async () => (await (await fetch(url + '/api/planner/guiones?week=2026-11-02')).json()).piezas.find(x => x.id === 'R04');
+  const pieza = async () => (await (await fetch(url + '/api/planner/guiones?week=2026-11-02&perfil=')).json()).piezas.find(x => x.id === 'R04');
   const estado = () => JSON.parse(readFileSync(resolve(r2, 'publicar/.planner/guiones-estado.json'), 'utf8'))[rn];
   try {
     let p = await pieza();
@@ -230,6 +239,19 @@ test('versiones de un final: se ve la más nueva, se aprueba la que se mira y lo
     assert.equal(p.etapa, 'final');
     assert.deepEqual(p.video.lista.map(v => v.nombre), ['Gancho simple', 'Final', 'V1']);
     assert.deepEqual(p.video.lista.map(v => v.agendada), [null, '2026-11-12', null], 'se ve cuál está en el calendario');
+    assert.deepEqual(p.video.lista.map(v => v.en_postiz), [null, null, null]);
+    // Con una versión sólo para el planner, ésa es la del calendario (sin subir) y la de Postiz se marca aparte.
+    const p5 = (await (await fetch(url + '/api/planner/guiones?week=2026-11-02&perfil=')).json()).piezas.find(x => x.id === 'R05');
+    assert.deepEqual(p5.video.lista.map(v => [v.nombre, v.agendada, v.sin_subir, v.en_postiz]), [['B', '2026-11-13', true, null], ['Final', null, false, '2026-11-13']]);
+    // Para: el valor del plan queda como el id de la opción de la config; uno que no está en la config, tal cual.
+    const lista = await (await fetch(url + '/api/planner/guiones?week=2026-11-02&perfil=')).json();
+    assert.deepEqual(lista.mensajes, [{ id: 'producto', nombre: 'Producto' }, { id: 'comunidad', nombre: 'Comunidad' }]);
+    assert.deepEqual(lista.piezas.map(x => x.mensaje_de), ['producto', 'Otra campaña']);
+    // Anuncios: el plan de la subcarpeta anuncios/ es de pauta y lleva su marca; el de la semana es orgánico.
+    assert.deepEqual(lista.weeks.map(w => [w.perfil, w.tipo, w.marca]), [['', 'organico', null], ['anuncios', 'anuncios', 'Mi marca']]);
+    const pauta = await (await fetch(url + '/api/planner/guiones?week=2026-11-02&perfil=anuncios')).json();
+    assert.equal(pauta.plan.tipo, 'anuncios');
+    assert.deepEqual(pauta.piezas.map(x => [x.quien, x.mensaje_de]), [['Ana', 'comunidad']]);
 
     // Sin decir cuál, se aprueba la que muestra la tarjeta; una ruta ajena no cuenta.
     assert.equal((await send('guiones/estado', { run: rn, estado: 'aprobado', video: '../afuera.mp4' })).status, 200);
@@ -266,7 +288,8 @@ test('versiones de un final: se ve la más nueva, se aprueba la que se mira y lo
 // La tarjeta se arma en el navegador: la ficha y la referencia se prueban con el código de guiones.js, sin servidor.
 test('tarjeta: la ficha no deja renglones vacíos y la referencia aparece sólo cuando la hay', () => {
   const source = readFileSync(new URL('../public/guiones.js', import.meta.url), 'utf8');
-  const ctx = vm.createContext({ gv: { open: {} }, esc: s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`), gvFormatoNombre: p => typeof p.formato === 'string' ? p.formato : p.formato?.nombre || '' });
+  const ctx = vm.createContext({ gv: { open: {} }, esc: s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`), gvFormatoNombre: p => typeof p.formato === 'string' ? p.formato : p.formato?.nombre || '',
+    perfilActual: 'all', marcas: () => ['Mi marca', 'Otra'], BRAND_LABEL: {}, gvParaNombre: v => ({ producto: 'Producto' })[v] || v, gvParaClase: () => 'p-0' });
   const desde = source.indexOf('// Qué es: el título y de qué trata.'), hasta = source.indexOf('// Las tres portadas del carrusel');
   assert.ok(desde > 0 && hasta > desde);
   vm.runInContext(source.slice(desde, hasta), ctx);
@@ -291,7 +314,7 @@ test('tarjeta: la ficha no deja renglones vacíos y la referencia aparece sólo 
   // Cómo se dice cada referencia, y nada sin referencia.
   assert.equal(ctx.gvReferencia({}), '');
   const ref = r => ctx.gvReferencia({ referencia: { url: 'https://www.instagram.com/p/X/', cuenta: '@a', ...r } });
-  assert.match(ref({ tomar: 'recrear', vistas: 234523, multiplo: 78.7 }), /Clona a @a[\s\S]*235 mil vistas · ×79/);
+  assert.match(ref({ tomar: 'recrear', vistas: 120000, multiplo: 12.5 }), /Clona a @a[\s\S]*120 mil vistas · ×13/);
   assert.match(ref({ tomar: 'idea' }), /Toma el tema de @a/);
   assert.match(ref({ tomar: 'formato' }), /Toma el formato de @a/);
   assert.match(ref({ tomar: null }), /Referencia: @a/);
@@ -299,6 +322,14 @@ test('tarjeta: la ficha no deja renglones vacíos y la referencia aparece sólo 
   assert.match(ref({}), /target="_blank" rel="noopener noreferrer"/);
   assert.doesNotMatch(ref({}), /gv-ref-th/);
   assert.match(ref({ poster: 'x/y.jpg' }), /gv-ref-th/);
+  // Con todas las marcas a la vista, la marca de la pieza; en un anuncio, quién habla; y para qué mensaje, con su nombre.
+  const anuncio = ctx.gvFicha({ key: 'G', marca: 'Mi marca', quien: 'Ana', mensaje_de: 'producto' }, false);
+  assert.match(anuncio, /title="Marca">Mi marca</);
+  assert.match(anuncio, /title="Quién habla">Ana</);
+  assert.match(anuncio, /gv-para p-0" title="Para">Producto</);
+  ctx.perfilActual = 'Mi marca';
+  assert.doesNotMatch(ctx.gvFicha({ key: 'G', marca: 'Mi marca' }, false), /Marca/, 'with one brand chosen in the sidebar, the brand chip is redundant');
+  ctx.perfilActual = 'all';
   // Sin título, el gancho hace de título; si son iguales, aunque cambie la puntuación, no se repite.
   assert.doesNotMatch(ctx.gvQueEs({ titulo: 'Toda empresa quiere su propia IA', hook: 'Toda empresa quiere su propia IA.' }), /gv-hook/);
   assert.match(ctx.gvQueEs({ hook: 'Sólo gancho' }), /<h3 class="gv-title">Sólo gancho<\/h3>$/);
@@ -316,4 +347,31 @@ test('tarjeta: la ficha no deja renglones vacíos y la referencia aparece sólo 
   assert.equal([...fuentes.matchAll(/<a /g)].length, 1);
   assert.match(fuentes, /href="https:\/\/techcrunch.com\/nota"/);
   assert.doesNotMatch(fuentes, /javascript:alert/);
+});
+
+// Los filtros Para y Formato y la marca de la barra, con el código de guiones.js.
+test('filtros: Para en el orden de la config, cada uno cuenta con el otro aplicado, y la marca de la barra filtra', () => {
+  const source = readFileSync(new URL('../public/guiones.js', import.meta.url), 'utf8');
+  const ctx = vm.createContext({ GV_PERIODOS: [['semana', 'Semana']], GV_FASES: [['todas', 'Todas']], gvDiaGuardado: () => '2026-11-06', esc: s => String(s ?? ''), ICON: { check: '✓' }, store: { get: (_k, d) => d, set() {} }, document: { getElementById: () => null }, todayStr: () => '2026-11-06', perfilActual: 'all', formatoPasa: () => true });
+  vm.runInContext(source.slice(source.indexOf('const gvFormatoNombre'), source.indexOf('const GV_ESTADO')), ctx);
+  vm.runInContext(source.slice(source.indexOf('const gvKey'), source.indexOf('const gvAprobable')), ctx);
+  vm.runInContext(source.slice(source.indexOf('const gvValorFiltro'), source.indexOf('function gvMenuFiltro')), ctx);
+  vm.runInContext(`gv.data = { mensajes: [{ id: 'comunidad', nombre: 'Comunidad' }, { id: 'producto', nombre: 'Producto' }], piezas: [] };
+    gv.enRango = [{ mensaje_de: 'producto', formato: 'Tutorial' }, { mensaje_de: 'producto', formato: 'Avatar reel editorial' }, { mensaje_de: 'comunidad', formato: 'Tutorial' }, { mensaje_de: 'suelto', formato: 'Tutorial' }, { formato: 'Tutorial' }];`, ctx);
+  const ops = k => JSON.parse(vm.runInContext(`JSON.stringify(gvOpcionesFiltro('${k}'))`, ctx));
+  assert.deepEqual(ops('para').ops, [['comunidad', 'Comunidad', 1], ['producto', 'Producto', 2], ['suelto', 'suelto', 1]], 'config order first, then what the plans bring');
+  assert.deepEqual(ops('familia').ops, [['Tutorial', 'Tutorial', 4], ['Avatar reel', 'Avatar reel', 1]]);
+  vm.runInContext(`gv.para = 'producto'`, ctx);
+  assert.deepEqual(ops('familia').ops, [['Avatar reel', 'Avatar reel', 1], ['Tutorial', 'Tutorial', 1]], 'Formato counts within Para');
+  assert.match(vm.runInContext('gvFiltrosHtml()', ctx), /Para: <b>Producto<\/b>.*Formato/);
+  assert.equal(vm.runInContext(`gvFichaOk({ mensaje_de: 'comunidad' })`, ctx), false);
+  // La marca de la barra: una pieza de otra marca no se ve; una sin marca, sí.
+  ctx.perfilActual = 'Mi marca';
+  assert.equal(vm.runInContext(`gvVisible({ marca: 'Otra' })`, ctx), false);
+  assert.equal(vm.runInContext(`gvVisible({ marca: 'Mi marca' }) && gvVisible({})`, ctx), true);
+  // Orgánico o Anuncios: los planes de la semana según su tipo.
+  const planes = [{ week: 'w', perfil: '', tipo: 'organico' }, { week: 'w', perfil: 'anuncios', tipo: 'anuncios' }, { week: 'w', perfil: 'otro' }];
+  assert.deepEqual(JSON.parse(vm.runInContext(`JSON.stringify(gvPlanes(${JSON.stringify(planes)}, 'w').map(p => p.perfil))`, ctx)), ['', 'otro']);
+  vm.runInContext(`gv.tipo = 'anuncios'`, ctx);
+  assert.deepEqual(JSON.parse(vm.runInContext(`JSON.stringify(gvPlanes(${JSON.stringify(planes)}, 'w').map(p => p.perfil))`, ctx)), ['anuncios']);
 });

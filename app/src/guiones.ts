@@ -7,7 +7,7 @@ import type { Hono } from 'hono';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, relative, resolve, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { paths } from './config.ts';
+import { config, paths } from './config.ts';
 import { ROOT, STATE, exec, fileRead, within, posix, readFeedback, validatePlannerFeedback, markFeedbackSent, OPEN, plannerMediaPath } from './publication-planner.ts';
 import { cantidad, editarDesc, nombreMensaje, tituloMensaje } from './titulo-mensaje.ts';
 
@@ -66,7 +66,9 @@ export function guionesPlans() {
       // Cada pieza con `run`: su carpeta relativa a la de contenido (en el plan puede venir como `carpeta`).
       const piezas = d.piezas.filter((p: any) => p && typeof p === 'object').map((p: any) => ({ ...p, id: String(p.id || ''), run: enContenido(planDir, p.carpeta ?? p.run) || String(p.carpeta ?? p.run ?? ''),
         muestras: (Array.isArray(p.muestras) ? p.muestras : []).map((m: any) => { const path = enContenido(planDir, typeof m === 'string' ? m : m?.path); return path ? { path, nota: m?.nota || '' } : null; }).filter(Boolean) }));
-      out.push({ week: d.semana || week, perfil: sub, path: rel(f), titulo: d.titulo || '', piezas: piezas.length, mtime: statSync(f).mtimeMs, data: { ...d, piezas }, file: f });
+      // Un plan de pauta (`tipo: "anuncios"`, o en una subcarpeta `anuncios/`) se ve en Guiones → Anuncios, no con el orgánico.
+      const tipo = d.tipo === 'anuncios' || (d.tipo === undefined && /^anuncios?$/i.test(sub)) ? 'anuncios' : 'organico';
+      out.push({ week: d.semana || week, perfil: sub, tipo, marca: limpio(d.marca, 80), path: rel(f), titulo: d.titulo || '', piezas: piezas.length, mtime: statSync(f).mtimeMs, data: { ...d, piezas }, file: f });
     }
   }
   return out.sort((a, b) => a.week < b.week ? -1 : a.week > b.week ? 1 : a.perfil.localeCompare(b.perfil));
@@ -110,17 +112,20 @@ function finalVigente(vs: ReturnType<typeof versionesFinal>, st: any) {
   return ok && !vs.some(v => v.modified > Date.parse(st.at)) ? ok : vs[0];
 }
 // Qué versión está en el calendario: la cola guarda de qué archivo copió cada pieza agendada. Lo que se ve en Guiones puede ser otra.
-let agendados: { at: number, map: Map<string, string> } | null = null;
+// Con una versión elegida sólo para el planner (`cola.py reemplazar --solo-planner`, `version_planner` en la ficha), la del
+// calendario es ésa, sin subir todavía, y Postiz sigue con la de `source_final` hasta que se pida subirla.
+let agendados: { at: number, map: Map<string, { agendada?: string, en_postiz?: string, sin_subir?: true }> } | null = null;
 function agendadaEl(abs: string) {
   if (!agendados || Date.now() - agendados.at > 15000) {
-    const map = new Map<string, string>(), d = resolve(paths().publish, 'agendado');
+    const map = new Map<string, { agendada?: string, en_postiz?: string, sin_subir?: true }>(), d = resolve(paths().publish, 'agendado');
     for (const f of existsSync(d) ? readdirSync(d) : []) if (f.endsWith('.json')) {
-      const m = fileRead(resolve(d, f), null);
-      if (m?.source_final) map.set(real(m.source_final), m?.slot?.fecha || '');
+      const m = fileRead(resolve(d, f), null), fecha = m?.slot?.fecha || '', vp = m?.version_planner?.path;
+      if (m?.source_final) map.set(real(m.source_final), vp ? { en_postiz: fecha } : { agendada: fecha });
+      if (typeof vp === 'string' && vp) map.set(real(resolve(ROOT(), vp)), { agendada: fecha, sin_subir: true });
     }
     agendados = { at: Date.now(), map };
   }
-  return agendados.map.get(real(abs)) ?? null;
+  return agendados.map.get(real(abs)) || {};
 }
 const real = (p: string) => { try { return realpathSync(p); } catch { return resolve(p); } };
 
@@ -279,12 +284,26 @@ export function referenciaDe(p: any) {
     poster: posterDe(r.poster), hook_original: limpio(r.hook_original, 400), nota: limpio(r.nota, 300) };
 }
 
+// Para quién es el mensaje de cada pieza (`mensaje_de` en plan.json): el filtro Para de Guiones. Las opciones, con su
+// nombre, salen de `guiones.mensajes` en la config ([{id, nombre}]); un valor que coincide con el id o el nombre de una
+// opción queda como su id. Sin opciones configuradas, vale lo que traiga cada plan.
+const sinAcentos = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+export function mensajesConfig(raw: any = config()?.guiones?.mensajes) {
+  return (Array.isArray(raw) ? raw : []).map((m: any) => typeof m === 'string' ? { id: m, nombre: m } : { id: limpio(m?.id, 40), nombre: limpio(m?.nombre, 60) || limpio(m?.id, 40) })
+    .filter((m: any) => m.id).map((m: any) => ({ id: String(m.id), nombre: String(m.nombre) }));
+}
+export function mensajeDe(p: any, ops = mensajesConfig()) {
+  const v = limpio(p?.mensaje_de, 40);
+  if (!v) return null;
+  return ops.find(m => [m.id, m.nombre].some(x => sinAcentos(x) === sinAcentos(v)))?.id || v;
+}
+
 async function pieza(p: any, estados: Record<string, any>, estilos: Record<string, any> = {}) {
   // El estilo elegido en el planner manda mientras el plan siga con el de antes; si trae un tercero, gana el plan.
   const ov = estilos[p.run];
   if (ov && p.estilo?.id === ov.de?.id) p = { ...p, estilo: ov.a, muestras: ov.muestras };
   const dir = runDir(p.run), st = estados[p.run];
-  const out: any = { ...p, tema: limpio(p.tema, 120), referencia: referenciaDe(p), run_ok: !!dir, inicio: inicioDe(p.run, dir), guion: null, audio: null, feedback: [], estado: p.tipo === 'carrusel' ? 'sin_laminas' : 'sin_audio', muestras: muestras(p.muestras),
+  const out: any = { ...p, tema: limpio(p.tema, 120), mensaje_de: mensajeDe(p), marca: limpio(p.marca, 80), quien: limpio(p.quien, 60), referencia: referenciaDe(p), run_ok: !!dir, inicio: inicioDe(p.run, dir), guion: null, audio: null, feedback: [], estado: p.tipo === 'carrusel' ? 'sin_laminas' : 'sin_audio', muestras: muestras(p.muestras),
     estilo_antes: ov && p.estilo?.id === ov.a?.id ? { id: ov.de?.id || null, nombre: ov.de?.nombre || ov.de?.id || '' } : null,
     descartado: st?.descartado || null, pausado: st?.descartado ? null : st?.pausado || null };
   if (!dir) { if (p.guion_texto) out.guion = { texto: p.guion_texto, palabras: 0 }; return out; }
@@ -307,7 +326,7 @@ async function pieza(p: any, estados: Record<string, any>, estilos: Record<strin
   // Con varias versiones del final se revisa la vigente (finalVigente) y la tarjeta lista las demás.
   const cuts = cortesDe(dir), finales = versionesFinal(dir), fin = finalVigente(finales, st);
   if (fin) out.video = { path: fin.path, seconds: await seconds(fin.abs), modified: fin.modified, versiones: 1, final: true,
-    ...(finales.length > 1 ? { lista: await Promise.all(finales.map(async v => ({ path: v.path, nombre: v.nombre, modified: v.modified, seconds: await seconds(v.abs), agendada: agendadaEl(v.abs),
+    ...(finales.length > 1 ? { lista: await Promise.all(finales.map(async v => ({ path: v.path, nombre: v.nombre, modified: v.modified, seconds: await seconds(v.abs), agendada: agendadaEl(v.abs).agendada ?? null, en_postiz: agendadaEl(v.abs).en_postiz ?? null, sin_subir: !!agendadaEl(v.abs).sin_subir,
       aprobada: st?.estado === 'aprobado' && st.video === v.path && st.video_modified === v.modified }))) } : {}) };
   else if (cuts[0]) out.video = { path: rel(cuts[0]), seconds: await seconds(cuts[0]), modified: statSync(cuts[0]).mtimeMs, versiones: cuts.length };
   out.etapa = out.video?.final ? 'final' : out.video ? 'rough_cut' : 'audio';
@@ -380,19 +399,19 @@ function guionesPrompt(plan: any, piezas: any[]) {
 export function registerGuiones(app: Hono) {
   app.get('/api/planner/guiones', async c => {
     const plans = guionesPlans(), perfil = c.req.query('perfil') ?? null, week = c.req.query('week') || '', path = c.req.query('path') || '';
-    const weeks = plans.map(p => ({ week: p.week, perfil: p.perfil, titulo: p.titulo, piezas: p.piezas, path: p.path }));
+    const weeks = plans.map(p => ({ week: p.week, perfil: p.perfil, tipo: p.tipo, marca: p.marca, titulo: p.titulo, piezas: p.piezas, path: p.path }));
     // El plan pedido por su archivo (dos planes pueden compartir semana y nombre); si no, el de la semana pedida o, sin
     // semana, el más nuevo.
     const pick = (path ? plans.find(p => p.path === path) : null) || plans.filter(p => (perfil === null || p.perfil === perfil) && (!week || p.week === week)).pop() || (!week ? plans.at(-1) : null);
-    if (!pick) return c.json({ weeks, plan: null, piezas: [], carpeta: rel(paths().guiones) });
+    if (!pick) return c.json({ weeks, plan: null, piezas: [], carpeta: rel(paths().guiones), mensajes: mensajesConfig() });
     const { conProduccion } = await import('./produccion.ts');
     const estados = fileRead(ESTADO(), {}), estilos = fileRead(ESTILOS(), {});
     const piezas = await Promise.all(pick.data.piezas.map((p: any) => pieza(conProduccion(p), estados, estilos)));
     // Un estilo descartado en la biblioteca se marca en la tarjeta de las piezas que todavía lo usan.
     const pr = prefs();
     for (const p of piezas) { p.estilo_descartado = !!pr.descartados[p.estilo?.id]; if (p.estilo?.id) p.estilo = { ...p.estilo, ...ajusteDe(p.estilo.id, pr.ajustes) }; }
-    const plan = { ...pick.data, path: pick.path, perfil: pick.perfil, week: pick.week, piezas: undefined };
-    return c.json({ weeks, plan, piezas, carpeta: rel(paths().guiones) });
+    const plan = { ...pick.data, path: pick.path, perfil: pick.perfil, tipo: pick.tipo, marca: pick.marca, week: pick.week, piezas: undefined };
+    return c.json({ weeks, plan, piezas, carpeta: rel(paths().guiones), mensajes: mensajesConfig() });
   });
   app.post('/api/planner/guiones/estado', async c => {
     const body = await c.req.json().catch(() => null);

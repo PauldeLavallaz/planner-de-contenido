@@ -4,6 +4,7 @@
   python3 engine/historias.py aplicar <id>              muestra lo que haría, sin tocar nada
   python3 engine/historias.py aplicar <id> --ejecutar   encola, agenda, mueve, reemplaza o quita cada historia
   python3 engine/historias.py cadena [--dry-run]        publica la siguiente historia de hoy si ya salió la anterior
+  python3 engine/historias.py avisar <id> [--ejecutar]  vuelve a encolar los avisos de Telegram de una propuesta ya aplicada
 
 La propuesta la arma el planner (Historias → Programar → Preparar confirmación) en
 <publicar>/.planner/proposal-historias-<id>.json. Las historias de una secuencia tienen su hora cada 2 minutos desde la
@@ -22,14 +23,17 @@ anterior y ya llegó su hora. Si una queda en error, la reintenta hasta dos vece
 que falló (reintentar enseguida no le da tiempo a Instagram); si sigue fallando, frena las que siguen para no
 desordenar la secuencia y avisa con el archivo para subirla a mano. Cada aviso (error, demora de más de 10 minutos,
 atraso) queda en
-<publicar>/.planner/historias-cadena.json y se ve arriba de la pestaña Historias. Con `historias.cadena: false` en
+<publicar>/.planner/historias-cadena.json y se ve arriba de la pestaña Historias; con `telegram.chat_id` en la config
+también llega por Telegram (engine/avisos.py). Con `telegram.historias_tiktok`, `aplicar` encola además, por cada día que
+sale por Postiz, todas sus historias juntas a la hora de la primera, para subirlas a mano a TikTok. Con `historias.cadena: false` en
 planner.config.json, todas se programan a su hora, como antes.
 """
 import argparse, datetime as dt, json, subprocess, sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import CFG, ROOT, STATE, die, file_lock, kebab, now_local
+from common import CFG, ROOT, STATE, die, file_lock, kebab, now_local, tz
+import avisos as telegram
 
 COLA = [sys.executable, str(Path(__file__).resolve().parent / 'cola.py')]
 ESPACIO_MIN = 2
@@ -37,6 +41,7 @@ AVISOS = STATE / 'historias-cadena.json'
 ATRASO_AVISO = dt.timedelta(minutes=10)
 REINTENTOS = 2
 ESPERA_REINTENTO = dt.timedelta(minutes=4)
+DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
 
 
 def en_cadena():
@@ -167,6 +172,7 @@ def aplicar(pid, ejecutar):
         print('\nEsperan el feedback (retenidas, no salen todavía):')
         for m in esperan:
             print('  ·', m)
+    avisos_tiktok(prop, ejecutar)
     if ejecutar:
         prop.update(status='aplicada' if ok_total else 'parcial', applied_at=now_local().isoformat(timespec='seconds'), resultados=resultados, a_mano=manuales, esperan_feedback=esperan)
         tmp = path.with_suffix('.tmp')
@@ -287,11 +293,18 @@ def avisado(aid):
         return False
 
 
-def avisar(aid, titulo, texto, dry):
-    """Guarda un aviso (uno por id) en <publicar>/.planner/historias-cadena.json: la pestaña Historias lo muestra."""
+def avisar(aid, titulo, texto, dry, archivo=None):
+    """Guarda un aviso (uno por id) en <publicar>/.planner/historias-cadena.json: la pestaña Historias lo muestra. Con
+    Telegram configurado, también sale por ahí enseguida; con `archivo`, adjunto."""
     print(f'aviso · {titulo}: {texto}')
     if dry:
         return
+    if telegram.configurado() and telegram.cfg().get('avisos_cadena', True) is not False:
+        parte = ['texto', f'{titulo}\n{texto}', False]
+        archivo = Path(archivo).resolve() if archivo else None
+        if archivo and archivo.is_file():
+            parte.append({'archivo': archivo.relative_to(ROOT).as_posix() if archivo.is_relative_to(ROOT) else str(archivo)})
+        telegram.encolar({'id': aid, 'tipo': 'historia_cadena', 'titulo': titulo, 'enviar_utc': telegram.utc_iso(now_local()), 'partes': [parte]})
     with file_lock(STATE / '.historias-cadena.lock'):
         try:
             data = json.loads(AVISOS.read_text(encoding='utf-8'))
@@ -306,6 +319,64 @@ def avisar(aid, titulo, texto, dry):
         tmp = AVISOS.with_suffix('.tmp')
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
         tmp.replace(AVISOS)
+
+
+def avisos_tiktok(prop, ejecutar):
+    """Por cada día que sale por Postiz, encola un aviso de Telegram con todas sus historias juntas a la hora de la
+    primera, para subirlas a mano a TikTok: Postiz no publica historias en TikTok. Rehace los de los días de la propuesta
+    que todavía no salieron y saca los de días que ya no van por Postiz. Sólo con `telegram.historias_tiktok`."""
+    if not telegram.cfg().get('historias_tiktok'):
+        return
+    if not telegram.configurado():
+        print('\n(avisos de historias para TikTok prendidos, pero falta telegram.chat_id en planner.config.json)')
+        return
+    ahora = dt.datetime.now(dt.timezone.utc)
+    grupos = {}
+    for a in prop['acciones']:
+        if a['accion'] not in {'quitar', 'descartar', 'nada', 'a_mano'}:
+            grupos.setdefault((a.get('cuenta') or '', a['fecha']), []).append(a)
+    dias = {(d.get('cuenta') or '', d['fecha']): d for d in prop.get('dias', [])}
+    vigentes, salida = set(), []
+    for (cuenta, fecha), acciones in sorted(grupos.items(), key=lambda x: x[0][1]):
+        dia = dias.get((cuenta, fecha)) or {}
+        if dia.get('publicar') != 'postiz' or dia.get('descartada') or not dia.get('hora'):
+            continue
+        h_, m_ = map(int, dia['hora'].split(':'))
+        slot = dt.datetime.fromisoformat(fecha).replace(hour=h_, minute=m_, tzinfo=tz())
+        aid = f"historias-tiktok-{kebab(cuenta) or 'cuenta'}-{fecha}"
+        vigentes.add(aid)
+        if slot < ahora:
+            continue
+        if telegram.empezado(aid):
+            salida.append(f'  · {fecha}: el aviso está saliendo, no lo toco')
+            continue
+        acciones.sort(key=lambda a: a['orden'])
+        archivos = [a.get('video') or a['imagen'] for a in acciones]
+        videos = [a['orden'] for a, p in zip(acciones, archivos) if Path(p).suffix.lower() == '.mp4']
+        d = dt.date.fromisoformat(fecha)
+        texto = (f"📲 Historias de hoy para TikTok · {DIAS[d.weekday()]} {d.day}\n"
+                 f"Son {len(archivos)}, en orden. En Instagram{f' (@{cuenta})' if cuenta else ''} arrancan ahora, a las {dia['hora']}.")
+        if videos:
+            texto += (f"\n{'La ' + str(videos[0]) + ' es un video' if len(videos) == 1 else 'Las ' + ', '.join(map(str, videos)) + ' son videos'}:"
+                      ' en TikTok va aparte, porque un carrusel no mezcla fotos y video.')
+        rehecho = (telegram.PEND / f'{aid}.json').exists()
+        salida.append(f"  · {fecha}: {len(archivos)} historias a las {dia['hora']}{' (rehecho)' if rehecho else ''}")
+        if ejecutar:
+            telegram.encolar({'id': aid, 'tipo': 'historias_tiktok', 'titulo': f'Historias para TikTok · {fecha}', 'cuenta': cuenta,
+                              'slot': slot.isoformat(), 'enviar_utc': telegram.utc_iso(slot),
+                              'fuente': {'propuesta': prop.get('id'), 'historias': [a['imagen'] for a in acciones]},
+                              'partes': [['aviso', texto, False], ['historias', '', True, {'archivos': archivos}]]}, rehacer=True)
+    # Un día que salió de Postiz, se descartó o se movió deja de tener su aviso (sólo si todavía no empezó a salir).
+    if prop.get('alcance') == 'todo_lo_pendiente':
+        desde = prop.get('desde') or ''
+        for f, av in telegram.pendientes('historias-tiktok-'):
+            if f.stem not in vigentes and not av.get('mensajes_enviados') and (av.get('slot') or '')[:10] >= desde:
+                salida.append(f"  · {(av.get('slot') or '')[:10]}: ya no va por Postiz, saco su aviso")
+                if ejecutar:
+                    telegram.quitar(f.stem)
+    if salida:
+        print('\nHistorias para TikTok por Telegram, a la hora de la primera de cada día:')
+        print('\n'.join(salida))
 
 
 def publicar_ya(slug, dry):
@@ -359,7 +430,7 @@ def avanzar(q, cadena, ahora, dry):
                 siguen = ('Frené la que sigue' if total - i == 1 else f'Frené las {total - i} que siguen') + ' para no desordenar la secuencia. ' if total > i else ''
                 archivo = media.relative_to(ROOT).as_posix() if media.is_relative_to(ROOT) else str(media)
                 avisar(f'{base}-frenada', f'Historias frenadas · {dia}',
-                       f"La {nombre(i, meta)} volvió a fallar en Postiz después de {REINTENTOS} reintentos. {siguen}Revisala en Postiz y pedile a Claude Code que la resuelva, o subila a mano desde la app: el archivo está en {archivo}.", dry)
+                       f"La {nombre(i, meta)} volvió a fallar en Postiz después de {REINTENTOS} reintentos. {siguen}Revisala en Postiz y pedile a Claude Code que la resuelva, o subila a mano desde la app: el archivo está en {archivo}.", dry, archivo=media)
             return
         if estado == 'en_revision':  # borrador de la cadena: sale cuando la anterior está publicada y llegó su hora
             if ahora < nominal:
@@ -422,12 +493,23 @@ def main():
     p = sp.add_parser('aplicar')
     p.add_argument('id')
     p.add_argument('--ejecutar', action='store_true')
+    p = sp.add_parser('avisar', help='vuelve a encolar los avisos de Telegram de una propuesta ya aplicada')
+    p.add_argument('id')
+    p.add_argument('--ejecutar', action='store_true')
     p = sp.add_parser('cadena', help='publica la siguiente historia de hoy si ya salió la anterior')
     p.add_argument('--dry-run', action='store_true', help='muestra qué haría, sin publicar ni guardar avisos')
     p.add_argument('--ahora', help=argparse.SUPPRESS)  # AAAA-MM-DDTHH:MM, para las pruebas
     a = ap.parse_args()
     if a.cmd == 'aplicar':
         sys.exit(aplicar(a.id, a.ejecutar))
+    if a.cmd == 'avisar':
+        path = STATE / f'proposal-historias-{a.id}.json'
+        if not path.is_file():
+            die(f'no existe la propuesta {a.id} ({path})')
+        avisos_tiktok(json.loads(path.read_text(encoding='utf-8')), a.ejecutar)
+        if not a.ejecutar:
+            print('\nCorrida en seco: no se encoló nada. Para encolarlos: --ejecutar')
+        sys.exit(0)
     ahora = None
     if a.ahora:
         from common import tz

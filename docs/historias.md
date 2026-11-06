@@ -2,7 +2,7 @@
 
 La pestaña **Historias** del planner muestra la semana en horizontal: un día por fila, sus historias una al lado de la otra y, fijo a la derecha, el recurso u oferta de ese día. Desde ahí:
 
-- elegís por día si sale **por Postiz** o **no se publica**, a qué hora (15:00 si no elegís otra) y desde qué cuenta de Instagram;
+- elegís por día si sale **por Postiz** o **no se publica**, a qué hora (la de ese día de la semana en `historias.horas`, o 15:00) y desde qué cuenta de Instagram;
 - reordenás historias arrastrándolas, las pasás a otro día, movés la secuencia entera con ⋮⋮ o tocando el día (también a otra semana; si el día ya tiene otra secuencia, intercambian), con **Dejar libre** corrés un día para abajo la secuencia de ese día y las que le siguen, y con **Descartar** sacás una secuencia del calendario;
 - en los días que ya pasaron ves qué salió y qué no;
 - cargás las **respuestas** y las vistas de cada día: las respuestas son la métrica principal;
@@ -139,7 +139,7 @@ En la vista grande, **Feedback** abre al costado las notas de esa historia: deta
 
 ## Programar
 
-1. Elegí **Postiz** en los días que querés agendar y la hora de la primera historia (15:00 si no la cambiás); las siguientes tienen su hora cada 2 minutos, en orden. Todas salen por Postiz: ninguna va a mano. («A mano» sólo aparece en un día que lo tenía en un borrador viejo.)
+1. Elegí **Postiz** en los días que querés agendar y la hora de la primera historia; las siguientes tienen su hora cada 2 minutos, en orden. La hora que propone es la de ese día de la semana en `historias.horas` de `planner.config.json` (por ejemplo `{"1": "14:00", "2": "14:15", "6": "15:30"}`, con 1 = lunes y 0 o 7 = domingo, o con el nombre del día: `{"lunes": "14:00"}`) y, si ese día no está, 15:00. Escalonarlas cada 15 minutos sirve para que las secuencias de varias cuentas no se pisen. Todas salen por Postiz: ninguna va a mano. («A mano» sólo aparece en un día que lo tenía en un borrador viejo.)
 2. **Programar** toma **todo lo pendiente** de una vez, no sólo la semana que estás mirando: las secuencias de hoy en adelante de todas las semanas y de todas las cuentas, las descartadas que siguen en la cola y las notas sin corregir de cualquier semana. El número del botón cuenta los días que van a Postiz o salen de Postiz y las notas. El panel lo muestra por semana y por día; un día ya agendado tal cual dice «ya en Postiz así» y no suma. Lo que ya pasó no lleva acción.
 3. **Preparar confirmación** guarda una sola propuesta en `<publicar>/.planner/proposal-historias-<id>.json` (con `semanas`, `cuentas` y `desde`, el día desde el que cuenta) y te da un solo mensaje, con la agenda por semana y el feedback de cada día. Su primera línea dice lo que hace («[Agenda] Programar 5 historias del 9 al 11 nov en tucuenta», «[Feedback] Corregir una historia del 10 nov») y, si abrís una conversación nueva con él, queda como su título.
 4. Pegalo en Claude Code. Corre `python3 engine/historias.py aplicar <id> --ejecutar`: agenda, mueve, reemplaza, quita o pausa cada historia por `engine/cola.py`.
@@ -158,6 +158,21 @@ Programar varias historias con dos minutos de distancia no garantiza el orden: P
 - Si Postiz tarda más de 10 minutos con una, o la compu estaba dormida y una sale tarde, también avisa. Los avisos de las últimas 24 horas se ven arriba de la pestaña Historias y quedan en `<publicar>/.planner/historias-cadena.json`.
 - **Hace falta que el planner esté corriendo** a la hora de las historias (el servicio de [INSTALAR.md](../INSTALAR.md) lo deja andando solo). Si estaba cerrado, las que faltan salen en orden apenas se abre. Para correrla a mano: `python3 engine/historias.py cadena` (con `--dry-run` muestra qué haría).
 - Con `"historias": { "cadena": false }` en `planner.config.json`, todas se programan a su hora, como antes.
+
+### Avisos por Telegram
+
+Con un bot de Telegram, el planner te avisa por ahí. Se configura con `TELEGRAM_BOT_TOKEN` en el `.env` del planner (el token que da @BotFather al crear el bot) y el chat al que escribe en `planner.config.json`:
+
+```json
+"telegram": { "chat_id": "123456789", "historias_tiktok": true, "avisos_cadena": true }
+```
+
+- **Los avisos de la cadena** (una historia con error, una demora, las que se frenaron) llegan además de verse arriba de la pestaña. Si hay que subir una a mano, el aviso trae el archivo. Se apagan con `"avisos_cadena": false`.
+- **Historias para TikTok** (`"historias_tiktok": true`): Postiz no publica historias en TikTok (sus integraciones de TikTok sólo suben al feed), así que cada día que sale por Postiz te llegan todas sus historias juntas, en un álbum de archivos sin comprimir, a la hora de la primera, para subirlas a mano. Si una es un video, el aviso lo dice: en TikTok va aparte, porque un carrusel no mezcla fotos y video. Los encola `engine/historias.py aplicar` y se rehacen al aplicar otra propuesta; un día que deja de ir por Postiz pierde su aviso. `python3 engine/historias.py avisar <id> --ejecutar` los vuelve a encolar para una propuesta ya aplicada.
+
+- **El copy de TikTok** (`"tiktok_copy": true`, fuera de las historias): con la cuenta de TikTok en modo `inbox`, cada reel agendado llega a la bandeja de la app como borrador sin su texto. Cuando llega (la hora del post más `tiktok_demora_minutos`, 2 por defecto) te escribe el título y, en un mensaje aparte, el copy para pegarlo. Lo mantiene al día `engine/cola.py` cada vez que agenda, mueve, quita o pausa; `python3 engine/cola.py avisos` lista los que están por salir.
+
+Los manda el servidor del planner, que revisa cada minuto `<publicar>/.planner/avisos/pendientes/` y pasa lo enviado a `enviados/`. Si Telegram falla, lo reintenta (lo que Telegram pida, un minuto como mínimo) sin repetir lo que ya salió. Como la cadena, hace falta que el planner esté corriendo a esa hora. `python3 engine/avisos.py estado` muestra lo pendiente y lo último enviado; `GET /api/planner/avisos`, lo mismo para el navegador. Para encontrar el `chat_id`, mandale un mensaje a tu bot y abrí `https://api.telegram.org/bot<token>/getUpdates`.
 
 ### Cambiar de día, dejar un día libre o descartar
 

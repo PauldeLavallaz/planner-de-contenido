@@ -380,6 +380,12 @@
 .gv-cam-t b { font-weight: 500; font-size: 13px; }
 .gv-cam-t small { font-size: 12px; color: var(--muted); }
 /* El filtro Formato, en la fila de las etapas. */
+/* Para: un color por opción, en el orden de guiones.mensajes. */
+.gv-para { font-weight: 500; }
+.gv-para.p-0 { background: var(--violet-soft); color: var(--violet); }
+.gv-para.p-1 { background: var(--accent-soft); color: var(--accent-ink); }
+.gv-para.p-2 { background: var(--sunk); color: var(--slate); }
+.gv-tipo[hidden] { display: none; }
 .gv-fila-filtros { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 18px; }
 .gv-fila-filtros .gv-fases { margin: 0; min-width: 0; }
 .gv-filtros { display: flex; gap: 8px; flex-wrap: wrap; }

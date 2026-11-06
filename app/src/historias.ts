@@ -6,7 +6,7 @@ import type { Hono } from 'hono';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync, copyFileSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, relative, resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { CONFIG_PATH, ENGINE_DIR, MOTOR_DIR, PYTHON, REPO_DIR, paths } from './config.ts';
+import { CONFIG_PATH, ENGINE_DIR, MOTOR_DIR, PYTHON, REPO_DIR, config, paths } from './config.ts';
 import { exec, fileRead, markFeedbackSent, OPEN, posix, readFeedback, ROOT, STATE, TYPES, validatePlannerFeedback, within, write } from './publication-planner.ts';
 import { cantidad, capitalizar, conTitulo, diaCorto, diasMensaje, listaNatural, nombreMensaje, tituloMensaje } from './titulo-mensaje.ts';
 
@@ -122,6 +122,19 @@ export function storyQueue() {
 // la API, así que las historias se diseñan sin ellos (el cierre va escrito: «Respondé…»); un sticker que haya quedado
 // anotado en semana.json no se sube y no frena nada. «A mano» sólo sigue en un borrador viejo que lo tenía.
 export const storyNeedsHand = (_sticker: any) => false;
+// La hora de la primera historia de cada día de la semana, de `historias.horas` en la config: `{"1": "14:00", "6": "15:30"}`
+// (0 o 7 es domingo, 1 es lunes) o con el nombre del día (`{"lunes": "14:00"}`). Va al navegador por getDay() (0 = domingo);
+// los días que faltan usan 15:00.
+const DIA_NUM: Record<string, number> = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 };
+export function storyHours(raw: any = config()?.historias?.horas) {
+  const out: Record<number, string> = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw)) {
+    const key = String(k).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''), n = /^\d$/.test(key) ? Number(key) % 7 : DIA_NUM[key];
+    if (n !== undefined && typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v.trim())) out[n] = v.trim();
+  }
+  return out;
+}
 // Una secuencia también pasa a otra semana (por ejemplo, del jueves al lunes siguiente). El borrador la sigue guardando
 // en su semana de origen; se ve, se edita y se programa en la semana del día al que va. Hasta 4 semanas antes o 12
 // después del día original. Dos secuencias nunca quedan en el mismo día: stories/move las intercambia.
@@ -507,7 +520,7 @@ export function registerStories(app: Hono) {
     return c.json({ week, cuenta, carpeta: relRoot(STORIES()), cuentas: accts.map(a => ({ profile: a.profile, label: a.label, marca: a.marca, semanas: semanasDe(a.profile) })), weeks: semanasDe(cuenta), semana: sem,
       metricas: metricsOf(metrics, cuenta, accts), metricas_cuentas: Object.fromEntries(accts.map(a => [a.profile, metricsOf(metrics, a.profile, accts)])),
       draft: { revision: drafts.revision || 0, ...(drafts.semanas?.[draftKey(cuenta, week, accts)] || { secuencias: {} }) }, cola, entrantes, descartadas, feedback: fb, feedback_sin_aplicar: sinAplicar,
-      avisos_cadena: cadenaAvisos(), pendiente: storyPending(storyPlan(drafts, accts)) });
+      avisos_cadena: cadenaAvisos(), pendiente: storyPending(storyPlan(drafts, accts)), horas: storyHours() });
   });
   // Lo pendiente de todas las semanas y cuentas, para el contador y el panel de Programar.
   app.get('/api/planner/stories/pending', c => c.json(storyPending(storyPlan(fileRead(resolve(STATE(), 'historias-draft.json'), { revision: 0, semanas: {} })))));

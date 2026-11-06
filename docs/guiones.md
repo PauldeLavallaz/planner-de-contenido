@@ -10,9 +10,10 @@ La pestaña **Guiones** es donde revisás el contenido de la semana mientras se 
 - elegís, desde la etiqueta del estilo, el look del avatar, el estilo del B-roll y el tipo de título (el **editor de producción**);
 - pausás una pieza que va más adelante o descartás la que no va (se pueden recuperar);
 - ves cada pieza en el día en que empezó a producirse: el del nombre de su carpeta si termina en `AAAAMMDD-HHMMSS` o, si no, el día en que se creó la carpeta. El período va arriba (Día, Semana, 15 días, Mes o Todo) y el título abre un calendario que dice cuántas piezas empezaron cada día, con un punto si alguna te toca. Lo elegido queda al recargar;
-- filtrás por etapa, con su contador: **Te toca** (lo que espera tu feedback o tu aprobación, de cualquier etapa), Guion, Audio, Por revisar, Aprobado, Publicado, Pausado y Descartado; por **Formato** (el `formato` del plan: «Reel explicativo · Mi marca» y «Reel explicativo» cuentan como el mismo); y con el formato de la barra lateral, reels o carruseles. Lo que aprobás o comentás se queda en su lugar hasta que cambies un filtro o recargues;
+- filtrás por etapa, con su contador: **Te toca** (lo que espera tu feedback o tu aprobación, de cualquier etapa), Guion, Audio, Por revisar, Aprobado, Publicado, Pausado y Descartado; por **Para** (para qué mensaje es cada pieza: `mensaje_de` del plan, con los nombres de `guiones.mensajes`) y por **Formato** (el `formato` del plan: «Reel explicativo · Mi marca» y «Reel explicativo» cuentan como el mismo); y con el formato de la barra lateral, reels o carruseles. Lo que aprobás o comentás se queda en su lugar hasta que cambies un filtro o recargues;
 - abrís en el Finder la carpeta de una pieza, con su video o su audio seleccionado (el ícono de carpeta al lado del archivo);
-- tocás **Copiar feedback para Claude Code** y pegás el mensaje en el chat: trae cada nota con su pieza y cómo aplicarla.
+- tocás **Copiar feedback para Claude Code** y pegás el mensaje en el chat: trae cada nota con su pieza y cómo aplicarla;
+- pasás de **Orgánico** a **Anuncios** (el selector aparece cuando hay planes de pauta), y con una marca elegida en la barra ves sólo sus piezas.
 
 El planner sólo lee tus carpetas. Lo único que escribe es lo que elegís acá: el estado (en `<publicar>/.planner/`), las notas (en `feedback/` de cada pieza) y el estilo, look o título en el `plan.json`.
 
@@ -39,6 +40,14 @@ Cada semana es una carpeta con la fecha de su lunes adentro de `guiones/` en tu 
 ```
 
 Si una semana tiene más de un plan (por ejemplo, uno por marca), cada uno va en una subcarpeta con su propio `plan.json`: `guiones/2026-10-26/marca-a/plan.json`. El planner los muestra uno abajo del otro con su título.
+
+### Anuncios
+
+Los guiones de pauta van en su propio plan, separado del orgánico: en la subcarpeta `anuncios/` de la semana (`guiones/2026-10-26/anuncios/plan.json`) o en cualquier plan con `"tipo": "anuncios"`. Arriba de Guiones aparece el selector **Orgánico / Anuncios**, y cada uno muestra sólo sus planes. Un anuncio aprobado no pasa solo a la Semana: se pauta aparte. En la tarjeta, `quien` dice quién habla en el anuncio (por ejemplo, si pautás videos de dos personas de la misma marca).
+
+### Marcas
+
+Con más de una marca en `brands`, un plan o una pieza dice de cuál es con `"marca"`. Con una marca elegida en la barra lateral, Guiones muestra sus piezas y las que no dicen marca; con todas, la tarjeta lleva la marca de cada pieza.
 
 ## plan.json
 
@@ -78,6 +87,8 @@ Si una semana tiene más de un plan (por ejemplo, uno por marca), cada uno va en
 - `mudo: true`: un video sin voz se aprueba por el texto de `guion.txt` hasta que haya corte.
 - `sin_avatar: true`: la pieza no lleva avatar y no muestra la pestaña Avatar.
 - `tema` (opcional): de qué trata, en una línea; va abajo del título.
+- `mensaje_de` (opcional): para qué mensaje u oferta es la pieza (el filtro **Para**). Las opciones, con su nombre y en su orden, van en `planner.config.json`: `"guiones": { "mensajes": [{ "id": "producto", "nombre": "Producto" }, { "id": "comunidad", "nombre": "Comunidad" }] }`. Un valor que coincide con el id o el nombre de una opción se muestra con su nombre; sin opciones en la config, el filtro usa lo que traiga cada plan.
+- `marca` (opcional, en el plan o en la pieza): de qué marca es; `quien` (opcional): quién habla, en los anuncios.
 - `porque` y `referencias` (opcionales): por qué se eligió la pieza y sus fuentes; se ven en la pestaña «Por qué» de la tarjeta.
 - `referencia` (opcional): el original que toma la pieza, si lo hay. Se muestra como un bloque que abre el original:
 
@@ -95,6 +106,7 @@ Si un final ya aprobado o agendado necesita otra iteración, la nueva va aparte,
 - **Aprobar** aprueba la versión que estás mirando, y la tarjeta se queda en ésa hasta que aparezca una más nueva.
 - La nota de feedback guarda sobre qué versión la escribiste, y el mensaje para Claude Code lo dice.
 - La cola (`listo`) y la Semana usan la versión aprobada en Guiones, aunque haya otra más nueva. Aprobar otra versión no cambia lo que ya está agendado en Postiz: el planner te avisa, y para cambiarla se reemplaza en la cola (ver la skill `publicar`).
+- Cada versión dice dónde está: **aprobada**, **agendada** con su fecha (la que la cola copió al calendario) y, si se eligió otra sólo para el planner con `cola.py reemplazar <slug> <archivo> --solo-planner`, ésa dice **sin subir a Postiz** y la anterior **en Postiz**, hasta que se pida subirla.
 
 ## Editor de producción
 
